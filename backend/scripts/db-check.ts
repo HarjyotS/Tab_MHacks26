@@ -1,9 +1,11 @@
 // Checks that the backend can reach SpacetimeDB and holds the backend role.
-//   npm run db:check
-// Calls set_group_status on a group that doesn't exist: "Unknown group" means
-// the role is granted, and nothing is written either way.
+//   npm run db:check -w backend
+// Kian's backend_* views return rows only to the backend role (and the
+// owner), so counting visible rows tells us whether the grant is in place.
+// Nothing is written. (Maincloud reports every reducer error as a generic
+// "fatal error", so a reducer probe can't tell us this.)
 import { connectBackend } from "../src/db/connection.js";
-import { createReducers, ReducerError } from "../src/db/reducers.js";
+import { BACKEND_VIEWS, spacetimeStore } from "../src/store/spacetime.js";
 
 const { conn, identity, token } = await connectBackend();
 console.log(`connected as ${identity}`);
@@ -13,23 +15,29 @@ if (!process.env.BACKEND_SPACETIME_TOKEN) {
   );
 }
 
-const db = createReducers(conn.reducers);
 try {
-  await db.set_group_status({ group_id: "__db_check__", status: "active" });
-  console.error("unexpected: the probe group exists");
-  process.exitCode = 1;
-} catch (err) {
-  if (!(err instanceof ReducerError)) throw err;
-  if (err.message.includes("Unknown group")) {
-    console.log("backend role: granted ✓");
-  } else if (err.message.includes("Requires service role")) {
+  await new Promise<void>((resolve, reject) => {
+    conn
+      .subscriptionBuilder()
+      .onApplied(() => resolve())
+      .onError((ctx) =>
+        reject(new Error(`subscription failed: ${String(ctx.event)}`)),
+      )
+      .subscribe(BACKEND_VIEWS);
+  });
+  const store = spacetimeStore(conn.db);
+  const groups = store.groups().length;
+  const messages = store.messages().length;
+  console.log(
+    `visible: ${groups} groups, ${messages} messages, ${store.expenses().length} expenses`,
+  );
+  if (groups === 0 && messages === 0) {
     console.log(
-      `backend role: NOT granted. The module owner must run grant_service_role for ${identity} with role "backend".`,
+      `backend role: probably NOT granted (views are empty). The owner runs:\n  spacetime call ${process.env.SPACETIME_DB} grant_service_role ${identity} backend --server maincloud`,
     );
     process.exitCode = 1;
   } else {
-    console.error(err.message);
-    process.exitCode = 1;
+    console.log("backend role: granted ✓");
   }
 } finally {
   conn.disconnect();
