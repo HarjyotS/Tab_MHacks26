@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import type { ChatCompletionContentPart } from "openai/resources/chat/completions";
 
 export class GrokOutputError extends Error {}
 
@@ -23,7 +24,8 @@ export async function structuredCall<T>(opts: {
   client: ChatClient;
   model: string;
   system: string;
-  user: string;
+  // Text, or text plus images for vision calls.
+  user: string | ChatCompletionContentPart[];
   name: string;
   schema: Record<string, unknown>;
   safeParse: SafeParse<T>;
