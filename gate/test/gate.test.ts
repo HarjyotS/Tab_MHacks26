@@ -33,7 +33,8 @@ describe('Jev gate', () => {
     const state = buildState(toInput(byId(6)));
     expect(state).toContain('NEW MESSAGE:\nPriya: same as Jake');
     expect(state).toContain('Jake: 2 and 3');
-    expect(state).toContain("Frita Batidos: expense itemizing, sender's share awaiting_claim");
+    expect(state).toContain('Frita Batidos: an item list is open; Tab is waiting for the sender to say which items they had');
+    expect(state).toContain('Settle request open for the sender: no');
     expect(state).toContain('Members: Tab, Joe, Kian, Priya, Jake, John');
   });
 
@@ -44,6 +45,18 @@ describe('Jev gate', () => {
     expect(await classify({ ...base, message: { ...base.message, kind: 'reaction' } })).toEqual({ intent: 'ignore', confidence: 1 });
     expect((await classify({ ...base, message: { ...base.message, kind: 'image', text: undefined } })).intent).toBe('receipt');
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('tells Jev plainly when a settle request is open, so agreement words only count then', () => {
+    expect(buildState(toInput(byId(10)))).toContain('Settle request open for the sender: yes');
+  });
+
+  it('gives up on a hung Jev request instead of stalling the backend', async () => {
+    const hang = vi.fn((_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+    }));
+    await expect(jevClassifier({ apiKey: 'key', timeoutMs: 20, fetch: hang as typeof globalThis.fetch })(toInput(byId(3))))
+      .rejects.toThrow('aborted');
   });
 
   it('rejects an answer outside the intent list instead of guessing', async () => {
@@ -70,6 +83,12 @@ describe('fixture scoring', () => {
 });
 
 describe('stub classifier', () => {
+  it('treats a one-word message as a name only right after the name prompt', async () => {
+    const plain = toInput(byId(3));
+    expect((await stubClassifier({ ...plain, message: { ...plain.message, text: 'ok' } })).intent).toBe('ignore');
+    expect((await stubClassifier(toInput(byId(14)))).intent).toBe('name_reply');
+  });
+
   it('passes the spec fixtures it is meant to cover', async () => {
     const results = await Promise.all(fixtures.map(async f => passes(f, await stubClassifier(toInput(f)))));
     expect(results.filter(Boolean).length).toBeGreaterThanOrEqual(15);

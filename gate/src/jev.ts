@@ -19,13 +19,13 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
   correction:
     'The sender fixes the amount or description of an expense that was already logged, usually as a reply to it ("actually it was 38").',
   approval:
-    'A settle request is open for the sender and they agree to pay their share ("yes", "we\'re chill", "pay it").',
+    'Only when "Settle request open for the sender" is yes: the sender agrees to pay their share ("yes", "we\'re chill", "pay it", "send it"). With no settle request open, agreement words are never an approval.',
   dispute:
     'The expense is already final and a settle request is open for the sender, and they refuse to pay or say their amount is wrong ("no", "I didn\'t get fries").',
   balance_query: 'The sender asks who owes what, or how much they owe or are owed.',
   breakdown_request: 'The sender asks which expenses make up a balance, or where an amount came from.',
   payment_reported:
-    'The sender says they already sent money to someone outside Tab ("sent you 20 on venmo"). Asking to be paid is not this.',
+    'The sender says they already sent money to someone outside Tab, including payment-app verbs ("sent you 20 on venmo", "venmo\'d you", "zelled you for the uber", "paid Priya back on cashapp"). Asking to be paid is not this.',
   help: 'The sender asks what Tab is or what it can do.',
   ignore:
     'Anything else: chatter, jokes, reactions, plans, or instructions aimed at Tab that are not about a real shared purchase.',
@@ -46,17 +46,30 @@ function line(m: GateMessage, input: ClassifyInput): string {
   return `${nameFor(m.sender_phone, input)}${m.reply_to_id ? ' (replying)' : ''}: ${body}`;
 }
 
+/** What an open item asks of the sender, in words Jev can reason about. */
+function pending(item: ClassifyInput['open_items'][number]): string {
+  const status = `(expense ${item.expense_status}${item.my_share_status ? `, sender's share ${item.my_share_status}` : ''})`;
+  if (item.expense_status === 'finalized' && item.my_share_status === 'locked') {
+    return `${item.description}: a settle request is open; Tab is waiting for the sender to approve paying their share ${status}`;
+  }
+  if (item.expense_status === 'itemizing') {
+    return `${item.description}: an item list is open; Tab is waiting for the sender to say which items they had ${status}`;
+  }
+  if (item.expense_status === 'proposed') {
+    return `${item.description}: a split is proposed and can still be adjusted ${status}`;
+  }
+  return `${item.description} ${status}`;
+}
+
 /** Everything Jev sees, as labeled data (SPEC 6.5: Jev only knows the state you send). */
 export function buildState(input: ClassifyInput): string {
-  const items = input.open_items.length
-    ? input.open_items
-        .map(i => `- ${i.description}: expense ${i.expense_status}${i.my_share_status ? `, sender's share ${i.my_share_status}` : ''}`)
-        .join('\n')
-    : '- none';
+  const items = input.open_items.length ? input.open_items.map(i => `- ${pending(i)}`).join('\n') : '- none';
+  const settleOpen = input.open_items.some(i => i.expense_status === 'finalized' && i.my_share_status === 'locked');
   return [
     `Chat: ${input.message.is_dm ? 'a private DM between the sender and Tab' : 'the group chat'}`,
     `Members: ${input.members.map(m => m.name ?? `member ending ${m.phone.slice(-4)}`).join(', ') || 'unknown'}`,
     `Open items for the sender:\n${items}`,
+    `Settle request open for the sender: ${settleOpen ? 'yes' : 'no'}`,
     `Recent messages, oldest first:\n${input.context.map(m => line(m, input)).join('\n') || '(none)'}`,
     `NEW MESSAGE:\n${line(input.message, input)}`,
   ].join('\n\n');
@@ -73,9 +86,12 @@ interface JevResponse {
 export function jevClassifier(options: {
   apiKey: string;
   model?: string;
+  /** A hung request would stall the backend's processing loop. Default 10 s. */
+  timeoutMs?: number;
   fetch?: typeof fetch;
 }): Classify {
   const doFetch = options.fetch ?? fetch;
+  const timeoutMs = options.timeoutMs ?? 10_000;
   return async input => {
     // Reactions route deterministically (SPEC 6.2) and receipts are images; neither needs a model.
     if (input.message.kind === 'reaction' || input.message.kind === 'system') return { intent: 'ignore', confidence: 1 };
@@ -84,6 +100,7 @@ export function jevClassifier(options: {
     const response = await doFetch(ENDPOINT, {
       method: 'POST',
       headers: { authorization: `Bearer ${options.apiKey}`, 'content-type': 'application/json' },
+      signal: AbortSignal.timeout(timeoutMs),
       body: JSON.stringify({
         state: buildState(input),
         model: options.model ?? 'jev-latest',
