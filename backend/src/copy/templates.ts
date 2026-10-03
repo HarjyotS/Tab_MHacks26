@@ -210,20 +210,12 @@ export function balanceReply(a: {
 // One line per expense behind a debt, with why it's that amount. Every
 // number and name comes from the database (P6).
 export type OwedLine = { description: string; amount_cents: number; why: string };
-export type OwedTo = { to: Person; total_cents: number; lines: OwedLine[] };
 
-export function personalBalanceReply(a: { owes: OwedTo[]; owed: Debt[] }): string {
+// Just the amounts. "why" gets the explanation (breakdownReply).
+export function personalBalanceReply(a: { owes: Debt[]; owed: Debt[] }): string {
   if (a.owes.length === 0 && a.owed.length === 0) return "You're square with everyone.";
   const parts: string[] = [];
-  for (const o of a.owes) {
-    if (o.lines.length === 1) {
-      const l = o.lines[0]!;
-      parts.push(`You owe ${displayName(o.to)} ${money(o.total_cents)} for ${l.description} (${l.why})`);
-    } else {
-      parts.push(`You owe ${displayName(o.to)} ${money(o.total_cents)}`);
-      for (const l of o.lines.slice(0, 5)) parts.push(`${l.description} ${money(l.amount_cents)}: ${l.why}`);
-    }
-  }
+  if (a.owes.length) parts.push(`You owe ${listJoin(a.owes.map((d) => `${displayName(d.to)} ${money(d.amount_cents)}`))}.`);
   if (a.owed.length) parts.push(`${listJoin(a.owed.map((d) => `${displayName(d.from)} owes you ${money(d.amount_cents)}`))}.`);
   return parts.join("\n");
 }

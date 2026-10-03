@@ -191,19 +191,7 @@ function renders(seed: string): {
       purpose: "balance_reply",
       group: true,
       text: T.personalBalanceReply({
-        owes: [
-          {
-            to: joe,
-            total_cents: 3825,
-            lines: [
-              {
-                description: "Frita Batidos",
-                amount_cents: 3825,
-                why: "the ribeye, plus tax and tip",
-              },
-            ],
-          },
-        ],
+        owes: [{ from: priya, to: joe, amount_cents: 3825 }],
         owed: [],
       }),
       amounts: [3825],

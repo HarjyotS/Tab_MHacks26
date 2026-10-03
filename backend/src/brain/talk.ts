@@ -128,25 +128,26 @@ export function explainShare(ctx: BrainCtx, e: Expense, phone: string): string {
   const members = activeMembers(ctx, e.group_id);
   const nameOf = (p: string) => members.find((m) => m.phone === p)?.name ?? `…${p.slice(-4)}`;
   const extras = [e.tax_cents > 0 && "tax", e.tip_cents > 0 && "tip", e.fees_cents > 0 && "fees"].filter(Boolean) as string[];
-  const plusExtras = extras.length ? `, plus ${listJoin(extras)}` : "";
+  const plus = extras.length ? ` + ${listJoin(extras)}` : "";
 
   if (e.split_mode === "itemized") {
     const claims = ctx.store.claims(e.expense_id);
-    const parts: string[] = [];
+    const mine: string[] = [];
+    const shared: string[] = [];
     for (const item of ctx.store.lineItems(e.expense_id)) {
       const claimers = claims.filter((c) => c.item_id === item.item_id).map((c) => c.phone);
       const name = item.description.toLowerCase();
-      if (claimers.length === 0) parts.push(`part of the ${name} nobody claimed`);
-      else if (claimers.includes(phone)) parts.push(claimers.length === 1 ? `the ${name}` : `part of the ${name}`);
+      if (claimers.length === 1 && claimers[0] === phone) mine.push(name);
+      else if (claimers.length === 0 || claimers.includes(phone)) shared.push(name);
     }
-    return `${listJoin(parts) || "an even share of what nobody claimed"}${plusExtras}`;
+    const parts = [...mine, ...(shared.length ? [`share of ${listJoin(shared)}`] : [])];
+    return `${parts.join(", ") || "even share"}${plus}`;
   }
   const mine = shares.find((s) => s.phone === phone);
-  if (e.split_mode === "custom" && mine?.fixed_cents !== undefined) return "just what you had";
+  if (e.split_mode === "custom" && mine?.fixed_cents !== undefined) return "what you had";
   const pinned = shares.filter((s) => s.fixed_cents !== undefined && s.phone !== phone);
-  const evenly = shares.length - pinned.length;
-  const after = pinned.length ? `after ${listJoin(pinned.map((s) => `${nameOf(s.phone)}'s ${money(s.fixed_cents!)}`))}, ` : "";
-  return `${after}split ${evenly} ways${plusExtras}`;
+  const after = pinned.length ? ` after ${listJoin(pinned.map((s) => `${nameOf(s.phone)}'s ${money(s.fixed_cents!)}`))}` : "";
+  return `split ${shares.length - pinned.length} ways${after}${plus}`;
 }
 
 const OWING = ["locked", "approved", "disputed"];
@@ -166,17 +167,12 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
   const group_id = groupFor(ctx, m);
   if (!group_id) return;
   const all = debts(ctx, group_id);
-  let text: string;
-  if (PERSONAL.test(m.text ?? "")) {
-    const lines = myLines(ctx, group_id, m.sender_phone);
-    // Net per person, matching the group view; lines explain the gross amounts.
-    const owes = all
-      .filter((d) => d.from.phone === m.sender_phone)
-      .map((d) => ({ to: d.to, total_cents: d.amount_cents, lines: lines.filter((l) => l.to === d.to.phone) }));
-    text = T.personalBalanceReply({ owes, owed: all.filter((d) => d.to.phone === m.sender_phone) });
-  } else {
-    text = T.balanceReply({ debts: all });
-  }
+  const text = PERSONAL.test(m.text ?? "")
+    ? T.personalBalanceReply({
+        owes: all.filter((d) => d.from.phone === m.sender_phone),
+        owed: all.filter((d) => d.to.phone === m.sender_phone),
+      })
+    : T.balanceReply({ debts: all });
   await say(ctx, { chat: chatOf(m), purpose: "balance_reply", id: `balance_reply:${m.message_id}`, text });
 }
 

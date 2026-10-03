@@ -30,6 +30,8 @@ const MONEY_INTENTS = new Set<Intent>([
   "approval", "dispute", "payment_reported", "balance_query", "breakdown_request",
 ]);
 
+const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
+
 const YES =
   /^(yes|yep|yeah|ya|yup|sure|ok|okay|correct|right|do it|go ahead|that's right)\b/i;
 const NO = /^(no|nope|nah|wrong|not right)\b/i;
@@ -66,8 +68,11 @@ export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
       ctx.log("classified", { message_id: m.message_id, group_id: m.group_id, intent, confidence, decision });
 
       const answered = (await mayAnswerPending(ctx, m, moneyRelated)) && (await answerPending(ctx, m));
-      if (answered || moneyRelated) ctx.memory.remember(m);
-      if (!answered) {
+      // "why?" right after Tab's balance reply: the short explanation.
+      const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
+      if (why) await handleBreakdown(ctx, m);
+      if (answered || moneyRelated || why) ctx.memory.remember(m);
+      if (!answered && !why) {
         if (decision === "act") await act(ctx, m, intent);
         else if (decision === "clarify") await clarify(ctx, m, intent);
       }
@@ -269,6 +274,14 @@ function answeringNamePrompt(ctx: BrainCtx, m: Message): boolean {
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
   // The intro, name prompt, and contact card go out together; any of them counts.
   return lastTab?.purpose === "name_prompt" || lastTab?.purpose === "onboarding_intro";
+}
+
+function lastTabPurpose(ctx: BrainCtx, m: Message): string | undefined {
+  const chat = chatOf(m);
+  return ctx.store
+    .outbox()
+    .filter((o) => o.kind !== "reaction" && o.created_at <= m.received_at && (chat.group_id ? o.group_id === chat.group_id : o.to_phone === chat.dm_phone))
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0]?.purpose;
 }
 
 function nameOf(ctx: BrainCtx, m: Message): string {
