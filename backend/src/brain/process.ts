@@ -1,7 +1,7 @@
 // SPEC §11.1 processing loop and §11.2 scheduler.
 import type { Intent } from "@tab/gate";
 import { decide } from "../gate/decide.js";
-import type { Message } from "../store/types.js";
+import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatKey, chatOf, inWords, type Pending, say, tapback } from "./context.js";
 import { applyAdjustment, groupFor, handleAdjustment, handleExpense, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
@@ -92,21 +92,34 @@ export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
   }
 }
 
+// An inline reply binds a message to one expense (Harjyot's review on #14,
+// like §6.2 for tapbacks): a reply to Tab's message about an expense, or to
+// the message that created it. Used to pick the target, never to lower a bar.
+export function repliedExpense(ctx: BrainCtx, m: Message): Expense | undefined {
+  if (!m.reply_to_id) return undefined;
+  const tab = ctx.store.outbox().find((o) => o.sent_photon_id === m.reply_to_id && o.expense_id);
+  const id = tab?.expense_id ?? ctx.store.expenses().find((e) => e.source_message_id === m.reply_to_id)?.expense_id;
+  return id ? ctx.store.expense(id) : undefined;
+}
+
 async function act(ctx: BrainCtx, m: Message, intent: Intent) {
+  const bound = repliedExpense(ctx, m);
+  const boundIf = (...statuses: Expense["status"][]) => (bound && statuses.includes(bound.status) ? bound : undefined);
   switch (intent) {
     case "expense":
       // A captioned photo ("dinner, i paid") is still a receipt.
       return m.kind === "image" ? handleReceipt(ctx, m) : handleExpense(ctx, m);
     case "split_adjustment":
-      return handleAdjustment(ctx, m);
+      return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed"));
     case "name_reply":
       return handleNameReply(ctx, m);
     case "approval": {
-      const e = settleTarget(ctx, m);
+      // decide() already required >= 0.90 and an open settle request (P7).
+      const e = boundIf("finalized") ?? settleTarget(ctx, m);
       return e ? approve(ctx, m, e) : undefined;
     }
     case "dispute": {
-      const e = settleTarget(ctx, m);
+      const e = boundIf("finalized") ?? settleTarget(ctx, m);
       return e ? dispute(ctx, m, e) : undefined;
     }
     case "balance_query":
@@ -118,7 +131,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     case "receipt":
       return handleReceipt(ctx, m);
     case "claim":
-      return handleClaim(ctx, m);
+      return handleClaim(ctx, m, boundIf("itemizing"));
     // Not built yet: correction (§7.7). payment_reported is ignored in the
     // MVP; ignore needs nothing.
     default:
