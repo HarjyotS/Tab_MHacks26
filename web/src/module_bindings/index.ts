@@ -68,6 +68,7 @@ import BackendMessagesRow from "./backend_messages_table";
 import BackendOutboxRow from "./backend_outbox_table";
 import BackendSharesRow from "./backend_shares_table";
 import BackendTransfersRow from "./backend_transfers_table";
+import ClientOutboxRow from "./client_outbox_table";
 import LedgerBalancesRow from "./ledger_balances_table";
 import LedgerClaimsRow from "./ledger_claims_table";
 import LedgerExpensesRow from "./ledger_expenses_table";
@@ -145,6 +146,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, BackendTransfersRow),
+  clientOutbox: __table({
+    name: 'client_outbox',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, ClientOutboxRow),
   ledgerBalances: __table({
     name: 'ledger_balances',
     indexes: [
@@ -259,6 +267,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "backend_shares": Omit<typeof tablesSchema.schemaType.tables["backendShares"], "accessorName"> & { readonly accessorName: "backend_shares" };
     /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
     readonly "backend_transfers": Omit<typeof tablesSchema.schemaType.tables["backendTransfers"], "accessorName"> & { readonly accessorName: "backend_transfers" };
+    /** @deprecated Use `clientOutbox` instead. This alias will be removed in the next major version. */
+    readonly "client_outbox": Omit<typeof tablesSchema.schemaType.tables["clientOutbox"], "accessorName"> & { readonly accessorName: "client_outbox" };
     /** @deprecated Use `ledgerBalances` instead. This alias will be removed in the next major version. */
     readonly "ledger_balances": Omit<typeof tablesSchema.schemaType.tables["ledgerBalances"], "accessorName"> & { readonly accessorName: "ledger_balances" };
     /** @deprecated Use `ledgerClaims` instead. This alias will be removed in the next major version. */
@@ -304,6 +314,7 @@ const tableAccessorAliases = {
   "backend_outbox": "backendOutbox",
   "backend_shares": "backendShares",
   "backend_transfers": "backendTransfers",
+  "client_outbox": "clientOutbox",
   "ledger_balances": "ledgerBalances",
   "ledger_claims": "ledgerClaims",
   "ledger_expenses": "ledgerExpenses",
@@ -351,6 +362,8 @@ export type DbView = __DbViewBase & {
   readonly "backend_shares": __DbViewBase["backendShares"];
   /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
   readonly "backend_transfers": __DbViewBase["backendTransfers"];
+  /** @deprecated Use `clientOutbox` instead. This alias will be removed in the next major version. */
+  readonly "client_outbox": __DbViewBase["clientOutbox"];
   /** @deprecated Use `ledgerBalances` instead. This alias will be removed in the next major version. */
   readonly "ledger_balances": __DbViewBase["ledgerBalances"];
   /** @deprecated Use `ledgerClaims` instead. This alias will be removed in the next major version. */
@@ -391,6 +404,8 @@ export type Tables = __TablesBase & {
   readonly "backend_shares": __TablesBase["backendShares"];
   /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
   readonly "backend_transfers": __TablesBase["backendTransfers"];
+  /** @deprecated Use `clientOutbox` instead. This alias will be removed in the next major version. */
+  readonly "client_outbox": __TablesBase["clientOutbox"];
   /** @deprecated Use `ledgerBalances` instead. This alias will be removed in the next major version. */
   readonly "ledger_balances": __TablesBase["ledgerBalances"];
   /** @deprecated Use `ledgerClaims` instead. This alias will be removed in the next major version. */
