@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { provisionMember, type NessieGateway, type SeedMember } from '../src/nessie-core.js';
 
 const base: SeedMember = {
-  memberId: 'g:+15550000001', groupId: 'g', phone: '+15550000001', name: 'Kian Test',
+  memberId: 'g:+15550000001', groupId: 'g', phone: '+15550000001', name: 'Harjyot Test',
   depositCreated: false, seededBalanceCents: 0n,
 };
 
@@ -15,6 +15,20 @@ function gateway(): NessieGateway {
 }
 
 describe('Nessie provisioning', () => {
+  it.each(['Harjyot', 'Joe', 'Dhanush', 'Tanuj', 'User'])(
+    'creates a valid fake Nessie profile for %s',
+    async name => {
+      const api = gateway();
+      await provisionMember({ ...base, memberId: `g:${name}`, name }, api, { save: async () => undefined }, {
+        forceNew: false, startingBalanceCents: 50000n, today: '2026-10-03',
+      });
+      expect(api.createCustomer).toHaveBeenCalledWith(expect.objectContaining({
+        first_name: name,
+        last_name: 'Demo',
+      }));
+    },
+  );
+
   it('persists after each external creation and is idempotent on rerun', async () => {
     const api = gateway();
     const saves: SeedMember[] = [];
