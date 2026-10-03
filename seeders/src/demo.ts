@@ -6,9 +6,11 @@ const GROUP_ID = 'photon-demo-group';
 const LEDGER_ID = 'ledger-demo-house';
 const LEDGER_SECRET = 'tab-demo-ledger-secret-2026';
 const members = [
-  { phone: '+17345550101', name: 'Kian', ledgerId: 'member-kian' },
+  { phone: '+17345550101', name: 'Harjyot', ledgerId: 'member-harjyot' },
   { phone: '+17345550102', name: 'Joe', ledgerId: 'member-joe' },
-  { phone: '+17345550103', name: 'Priya', ledgerId: 'member-priya' },
+  { phone: '+17345550103', name: 'Dhanush', ledgerId: 'member-dhanush' },
+  { phone: '+17345550104', name: 'Tanuj', ledgerId: 'member-tanuj' },
+  { phone: '+17345550105', name: 'User', ledgerId: 'member-user' },
 ];
 
 const connection = await connect();
@@ -50,13 +52,17 @@ try {
       });
     }
     await connection.reducers.setLineItems({ expenseId: 'expense-frita', items: [
-      { itemId: 'frita-burger', position: 1, description: 'Cuban burger', quantity: 1, amountCents: 3000n },
-      { itemId: 'frita-chorizo', position: 2, description: 'Chorizo burger', quantity: 1, amountCents: 2000n },
-      { itemId: 'frita-batidos', position: 3, description: 'Batidos', quantity: 2, amountCents: 3000n },
+      { itemId: 'frita-cuban', position: 1, description: 'Cuban burger', quantity: 1, amountCents: 1800n },
+      { itemId: 'frita-chorizo', position: 2, description: 'Chorizo burger', quantity: 1, amountCents: 1400n },
+      { itemId: 'frita-chicken', position: 3, description: 'Chicken frita', quantity: 1, amountCents: 1600n },
+      { itemId: 'frita-fries', position: 4, description: 'Loaded fries', quantity: 1, amountCents: 1500n },
+      { itemId: 'frita-batido', position: 5, description: 'Batido', quantity: 1, amountCents: 1700n },
     ] });
-    await connection.reducers.addClaim({ itemId: 'frita-burger', phone: members[0].phone, sourceMessageId: 'demo-claim-1' });
+    await connection.reducers.addClaim({ itemId: 'frita-cuban', phone: members[0].phone, sourceMessageId: 'demo-claim-1' });
     await connection.reducers.addClaim({ itemId: 'frita-chorizo', phone: members[1].phone, sourceMessageId: 'demo-claim-2' });
-    await connection.reducers.addClaim({ itemId: 'frita-batidos', phone: members[2].phone, sourceMessageId: 'demo-claim-3' });
+    await connection.reducers.addClaim({ itemId: 'frita-chicken', phone: members[2].phone, sourceMessageId: 'demo-claim-3' });
+    await connection.reducers.addClaim({ itemId: 'frita-fries', phone: members[3].phone, sourceMessageId: 'demo-claim-4' });
+    await connection.reducers.addClaim({ itemId: 'frita-batido', phone: members[4].phone, sourceMessageId: 'demo-claim-5' });
     for (const member of members) {
       await connection.reducers.setShare({
         expenseId: 'expense-frita', phone: member.phone,

@@ -735,6 +735,12 @@ const backendMemberRow = t.row('BackendMember', {
   name: t.option(t.string()), joined_at: t.timestamp(), left_at: t.option(t.timestamp()),
 });
 
+const clientOutboxRow = t.row('ClientOutboxItem', {
+  action_id: t.string().primaryKey(), kind: t.string(), group_id: t.option(t.string()), to_phone: t.option(t.string()),
+  target_message_id: t.option(t.string()), text: t.option(t.string()), reaction: t.option(t.string()),
+  expense_id: t.option(t.string()), purpose: t.string(), send_after: t.timestamp(), status: t.string(),
+});
+
 function grantedGroups(ctx: any): string[] {
   return [...ctx.db.ledger_grants.by_identity.filter(ctx.sender)].map((grant: any) => grant.group_id);
 }
@@ -924,5 +930,19 @@ export const seeder_members = spacetime.view(
         seeded_balance_cents: progress?.seeded_balance_cents ?? 0n,
       };
     });
+  }
+);
+
+/** Outbox rows the iMessage client still has to send. Visible to the client role and the owner only. */
+export const client_outbox = spacetime.view(
+  { name: 'client_outbox', public: true }, t.array(clientOutboxRow), ctx => {
+    if (!isOwner(ctx) && ctx.db.service_roles.identity.find(ctx.sender)?.role !== 'client') return [];
+    return [...ctx.db.outbox]
+      .filter(row => row.status === 'queued' || row.status === 'sending')
+      .map(row => ({
+        action_id: row.action_id, kind: row.kind, group_id: row.group_id, to_phone: row.to_phone,
+        target_message_id: row.target_message_id, text: row.text, reaction: row.reaction,
+        expense_id: row.expense_id, purpose: row.purpose, send_after: row.send_after, status: row.status,
+      }));
   }
 );

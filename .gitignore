@@ -9,3 +9,5 @@ spacetime/build/
 !.env.example
 .DS_Store
 *.tsbuildinfo
+.state/
+.DS_Store
