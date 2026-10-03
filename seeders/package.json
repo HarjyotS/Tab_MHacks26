@@ -9,6 +9,7 @@
     "test": "vitest run",
     "seed:demo": "tsx src/demo.ts",
     "seed:nessie": "tsx src/nessie.ts",
+    "grant:role": "tsx src/grant-role.ts",
     "verify:settlement": "tsx src/verify-settlement.ts",
     "verify:access": "tsx src/verify-ledger-access.ts",
     "verify:backend-access": "tsx src/verify-backend-access.ts"

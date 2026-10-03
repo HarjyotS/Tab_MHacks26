@@ -58,6 +58,24 @@ export const Claims = __t.object("Claims", {
 });
 export type Claims = __Infer<typeof Claims>;
 
+export const ClientOutbox = __t.object("ClientOutbox", {});
+export type ClientOutbox = __Infer<typeof ClientOutbox>;
+
+export const ClientOutboxItem = __t.object("ClientOutboxItem", {
+  actionId: __t.string(),
+  kind: __t.string(),
+  groupId: __t.option(__t.string()),
+  toPhone: __t.option(__t.string()),
+  targetMessageId: __t.option(__t.string()),
+  text: __t.option(__t.string()),
+  reaction: __t.option(__t.string()),
+  expenseId: __t.option(__t.string()),
+  purpose: __t.string(),
+  sendAfter: __t.timestamp(),
+  status: __t.string(),
+});
+export type ClientOutboxItem = __Infer<typeof ClientOutboxItem>;
+
 export const Expenses = __t.object("Expenses", {
   expenseId: __t.string(),
   groupId: __t.string(),

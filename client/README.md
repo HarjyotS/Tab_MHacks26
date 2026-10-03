@@ -5,6 +5,7 @@ Photon Spectrum's cloud lines can't join group chats on the free and Pro plans: 
 | Direction | How |
 |---|---|
 | Inbound | Reads `~/Library/Messages/chat.db` (read-only) every 500 ms. Texts, receipt photos, tapbacks, threaded replies, and members joining or leaving all become `ingest_message` calls. |
+| Hub | `HUB=spacetime` talks to the SpacetimeDB module; `HUB=dev` is an in-memory stand-in with echo commands for testing without it. |
 | Outbound | Sends through Spectrum's local iMessage provider (`@spectrum-ts/imessage-local`), which drives Messages.app. |
 | Tapbacks | Messages has no scripting API for tapbacks, so the bridge drives its interface: it opens the chat with an `sms://open?message-guid=` link, chooses Edit → Tapback Last Message…, and presses the picker key. That only works on a chat's newest message, so the bridge skips (and marks `failed`) any tapback whose target is no longer the newest. |
 | Message ids | AppleScript doesn't return the id of a sent message, so the bridge watches for its own sends to land in chat.db and writes that guid back as `sent_photon_id`. That's what lets a 👍 on Tab's settle request route to the right expense. Tapbacks are confirmed the same way. |
@@ -74,9 +75,18 @@ curl -X POST localhost:8787/dev/outbox -H 'content-type: application/json' \
 
 `bun run tapback-probe` tapbacks 👍 on the newest incoming message in an enabled group and checks chat.db to confirm it landed there. Run it once in the test group before relying on tapbacks. `bun run chats` lists recent group chats with their guids. `bun test` runs the tests against a fake chat.db.
 
-## Wiring up SpacetimeDB
+## Connecting to SpacetimeDB
 
-`src/hub.ts` defines the interface (`ingest`, `markOutbox`, `dueOutbox`), and `DevHub` stands in until the module exists. Once Kian's module is deployed, generate bindings with `spacetime generate --lang typescript --out-dir src/module_bindings` and add a `SpacetimeHub` that calls the `ingest_message` and `mark_outbox` reducers and reads queued outbox rows from a subscription.
+Set `HUB=spacetime` (plus `SPACETIME_HOST` and `SPACETIME_DB`) to use the real module instead of DevHub. The shared database is `SPACETIME_HOST=https://maincloud.spacetimedb.com` with `SPACETIME_DB=tabmhacks2026-268xk`; on Maincloud, Kian grants the role with `spacetime call tabmhacks2026-268xk grant_service_role <identity> client --server maincloud`. The client calls `ingest_message` and `mark_outbox`, and reads its work from the `client_outbox` view.
+
+1. Start the bridge once. It creates its own SpacetimeDB identity, saves the token in `.state/spacetime-token-<database>`, and logs the identity.
+2. The module owner grants that identity the client role from the repo root:
+   ```sh
+   npm run grant:role -- <identity> client
+   ```
+3. Until then, ingests are refused and the outbox looks empty. That's expected.
+
+After the module changes, regenerate bindings with `npm run bindings` from the repo root (it now includes `client/`).
 
 ## Troubleshooting
 
