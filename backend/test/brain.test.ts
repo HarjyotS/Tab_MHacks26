@@ -185,9 +185,7 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
     await tick(ctx);
     await tick(ctx);
     expect(said("objection_reminder")).toHaveLength(1);
-    expect(said("objection_reminder")[0]).toMatch(
-      /^(Locking in \$15\.75 each in \d+ seconds unless anything's off\.|Heads up, \$15\.75 each gets locked in \d+ seconds\.)$/,
-    );
+    expect(said("objection_reminder")[0]).toBe("Anything else?");
 
     advance(10_000);
     await tick(ctx);
@@ -197,7 +195,7 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
       true,
     );
     expect(said("settle_request")[0]).toContain(
-      "Groceries is final. Owed to Joe:\nKian $15.75, Priya $15.75, Jake $15.75.",
+      "Cool, here's what's owed to Joe for Groceries:\nKian $15.75, Priya $15.75, Jake $15.75.",
     );
   });
 

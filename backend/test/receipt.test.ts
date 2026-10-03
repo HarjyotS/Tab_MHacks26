@@ -203,7 +203,7 @@ describe("claims and finalizing (SPEC 7.5)", () => {
       [PEOPLE.Jake]: 637,
     });
     expect(w.said("settle_request")[0]).toContain(
-      "Owed to Joe:\nKian $63.75, Priya $25.50, Jake $6.37.",
+      "Cool, here's what's owed to Joe for Frita Batidos:\nKian $63.75, Priya $25.50, Jake $6.37.",
     );
   });
 
@@ -220,36 +220,25 @@ describe("claims and finalizing (SPEC 7.5)", () => {
     ).toEqual([`${w.db.expenses()[0]!.expense_id}:2`]);
   });
 
-  it("follows up by DM, mentions in the group, gives a last call with a dollar amount, then finalizes", async () => {
+  it("nudges in the group by name, gives a last call with a dollar amount, then finalizes", async () => {
     const w = world({ receipt: { frita: FRITA }, claim: claims });
     await w.photo("Joe", "frita");
     await w.say("Kian", "1");
     await w.say("Priya", "2");
     await w.say("Joe", "even");
-    const dmsTo = (who: keyof typeof PEOPLE) =>
-      w.db
-        .outbox()
-        .filter(
-          (o) => o.purpose === "claim_followup" && o.to_phone === PEOPLE[who],
-        );
+    const nudges = () => w.db.outbox().filter((o) => o.purpose === "claim_followup");
 
     await w.wait(21_000); // demo: 2h → 20s
-    expect(dmsTo("Jake")).toHaveLength(1);
-    expect(dmsTo("Jake")[0]!.text).toContain('Reply with numbers, or "even".');
-    expect(dmsTo("Kian")).toHaveLength(0); // already answered: never asked twice (P4)
+    expect(nudges()).toHaveLength(1);
+    expect(nudges()[0]).toMatchObject({ kind: "group_message", group_id: "house" });
+    expect(nudges()[0]!.text).toMatch(/^Jake, what (did you have|was yours) at Frita Batidos\?/);
 
     await w.wait(121_000); // +12h → +120s
-    expect(dmsTo("Jake")).toHaveLength(2);
+    expect(nudges()[1]!.text).toBe('Jake, still need yours for Frita Batidos. Numbers, or "even".');
 
-    await w.wait(260_000); // 40h → 400s
-    expect(w.said("group_mention")).toHaveLength(1);
-    expect(w.said("group_mention")[0]).toMatch(/^Jake, /);
-
-    await w.wait(40_000); // 44h → 440s
-    expect(dmsTo("Jake")).toHaveLength(3);
-    expect(dmsTo("Jake")[2]!.text).toMatch(
-      /^Last call on Frita Batidos\. In \d+ seconds I'll put you down for \$\d+\.\d{2}/,
-    );
+    await w.wait(300_000); // 44h → 440s
+    expect(nudges()[2]!.text).toMatch(/^Last call, Jake: in \d+ seconds I'll put you down for \$\d+\.\d{2} for Frita Batidos/);
+    expect(w.db.outbox().filter((o) => o.kind === "dm")).toEqual([]); // no DMs at all
 
     await w.wait(41_000); // 48h → 480s: deadline
     expect(w.db.expenses()[0]!.status).toBe("finalized");

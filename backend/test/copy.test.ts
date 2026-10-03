@@ -18,9 +18,7 @@ const items = [
 
 // Every template, rendered with many seeds so every variant is covered.
 // The amounts listed are the only ones the message may contain (P6).
-function renders(
-  seed: string,
-): {
+function renders(seed: string): {
   purpose: OutboxPurpose;
   group: boolean;
   text: string;
@@ -74,8 +72,8 @@ function renders(
     {
       purpose: "objection_reminder",
       group: true,
-      text: T.objectionReminder({ seed, shares: even, when: "in an hour" }),
-      amounts: [1575],
+      text: T.objectionReminder(),
+      amounts: [],
     },
     {
       purpose: "item_list",
@@ -85,41 +83,36 @@ function renders(
     },
     {
       purpose: "claim_followup",
-      group: false,
-      text: T.claimFollowupFirst({
+      group: true,
+      text: T.claimNudge({
+        seed,
+        person: jake,
         merchant: "Frita Batidos",
-        total_cents: 2300,
-        items,
+        step: 1,
       }),
-      amounts: [2300, 1500, 800],
-    },
-    {
-      purpose: "claim_followup",
-      group: false,
-      text: T.claimFollowupSecond({ seed, merchant: "Frita Batidos" }),
       amounts: [],
     },
     {
       purpose: "claim_followup",
-      group: false,
+      group: true,
+      text: T.claimNudge({
+        seed,
+        person: jake,
+        merchant: "Frita Batidos",
+        step: 2,
+      }),
+      amounts: [],
+    },
+    {
+      purpose: "claim_followup",
+      group: true,
       text: T.claimLastCall({
+        person: jake,
         merchant: "Frita Batidos",
         amount_cents: 2475,
-        when: "Tonight",
+        when: "in 4 hours",
       }),
       amounts: [2475],
-    },
-    {
-      purpose: "claim_followup",
-      group: false,
-      text: T.claimFollowupBatch(["Frita Batidos", "Zingerman's"]),
-      amounts: [],
-    },
-    {
-      purpose: "group_mention",
-      group: true,
-      text: T.groupMention({ seed, person: jake }),
-      amounts: [],
     },
     {
       purpose: "settle_request",
@@ -184,7 +177,34 @@ function renders(
       purpose: "breakdown_reply",
       group: true,
       text: T.breakdownReply({
-        lines: [{ description: "Frita Batidos", amount_cents: 3825 }],
+        lines: [
+          {
+            description: "Frita Batidos",
+            amount_cents: 3825,
+            why: "the ribeye, part of the fries, plus tax and tip",
+          },
+        ],
+      }),
+      amounts: [3825],
+    },
+    {
+      purpose: "balance_reply",
+      group: true,
+      text: T.personalBalanceReply({
+        owes: [
+          {
+            to: joe,
+            total_cents: 3825,
+            lines: [
+              {
+                description: "Frita Batidos",
+                amount_cents: 3825,
+                why: "the ribeye, plus tax and tip",
+              },
+            ],
+          },
+        ],
+        owed: [],
       }),
       amounts: [3825],
     },
@@ -322,17 +342,34 @@ describe("group style", () => {
     expect(detectStyle(["got groceries 🛒", "ok"]).emoji).toBe(true);
   });
 
+  it("drops trailing periods when the group doesn't use them, but never inside amounts", () => {
+    expect(
+      detectStyle(["what do i owe", "got pizza, $48", "ok cool"]).periods,
+    ).toBe(false);
+    expect(detectStyle(["What do I owe.", "Got pizza.", "Ok."]).periods).toBe(
+      true,
+    );
+    const casual = { lowercase: true, emoji: false, periods: false };
+    expect(applyStyle("You owe Joe $63.75.", casual)).toBe(
+      "you owe joe $63.75",
+    );
+    expect(
+      applyStyle("Kian $15.00, Priya $3.00.\nTap 👍 to pay.", casual),
+    ).toBe("kian $15.00, priya $3.00\ntap 👍 to pay");
+  });
+
   it("keeps ledger URLs intact when lowercasing", () => {
     const out = applyStyle("Full list: https://tab.tech/g/AbC123", {
       lowercase: true,
       emoji: false,
+      periods: true,
     });
     expect(out).toBe("full list: https://tab.tech/g/AbC123");
   });
 });
 
 describe("compose", () => {
-  const style = { lowercase: false, emoji: false };
+  const style = { lowercase: false, emoji: false, periods: true };
 
   it("adds a wit line when it fits", () => {
     const text = compose({
@@ -367,7 +404,7 @@ describe("wit line", () => {
     moment: "everyone finished paying for Frita Batidos",
     allowed_names: ["Joe"],
     all_member_names: ["Joe", "Jake", "Priya"],
-    style: { lowercase: false, emoji: false },
+    style: { lowercase: false, emoji: false, periods: true },
     previous_had_wit: false,
   };
 

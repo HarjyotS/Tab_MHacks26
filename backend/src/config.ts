@@ -30,10 +30,9 @@ const BASE_DURATIONS = {
   OBJECTION_EXTENSION: 1 * HOUR,
   CLAIM_DEADLINE: 48 * HOUR,
   FOLLOWUP_DM1_AFTER: 2 * HOUR,
-  // SPEC says 10:00 the next morning; quiet hours already push DMs there,
-  // so this is the gap after DM1 before the second nudge.
+  // Claim nudges (SPEC names kept; they now go in the group chat). SPEC
+  // says 10:00 the next morning for the second; quiet hours push it there.
   FOLLOWUP_DM2_AFTER: 12 * HOUR,
-  GROUP_MENTION_AFTER: 40 * HOUR,
   FOLLOWUP_DM3_AFTER: 44 * HOUR,
   // How long Tab waits for an answer to one of its questions.
   PENDING_QUESTION_TTL: 2 * HOUR,

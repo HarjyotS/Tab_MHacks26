@@ -5,7 +5,7 @@ import { CONTEXT_MESSAGES, type Timing } from "../config.js";
 import type { BackendReducers } from "../db/reducers.js";
 import type { OutboxPurpose, Reaction } from "../db/types.js";
 import { compose } from "../copy/compose.js";
-import { detectStyle, type GroupStyle } from "../copy/style.js";
+import { styleFlags, styleFromFlags, type GroupStyle, type StyleFlags } from "../copy/style.js";
 import type { WitContext } from "../copy/wit.js";
 import type { ExpenseMode } from "../extraction/expense.js";
 import type {
@@ -74,6 +74,18 @@ export class Memory {
   >();
   pending = new Map<string, Pending>();
   lastHadWit = new Map<string, boolean>();
+  // Style flags from every text message (no text), for matching the group.
+  private style = new Map<string, StyleFlags[]>();
+
+  observeStyle(m: Message) {
+    if (m.kind !== "text" || !m.text) return;
+    const key = chatKey(chatOf(m));
+    this.style.set(key, [...(this.style.get(key) ?? []), styleFlags(m.text)].slice(-10));
+  }
+
+  styleSamples(chat: Chat): StyleFlags[] {
+    return this.style.get(chatKey(chat)) ?? [];
+  }
 
   remember(m: Message) {
     if (m.kind !== "text" || !m.text) return;
@@ -121,12 +133,7 @@ export function activeMembers(ctx: BrainCtx, group_id: string) {
 }
 
 export function styleFor(ctx: BrainCtx, chat: Chat): GroupStyle {
-  return detectStyle(
-    ctx.memory
-      .humanHistory(chat)
-      .slice(-10)
-      .map((h) => h.text),
-  );
+  return styleFromFlags(ctx.memory.styleSamples(chat));
 }
 
 // SPEC §6.3 context: recent messages in the chat, oldest first, with Tab's

@@ -53,6 +53,7 @@ export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
     if (m.kind === "reaction") {
       await routeReaction(ctx, m); // §6.2: never classified
     } else {
+      ctx.memory.observeStyle(m); // flags only, no text
       // The gate sees every message; Grok only sees what the gate passes
       // (§19, §16.3). Memory, and so all later context, holds only
       // money-related messages.
@@ -285,21 +286,11 @@ export async function tick(ctx: BrainCtx): Promise<void> {
       now.getTime() >= remindAt &&
       !ctx.store.outbox().some((o) => o.action_id === id)
     ) {
-      const shares = ctx.store
-        .shares(e.expense_id)
-        .filter((s) => s.status !== "opted_out");
       await say(ctx, {
         chat: { group_id: e.group_id },
         purpose: "objection_reminder",
         id,
-        text: T.objectionReminder({
-          seed: e.expense_id,
-          shares: shares.map((s) => ({
-            person: { phone: s.phone },
-            amount_cents: s.amount_cents,
-          })),
-          when: inWords(deadline.getTime() - now.getTime()),
-        }),
+        text: T.objectionReminder(),
         expense_id: e.expense_id,
       });
     }

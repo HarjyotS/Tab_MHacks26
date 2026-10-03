@@ -325,13 +325,12 @@ async function applyClaim(
   await ctx.db.set_share({ ...share, status: "locked", responded: true });
 }
 
-// §7.5 follow-ups for people who haven't claimed, generated when due.
+// §7.5 follow-ups for people who haven't claimed, generated when due. Joe's
+// call: they go in the group chat by name, not by DM (changes SPEC P5).
 export async function claimFollowups(ctx: BrainCtx) {
   const now = ctx.now();
   const d = ctx.timing.durations;
-  for (const e of ctx.store
-    .expenses()
-    .filter((x) => x.status === "itemizing" && x.claim_deadline)) {
+  for (const e of ctx.store.expenses().filter((x) => x.status === "itemizing" && x.claim_deadline)) {
     const end = e.claim_deadline!;
     if (now >= end) {
       await finalize(ctx, e); // unclaimed items split evenly by the module
@@ -340,73 +339,23 @@ export async function claimFollowups(ctx: BrainCtx) {
     const start = end.getTime() - d.CLAIM_DEADLINE;
     const tz = ctx.store.group(e.group_id)?.timezone ?? "America/Detroit";
     const members = activeMembers(ctx, e.group_id);
-    for (const s of ctx.store
-      .shares(e.expense_id)
-      .filter((x) => x.status === "awaiting_claim" && !x.responded)) {
-      const dm = { dm_phone: s.phone };
-      const due = [
-        start + d.FOLLOWUP_DM1_AFTER,
-        start + d.FOLLOWUP_DM1_AFTER + d.FOLLOWUP_DM2_AFTER,
-        start + d.FOLLOWUP_DM3_AFTER,
-      ][s.followup_count];
-      if (
-        due !== undefined &&
-        s.followup_count < MAX_DMS_PER_EXPENSE &&
-        now.getTime() >= due
-      ) {
-        const text =
-          s.followup_count === 0
-            ? T.claimFollowupFirst({
-                merchant: e.description,
-                total_cents: e.total_cents,
-                items: ctx.store.lineItems(e.expense_id),
-              })
-            : s.followup_count === 1
-              ? T.claimFollowupSecond({
-                  seed: e.expense_id,
-                  merchant: e.description,
-                })
-              : T.claimLastCall({
-                  merchant: e.description,
-                  amount_cents: s.amount_cents,
-                  when: capitalize(inWords(end.getTime() - now.getTime())),
-                });
-        await say(ctx, {
-          chat: dm,
-          purpose: "claim_followup",
-          id: `claim_followup:${e.expense_id}:${s.phone}:${s.followup_count + 1}`,
-          text,
-          expense_id: e.expense_id,
-          send_after: outsideQuietHours(ctx, now, tz),
-        });
-        await ctx.db.set_share({
-          ...s,
-          followup_count: s.followup_count + 1,
-          last_followup_at: now,
-        });
-      }
-      // The group mention only after DMs went unanswered (§7.5), never a call-out of amounts (P5).
-      const mentionId = `group_mention:${e.expense_id}:${s.phone}`;
-      if (
-        s.followup_count >= 1 &&
-        now.getTime() >= start + d.GROUP_MENTION_AFTER &&
-        !ctx.store.outbox().some((o) => o.action_id === mentionId)
-      ) {
-        const person = {
-          phone: s.phone,
-          name: members.find((x) => x.phone === s.phone)?.name,
-        };
-        await say(ctx, {
-          chat: { group_id: e.group_id },
-          purpose: "group_mention",
-          id: mentionId,
-          text: T.groupMention({ seed: e.expense_id, person }),
-          expense_id: e.expense_id,
-          send_after: outsideQuietHours(ctx, now, tz),
-        });
-      }
+    for (const s of ctx.store.shares(e.expense_id).filter((x) => x.status === "awaiting_claim" && !x.responded)) {
+      const due = [start + d.FOLLOWUP_DM1_AFTER, start + d.FOLLOWUP_DM1_AFTER + d.FOLLOWUP_DM2_AFTER, start + d.FOLLOWUP_DM3_AFTER][s.followup_count];
+      if (due === undefined || s.followup_count >= MAX_DMS_PER_EXPENSE || now.getTime() < due) continue;
+      const person = { phone: s.phone, name: members.find((x) => x.phone === s.phone)?.name };
+      const text =
+        s.followup_count < 2
+          ? T.claimNudge({ seed: `${e.expense_id}:${s.phone}`, person, merchant: e.description, step: (s.followup_count + 1) as 1 | 2 })
+          : T.claimLastCall({ person, merchant: e.description, amount_cents: s.amount_cents, when: inWords(end.getTime() - now.getTime()) });
+      await say(ctx, {
+        chat: { group_id: e.group_id },
+        purpose: "claim_followup",
+        id: `claim_followup:${e.expense_id}:${s.phone}:${s.followup_count + 1}`,
+        text,
+        expense_id: e.expense_id,
+        send_after: outsideQuietHours(ctx, now, tz),
+      });
+      await ctx.db.set_share({ ...s, followup_count: s.followup_count + 1, last_followup_at: now });
     }
   }
 }
-
-const capitalize = (s: string) => s[0]!.toUpperCase() + s.slice(1);

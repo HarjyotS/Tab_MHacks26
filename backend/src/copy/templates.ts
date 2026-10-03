@@ -54,21 +54,9 @@ export function splitProposal(a: {
   return a.updated ? head : `${head}\n${ask}`;
 }
 
-export function objectionReminder(a: {
-  seed: string;
-  shares: Share[];
-  when: string;
-}): string {
-  const amounts = new Set(a.shares.map((s) => s.amount_cents));
-  const what =
-    amounts.size === 1
-      ? `${money(a.shares[0]!.amount_cents)} each`
-      : "these amounts";
-  return pick(a.seed, [
-    `Locking in ${what} ${a.when} unless anything's off.`,
-    `Heads up, ${what} gets locked in ${a.when}.`,
-  ]);
-}
+// Joe's copy (replaces SPEC 7.3's countdown): a light check-in, and about an
+// hour later the settle request.
+export const objectionReminder = () => "Anything else?";
 
 // ── Itemizing (§7.5) ─────────────────────────────────────────────────────
 
@@ -91,44 +79,21 @@ export function itemList(a: {
   return `${a.merchant}, ${money(a.total_cents)} total\n${itemLines(a.items)}\nReply with what you had, or "even" for an even share of whatever's left.`;
 }
 
-export function claimFollowupFirst(a: {
-  merchant: string;
-  total_cents: number;
-  items: Item[];
-}): string {
-  return `${a.merchant}, ${money(a.total_cents)} total\n${itemLines(a.items)}\nReply with numbers, or "even".`;
-}
 
-export function claimFollowupSecond(a: {
-  seed: string;
-  merchant: string;
-}): string {
-  return pick(a.seed, [
-    `Still need what you had at ${a.merchant}. Numbers, or "even".`,
-    `What did you get at ${a.merchant}? Numbers work, or "even".`,
-  ]);
-}
 
-export function claimLastCall(a: {
-  merchant: string;
-  amount_cents: number;
-  when: string;
-}): string {
-  return `Last call on ${a.merchant}. ${a.when} I'll put you down for ${money(a.amount_cents)}\n(an even share of what's unclaimed) unless you reply with what you had.`;
-}
 
-// SPEC §7.5: several pending expenses go in one DM.
-export function claimFollowupBatch(merchants: string[]): string {
-  const list = merchants.map((m, i) => `${i + 1}. ${m}`).join("\n");
-  return `You have ${merchants.length} receipts waiting:\n${list}\nReply with what you had on each, or "even".`;
-}
 
-export function groupMention(a: { seed: string; person: Person }): string {
+// Claim nudges go in the group chat, by name (Joe's call; SPEC P5 and §7.5
+// say DMs). The last one quotes the amount they'll be assigned.
+export function claimNudge(a: { seed: string; person: Person; merchant: string; step: 1 | 2 }): string {
   const name = displayName(a.person);
-  return pick(a.seed, [
-    `${name}, check your DMs from me.`,
-    `${name}, I sent you a DM.`,
-  ]);
+  return a.step === 1
+    ? pick(a.seed, [`${name}, what did you have at ${a.merchant}? Numbers from the list, or "even".`, `${name}, what was yours at ${a.merchant}? Numbers, or "even".`])
+    : `${name}, still need yours for ${a.merchant}. Numbers, or "even".`;
+}
+
+export function claimLastCall(a: { person: Person; merchant: string; amount_cents: number; when: string }): string {
+  return `Last call, ${displayName(a.person)}: ${a.when} I'll put you down for ${money(a.amount_cents)} for ${a.merchant} (an even share of what's unclaimed) unless you say what you had.`;
 }
 
 // ── Settling (§7.6) ──────────────────────────────────────────────────────
@@ -142,7 +107,7 @@ export function settleRequest(a: {
   const owed = a.shares
     .map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`)
     .join(", ");
-  const head = `${a.description} is final. Owed to ${displayName(a.payer)}:\n${owed}.`;
+  const head = `Cool, here's what's owed to ${displayName(a.payer)} for ${a.description}:\n${owed}.`;
   return `${head}\n${pick(a.seed, [
     "Tap 👍 on this message to pay your part, or reply if something's off.",
     "Are we chill? Tap 👍 to pay your part, or reply if something's off.",
@@ -242,33 +207,30 @@ export function balanceReply(a: {
   return `Here's where things stand:\n${lines.join("\n")}${more}`;
 }
 
-export function personalBalanceReply(a: {
-  owes: Debt[];
-  owed: Debt[];
-}): string {
-  if (a.owes.length === 0 && a.owed.length === 0)
-    return "You're square with everyone.";
+// One line per expense behind a debt, with why it's that amount. Every
+// number and name comes from the database (P6).
+export type OwedLine = { description: string; amount_cents: number; why: string };
+export type OwedTo = { to: Person; total_cents: number; lines: OwedLine[] };
+
+export function personalBalanceReply(a: { owes: OwedTo[]; owed: Debt[] }): string {
+  if (a.owes.length === 0 && a.owed.length === 0) return "You're square with everyone.";
   const parts: string[] = [];
-  if (a.owes.length)
-    parts.push(
-      `You owe ${listJoin(a.owes.map((d) => `${displayName(d.to)} ${money(d.amount_cents)}`))}.`,
-    );
-  if (a.owed.length)
-    parts.push(
-      `${listJoin(a.owed.map((d) => `${displayName(d.from)} owes you ${money(d.amount_cents)}`))}.`,
-    );
+  for (const o of a.owes) {
+    if (o.lines.length === 1) {
+      const l = o.lines[0]!;
+      parts.push(`You owe ${displayName(o.to)} ${money(o.total_cents)} for ${l.description} (${l.why})`);
+    } else {
+      parts.push(`You owe ${displayName(o.to)} ${money(o.total_cents)}`);
+      for (const l of o.lines.slice(0, 5)) parts.push(`${l.description} ${money(l.amount_cents)}: ${l.why}`);
+    }
+  }
+  if (a.owed.length) parts.push(`${listJoin(a.owed.map((d) => `${displayName(d.from)} owes you ${money(d.amount_cents)}`))}.`);
   return parts.join("\n");
 }
 
-export function breakdownReply(a: {
-  lines: { description: string; amount_cents: number }[];
-  ledger_url?: string;
-}): string {
+export function breakdownReply(a: { lines: OwedLine[]; ledger_url?: string }): string {
   if (a.lines.length === 0) return "Nothing open for you right now.";
-  const body = a.lines
-    .slice(0, 5)
-    .map((l) => `${l.description}: ${money(l.amount_cents)}`)
-    .join("\n");
+  const body = a.lines.slice(0, 5).map((l) => `${l.description} ${money(l.amount_cents)}: ${l.why}`).join("\n");
   return `${body}${a.ledger_url ? `\nEverything else: ${a.ledger_url}` : ""}`;
 }
 
