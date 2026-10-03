@@ -8,11 +8,12 @@ import { extractInput } from "./inputs.js";
 import { claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   announceSettlements,
-  approve,
   dispute,
   finalize,
   routeReaction,
   settleTarget,
+  settleUp,
+  textApproval,
 } from "./settle.js";
 import {
   handleBalanceQuery,
@@ -40,7 +41,6 @@ const NO = /^(no|nope|nah|wrong|not right)\b/i;
 // that only read data are answered directly; names are never guessed.
 const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
   expense: "Want me to split that?",
-  approval: "Want to pay your part?",
 };
 
 export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
@@ -118,11 +118,11 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed"));
     case "name_reply":
       return handleNameReply(ctx, m);
-    case "approval": {
-      // decide() already required >= 0.90 and an open settle request (P7).
-      const e = boundIf("finalized") ?? settleTarget(ctx, m);
-      return e ? approve(ctx, m, e) : undefined;
-    }
+    case "approval":
+      // Text never moves money (P7, SPEC #15): point to the 👍.
+      return textApproval(ctx, m);
+    case "settle_up":
+      return settleUp(ctx, m);
     case "dispute": {
       const e = boundIf("finalized") ?? settleTarget(ctx, m);
       return e ? dispute(ctx, m, e) : undefined;
@@ -159,7 +159,7 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   });
   ctx.memory.pending.set(chatKey(chatOf(m)), {
     kind: "confirm",
-    then: intent === "expense" ? "expense" : "approval",
+    then: "expense",
     source: m,
     asked_at: ctx.now(),
   });
@@ -172,7 +172,8 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
 // message the gate itself judged money-related.
 async function mayAnswerPending(ctx: BrainCtx, m: Message, moneyRelated: boolean): Promise<boolean> {
   const p = ctx.memory.pending.get(chatKey(chatOf(m)));
-  return Boolean(p) && (m.sender_phone === p!.source.sender_phone || moneyRelated);
+  // The settle-mode question is answered by anyone, by regex only (no Grok).
+  return Boolean(p) && (p!.kind === "settle_mode" || m.sender_phone === p!.source.sender_phone || moneyRelated);
 }
 
 async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
@@ -189,6 +190,7 @@ async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
   if (p.kind === "confirm") return answerConfirm(ctx, m, p, key);
   if (p.kind === "receipt") return answerReceipt(ctx, m, p, key);
   if (p.kind === "which") return answerWhich(ctx, m, p, key);
+  if (p.kind === "settle_mode") return answerSettleMode(ctx, m, key);
 
   const answerer =
     m.sender_phone === p.source.sender_phone
@@ -248,10 +250,7 @@ async function answerConfirm(
   if (!YES.test(text)) return false;
   ctx.memory.pending.delete(key);
   if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source);
-  else if (p.then === "approval") {
-    const e = settleTarget(ctx, p.source);
-    if (e) await approve(ctx, { ...m }, e);
-  } else if (p.then === "large_amount" && p.extraction) {
+  else if (p.then === "large_amount" && p.extraction) {
     const group_id = groupFor(ctx, p.source);
     const rest = p.extraction.problems.filter((x) => x.kind !== "large_amount");
     if (group_id && rest.length === 0)
@@ -378,4 +377,14 @@ async function answerWhich(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind
 function answerCents(text: string): number | undefined {
   const match = text.match(/\$?(\d{1,6}(?:\.\d{1,2})?)/);
   return match ? Math.round(Number(match[1]) * 100) : undefined;
+}
+
+// SPEC #15: "each" switches the group to per-expense settling; anything else
+// leaves the default (ledger) and goes through normal handling.
+async function answerSettleMode(ctx: BrainCtx, m: Message, key: string): Promise<boolean> {
+  if (!m.group_id || !/^each\b/i.test((m.text ?? "").trim())) return false;
+  ctx.memory.pending.delete(key);
+  ctx.memory.settleMode.set(m.group_id, "per_expense");
+  await tapback(ctx, m, "like");
+  return true;
 }

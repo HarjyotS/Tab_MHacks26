@@ -3,7 +3,7 @@ import * as T from "../copy/templates.js";
 import type { Debt, OwedLine } from "../copy/templates.js";
 import { listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
-import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, styleFor, tapback } from "./context.js";
+import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, styleFor, tapback, chatKey } from "./context.js";
 import { groupFor } from "./expense.js";
 
 // §7.2 step 2: intro, name prompt, and contact card for a new group.
@@ -85,6 +85,9 @@ export async function handleNameReply(ctx: BrainCtx, m: Message) {
     ctx.store.group(m.group_id)?.onboarding_status === "pending"
   ) {
     await ctx.db.set_group_status({ group_id: m.group_id, status: "active" });
+    // SPEC #15: ask once, right after names are in. Silence keeps ledger mode.
+    await say(ctx, { chat: { group_id: m.group_id }, purpose: "clarifying_question", id: `settle_mode:${m.group_id}`, text: T.settleModeQuestion() });
+    ctx.memory.pending.set(chatKey({ group_id: m.group_id }), { kind: "settle_mode", source: m, asked_at: ctx.now() });
   }
 }
 

@@ -36,8 +36,8 @@ describe("decide", () => {
     expect(decide(approval, base)).toBe("ignore");
   });
 
-  it("asks instead of paying when approval confidence is below 0.90", () => {
-    expect(decide({ ...approval, confidence: 0.87 }, settle)).toBe("clarify");
+  it("treats a text approval like any other intent, since it only points to the 👍 (SPEC #15)", () => {
+    expect(decide({ ...approval, confidence: 0.87 }, settle)).toBe("act");
   });
 
   it("applies the 0.85 act and 0.50 clarify thresholds to other intents", () => {

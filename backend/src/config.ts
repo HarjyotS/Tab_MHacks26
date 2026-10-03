@@ -11,7 +11,6 @@ function required(name: string): string {
 export const thresholds = {
   act: 0.85,
   clarify: 0.5,
-  approvalText: 0.9,
 } as const;
 
 export const LARGE_AMOUNT_CENTS = 100_000;

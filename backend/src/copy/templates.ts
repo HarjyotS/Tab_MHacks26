@@ -98,20 +98,35 @@ export function claimLastCall(a: { person: Person; merchant: string; amount_cent
 
 // ── Settling (§7.6) ──────────────────────────────────────────────────────
 
-export function settleRequest(a: {
-  seed: string;
-  description: string;
-  payer: Person;
-  shares: Share[];
-}): string {
-  const owed = a.shares
-    .map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`)
-    .join(", ");
-  const head = `Cool, here's what's owed to ${displayName(a.payer)} for ${a.description}:\n${owed}.`;
-  return `${head}\n${pick(a.seed, [
+// One settle request (SPEC #15). Per-expense mode covers one expense; ledger
+// mode covers everything outstanding, grouped by who is owed.
+export type Owed = { payee: Person; shares: Share[] };
+
+export function settleRequest(a: { seed: string; owed: Owed[]; description?: string }): string {
+  const tap = pick(a.seed, [
     "Tap 👍 on this message to pay your part, or reply if something's off.",
     "Are we chill? Tap 👍 to pay your part, or reply if something's off.",
-  ])}`;
+  ]);
+  const list = (shares: Share[]) => shares.map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`).join(", ");
+  if (a.owed.length === 1) {
+    const o = a.owed[0]!;
+    return `Cool, here's what's owed to ${displayName(o.payee)}${a.description ? ` for ${a.description}` : ""}:\n${list(o.shares)}.\n${tap}`;
+  }
+  return `Cool, here's what's owed:\n${a.owed.map((o) => `Owed to ${displayName(o.payee)}: ${list(o.shares)}`).join("\n")}\n${tap}`;
+}
+
+// A typed "yes" never moves money (P7, SPEC #15).
+export const tapToPay = () => "Tap 👍 on the settle request to pay your part.";
+
+export const nothingToSettle = () => "Nothing to settle. Everyone's square.";
+
+export const settleModeQuestion = () =>
+  'Got a trip coming up? I\'ll keep a running tab and settle everyone up at the end. Reply "each" if you\'d rather settle after every expense.';
+
+// SPEC #15: one DM once all of a person's approved transfers are done.
+export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: number }[]; label?: string; allSquare: boolean }): string {
+  const what = listJoin(a.paid.map((p) => `${displayName(p.payee)} ${money(p.amount_cents)}`));
+  return `Simulated settlement complete: you paid ${what}${a.label ? ` for ${a.label}` : ""}.${a.allSquare ? " All square." : ""}`;
 }
 
 export function approvalFollowup(a: {
@@ -128,14 +143,6 @@ export function approvalFollowup(a: {
 }
 
 // SPEC §7.6 wording: the receipt must say the settlement is simulated.
-export function paymentReceipt(a: {
-  payee: Person;
-  amount_cents: number;
-  description: string;
-}): string {
-  return `Simulated settlement complete: you paid ${displayName(a.payee)} ${money(a.amount_cents)} for ${a.description}.`;
-}
-
 export function allSquare(a: { seed: string; description: string }): string {
   return pick(a.seed, [
     `Everyone's square on ${a.description}.`,

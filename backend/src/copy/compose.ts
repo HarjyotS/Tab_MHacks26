@@ -9,6 +9,7 @@ const LIST_PURPOSES = new Set<OutboxPurpose>([
   "claim_followup",
   "balance_reply",
   "breakdown_reply",
+  "settle_request", // ledger mode lists one line per person owed
 ]);
 
 export const GROUP_MAX_LINES = 3;

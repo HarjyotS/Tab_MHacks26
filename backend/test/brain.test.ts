@@ -30,6 +30,7 @@ const base = {
 // What scripted "Grok" returns for each message (mode + text). The real
 // validation in extractExpense still runs on it.
 const GROK: Record<string, object> = {
+  "new|got pizza, $40": { ...base, amount_cents: 4000, description: "Pizza" },
   "new|got groceries, $63": {
     ...base,
     amount_cents: 6300,
@@ -176,6 +177,7 @@ describe("text expense (SPEC 7.3)", () => {
 
 describe("reminder and lock-in in DEMO_MODE (M2)", () => {
   it("reminds once before the deadline, then locks in and asks to settle", async () => {
+    ctx.memory.settleMode.set(G, "per_expense");
     const m = await send(JOE, "got groceries, $63");
     advance(15_000);
     await tick(ctx);
@@ -210,34 +212,27 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
   });
 });
 
-describe("settling (SPEC 7.6)", () => {
+describe("settling, per-expense mode (SPEC 7.6)", () => {
   async function finalized() {
+    ctx.memory.settleMode.set(G, "per_expense");
     const m = await send(JOE, "got groceries, $63");
     advance(31_000);
     await tick(ctx);
     return expenseId(m);
   }
 
-  it("a 👍 on the settle request pays only the reactor's share, then sends a truthful receipt", async () => {
+  it("a 👍 on the settle request pays only the reactor's share, then one DM confirms it", async () => {
     const id = await finalized();
     await react(KIAN, `settle_request:${id}`);
     expect(db.transfers()).toHaveLength(1);
-    expect(db.transfers()[0]).toMatchObject({
-      from_phone: KIAN,
-      to_phone: JOE,
-      amount_cents: 1575,
-      status: "pending",
-    });
+    expect(db.transfers()[0]).toMatchObject({ from_phone: KIAN, to_phone: JOE, amount_cents: 1575, status: "pending" });
     expect(db.shares(id).find((s) => s.phone === PRIYA)!.status).toBe("locked");
-
     db.completeTransfers();
     await tick(ctx);
-    expect(
-      db.outbox().find((o) => o.purpose === "payment_receipt"),
-    ).toMatchObject({
+    expect(db.outbox().find((o) => o.purpose === "payment_receipt")).toMatchObject({
       kind: "dm",
       to_phone: KIAN,
-      text: "Simulated settlement complete: you paid Joe $15.75 for Groceries.",
+      text: "Simulated settlement complete: you paid Joe $15.75 for Groceries. All square.",
     });
   });
 
@@ -247,17 +242,47 @@ describe("settling (SPEC 7.6)", () => {
     expect(db.transfers()).toHaveLength(0);
   });
 
-  it("accepts a text yes, and says everyone's square once all have paid", async () => {
-    const id = await finalized();
+  it("never pays on a typed yes, and points to the 👍 once (P7)", async () => {
+    await finalized();
     await send(KIAN, "yes");
-    await send(PRIYA, "yep");
-    await react(JAKE, `settle_request:${id}`);
-    expect(db.transfers()).toHaveLength(3);
+    await send(KIAN, "yes");
+    expect(db.transfers()).toHaveLength(0);
+    expect(said("clarifying_question")).toEqual(["Tap 👍 on the settle request to pay your part."]);
+  });
+});
+
+describe("settling, ledger mode (SPEC 7.6, default)", () => {
+  it("asks nobody to pay until someone says let's settle up, then one 👍 pays everything they owe", async () => {
+    const groceries = await send(JOE, "got groceries, $63");
+    const pizza = await send(PRIYA, "got pizza, $40");
+    advance(31_000);
+    await tick(ctx);
+    expect(db.expense(expenseId(groceries))!.status).toBe("finalized");
+    expect(said("settle_request")).toEqual([]);
+
+    const settle = await send(KIAN, "let's settle up");
+    // The group texts in lowercase, so Tab does too; the tap line varies.
+    const [head, joe, priya] = said("settle_request")[0]!.toLowerCase().split("\n");
+    expect([head, joe, priya]).toEqual([
+      "cool, here's what's owed:",
+      "owed to joe: kian $15.75, priya $15.75, jake $15.75",
+      "owed to priya: joe $10.00, kian $10.00, jake $10.00",
+    ]);
+    const request = `settle_request:${G}:${settle.message_id}`;
+    expect(db.expense(expenseId(pizza))!.settle_message_id).toBe(request);
+
+    await react(KIAN, request);
+    expect(db.transfers().map((t) => [t.to_phone, t.amount_cents])).toEqual([[JOE, 1575], [PRIYA, 1000]]);
+    for (const who of [PRIYA, JAKE, JOE]) await react(who, request);
     db.completeTransfers();
     await tick(ctx);
-    expect(db.expense(id)!.status).toBe("settled");
-    expect(said("all_square")).toHaveLength(1);
-    expect(said("payment_receipt")).toHaveLength(3);
+    expect(said("payment_receipt")).toContain("Simulated settlement complete: you paid Joe $15.75 and Priya $10.00. All square.");
+    expect(said("all_square")).toEqual(["everyone's square"]);
+  });
+
+  it("says there's nothing to settle when nobody owes anything", async () => {
+    await send(KIAN, "let's settle up");
+    expect(said("balance_reply")).toEqual(["Nothing to settle. Everyone's square."]);
   });
 });
 
@@ -314,6 +339,20 @@ describe("Tab's questions (SPEC 7.3 step 2)", () => {
 });
 
 describe("onboarding (SPEC 7.2)", () => {
+  it("asks once about settling after names are in, and \"each\" switches to per-expense (SPEC #15)", async () => {
+    db.addGroup("trip", [{ phone: JOE }, { phone: KIAN }], "pending");
+    await tick(ctx);
+    advance(1000);
+    await processMessage(ctx, db.ingest({ sender_phone: JOE, group_id: "trip", text: "joe" }));
+    advance(1000);
+    await processMessage(ctx, db.ingest({ sender_phone: KIAN, group_id: "trip", text: "kian" }));
+    expect(db.outbox().filter((o) => o.action_id === "settle_mode:trip").map((o) => o.text)).toHaveLength(1);
+    expect(ctx.memory.settleMode.get("trip")).toBeUndefined(); // ledger by default
+    advance(1000);
+    await processMessage(ctx, db.ingest({ sender_phone: KIAN, group_id: "trip", text: "each" }));
+    expect(ctx.memory.settleMode.get("trip")).toBe("per_expense");
+  });
+
   it("introduces Tab once and names people as they answer", async () => {
     db.addGroup("new", [{ phone: JOE }, { phone: KIAN }], "pending");
     await tick(ctx);

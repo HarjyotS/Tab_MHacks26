@@ -45,7 +45,7 @@ export type Pending =
   | {
       kind: "confirm"; // "yes" proceeds with `then`
       source: Message;
-      then: "expense" | "approval" | "large_amount";
+      then: "expense" | "large_amount";
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
       asked_at: Date;
@@ -55,6 +55,11 @@ export type Pending =
       stage: "confirm_total" | "total" | "tip";
       source: Message;
       read: ReceiptRead;
+      asked_at: Date;
+    }
+  | {
+      kind: "settle_mode"; // the one-time "Got a trip coming up?" question
+      source: Message;
       asked_at: Date;
     }
   | {
@@ -74,6 +79,8 @@ export class Memory {
   >();
   pending = new Map<string, Pending>();
   lastHadWit = new Map<string, boolean>();
+  // Groups that answered "each" (SPEC #15) until Kian stores settle_mode.
+  settleMode = new Map<string, "ledger" | "per_expense">();
   // Style flags from every text message (no text), for matching the group.
   private style = new Map<string, StyleFlags[]>();
 

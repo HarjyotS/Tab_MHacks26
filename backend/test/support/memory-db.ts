@@ -4,7 +4,18 @@
 import { Timestamp } from "spacetimedb";
 import { computeSplit } from "../../../spacetime/src/split-math.js";
 import { createReducers, type ReducerClient } from "../../src/db/reducers.js";
-import type { Claim, Expense, Group, LineItem, Member, Message, Outbox, Share, Store, Transfer } from "../../src/store/types.js";
+import type {
+  Claim,
+  Expense,
+  Group,
+  LineItem,
+  Member,
+  Message,
+  Outbox,
+  Share,
+  Store,
+  Transfer,
+} from "../../src/store/types.js";
 
 type Args<K extends keyof ReducerClient> = Parameters<ReducerClient[K]>[0];
 
@@ -39,8 +50,12 @@ export class MemoryDb implements Store {
   shares = (id: string) =>
     [...this.shrs.values()].filter((s) => s.expense_id === id);
   transfers = () => [...this.trs.values()];
-  lineItems = (id: string) => [...this.items.values()].filter((i) => i.expense_id === id).sort((a, b) => a.position - b.position);
-  claims = (id: string) => [...this.clms.values()].filter((c) => c.expense_id === id);
+  lineItems = (id: string) =>
+    [...this.items.values()]
+      .filter((i) => i.expense_id === id)
+      .sort((a, b) => a.position - b.position);
+  claims = (id: string) =>
+    [...this.clms.values()].filter((c) => c.expense_id === id);
 
   // ── What the client does ───────────────────────────────────────────────
   addGroup(
@@ -129,7 +144,12 @@ export class MemoryDb implements Store {
       tipCents: BigInt(e.tip_cents),
       feesCents: BigInt(e.fees_cents),
       discountCents: BigInt(e.discount_cents),
-      items: items.map((i) => ({ amountCents: BigInt(i.amount_cents), claimers: [...this.clms.values()].filter((c) => c.item_id === i.item_id).map((c) => c.phone) })),
+      items: items.map((i) => ({
+        amountCents: BigInt(i.amount_cents),
+        claimers: [...this.clms.values()]
+          .filter((c) => c.item_id === i.item_id)
+          .map((c) => c.phone),
+      })),
     });
     const sum = [...result.values()].reduce((a, b) => a + b, 0n);
     if (sum !== BigInt(e.total_cents))
@@ -241,9 +261,13 @@ export class MemoryDb implements Store {
       }
     },
     createTransfer: async (a: Args<"createTransfer">) => {
+      // Keyed by approval AND expense: the change asked of Kian on #15, so one
+      // 👍 can approve several shares. The module today keys by approval only.
       if (
         [...this.trs.values()].some(
-          (t) => t.approved_by_message_id === a.approvedByMessageId,
+          (t) =>
+            t.approved_by_message_id === a.approvedByMessageId &&
+            t.expense_id === a.expenseId,
         )
       )
         return;
@@ -274,9 +298,17 @@ export class MemoryDb implements Store {
     },
     setLedgerSecret: async () => {},
     setLineItems: async (a: Args<"setLineItems">) => {
-      for (const [k, i] of this.items) if (i.expense_id === a.expenseId) this.items.delete(k);
+      for (const [k, i] of this.items)
+        if (i.expense_id === a.expenseId) this.items.delete(k);
       for (const i of a.items) {
-        this.items.set(i.itemId, { item_id: i.itemId, expense_id: a.expenseId, position: i.position, description: i.description, quantity: i.quantity, amount_cents: n(i.amountCents) });
+        this.items.set(i.itemId, {
+          item_id: i.itemId,
+          expense_id: a.expenseId,
+          position: i.position,
+          description: i.description,
+          quantity: i.quantity,
+          amount_cents: n(i.amountCents),
+        });
       }
       if (this.shares(a.expenseId).length > 0) this.recompute(a.expenseId);
     },
@@ -284,7 +316,15 @@ export class MemoryDb implements Store {
       const item = this.items.get(a.itemId);
       if (!item) throw new Error("Unknown line item");
       const id = `${a.itemId}:${a.phone}`;
-      if (!this.clms.has(id)) this.clms.set(id, { claim_id: id, item_id: a.itemId, expense_id: item.expense_id, phone: a.phone, source_message_id: a.sourceMessageId, created_at: this.now() });
+      if (!this.clms.has(id))
+        this.clms.set(id, {
+          claim_id: id,
+          item_id: a.itemId,
+          expense_id: item.expense_id,
+          phone: a.phone,
+          source_message_id: a.sourceMessageId,
+          created_at: this.now(),
+        });
       this.recompute(item.expense_id);
     },
     removeClaim: async (a: Args<"removeClaim">) => {

@@ -120,13 +120,21 @@ function renders(seed: string): {
       text: T.settleRequest({
         seed,
         description: "Frita Batidos",
-        payer: joe,
-        shares: [
-          { person: jake, amount_cents: 3825 },
-          { person: priya, amount_cents: 2550 },
-        ],
+        owed: [{ payee: joe, shares: [{ person: jake, amount_cents: 3825 }, { person: priya, amount_cents: 2550 }] }],
       }),
       amounts: [3825, 2550],
+    },
+    {
+      purpose: "settle_request",
+      group: true,
+      text: T.settleRequest({
+        seed,
+        owed: [
+          { payee: joe, shares: [{ person: jake, amount_cents: 3825 }] },
+          { payee: priya, shares: [{ person: jake, amount_cents: 1200 }] },
+        ],
+      }),
+      amounts: [3825, 1200],
     },
     {
       purpose: "approval_followup",
@@ -142,12 +150,8 @@ function renders(seed: string): {
     {
       purpose: "payment_receipt",
       group: false,
-      text: T.paymentReceipt({
-        payee: joe,
-        amount_cents: 3825,
-        description: "Frita Batidos",
-      }),
-      amounts: [3825],
+      text: T.paymentConfirmation({ paid: [{ payee: joe, amount_cents: 3825 }, { payee: priya, amount_cents: 1200 }], label: "Vegas Trip", allSquare: true }),
+      amounts: [3825, 1200],
     },
     {
       purpose: "all_square",
@@ -256,24 +260,13 @@ describe("templates", () => {
   });
 
   it("lists people by name, or by last four digits until they're named", () => {
-    const text = T.settleRequest({
-      seed: "x",
-      description: "Pizza",
-      payer: joe,
-      shares: [{ person: unnamed, amount_cents: 960 }],
-    });
+    const text = T.settleRequest({ seed: "x", description: "Pizza", owed: [{ payee: joe, shares: [{ person: unnamed, amount_cents: 960 }] }] });
     expect(text).toContain("…0199 $9.60");
   });
 
   it("says the settlement receipt is simulated, as SPEC 7.6 requires", () => {
-    expect(
-      T.paymentReceipt({
-        payee: joe,
-        amount_cents: 3825,
-        description: "Frita Batidos",
-      }),
-    ).toBe(
-      "Simulated settlement complete: you paid Joe $38.25 for Frita Batidos.",
+    expect(T.paymentConfirmation({ paid: [{ payee: joe, amount_cents: 3825 }, { payee: priya, amount_cents: 1200 }], label: "Vegas Trip", allSquare: true })).toBe(
+      "Simulated settlement complete: you paid Joe $38.25 and Priya $12.00 for Vegas Trip. All square.",
     );
   });
 
