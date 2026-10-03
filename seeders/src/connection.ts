@@ -1,8 +1,9 @@
+import { type Identity } from 'spacetimedb';
 import { DbConnection, tables, type SubscriptionHandle } from './module_bindings/index.js';
 
 export type TabConnection = DbConnection;
 
-export function connect(options: { anonymous?: boolean } = {}): Promise<DbConnection> {
+export function connect(options: { anonymous?: boolean; onIdentity?: (identity: Identity) => void } = {}): Promise<DbConnection> {
   const uri = process.env.SPACETIME_HOST ?? 'http://127.0.0.1:3000';
   const database = process.env.SPACETIME_DB ?? 'tab-local';
   const token = options.anonymous ? undefined : process.env.SPACETIME_AUTH_TOKEN;
@@ -11,7 +12,10 @@ export function connect(options: { anonymous?: boolean } = {}): Promise<DbConnec
     let builder = DbConnection.builder()
       .withUri(uri)
       .withDatabaseName(database)
-      .onConnect(connection => resolve(connection))
+      .onConnect((connection, identity) => {
+        options.onIdentity?.(identity);
+        resolve(connection);
+      })
       .onConnectError((_ctx, error) => reject(error));
     if (token) builder = builder.withToken(token);
     builder.build();
@@ -43,6 +47,26 @@ export function subscribeLedger(connection: DbConnection): Promise<SubscriptionH
         tables.ledgerClaims,
         tables.ledgerTransfers,
         tables.ledgerBalances,
+      ]);
+  });
+}
+
+export function subscribeBackend(connection: DbConnection): Promise<SubscriptionHandle> {
+  return new Promise((resolve, reject) => {
+    let handle: SubscriptionHandle;
+    handle = connection.subscriptionBuilder()
+      .onApplied(() => resolve(handle))
+      .onError(ctx => reject(new Error(String(ctx.event))))
+      .subscribe([
+        tables.backendMessages,
+        tables.backendGroups,
+        tables.backendMembers,
+        tables.backendOutbox,
+        tables.backendExpenses,
+        tables.backendLineItems,
+        tables.backendClaims,
+        tables.backendShares,
+        tables.backendTransfers,
       ]);
   });
 }

@@ -59,6 +59,15 @@ import UpsertExpenseReducer from "./upsert_expense_reducer";
 // Import all procedure arg schemas
 
 // Import all table schema definitions
+import BackendClaimsRow from "./backend_claims_table";
+import BackendExpensesRow from "./backend_expenses_table";
+import BackendGroupsRow from "./backend_groups_table";
+import BackendLineItemsRow from "./backend_line_items_table";
+import BackendMembersRow from "./backend_members_table";
+import BackendMessagesRow from "./backend_messages_table";
+import BackendOutboxRow from "./backend_outbox_table";
+import BackendSharesRow from "./backend_shares_table";
+import BackendTransfersRow from "./backend_transfers_table";
 import LedgerBalancesRow from "./ledger_balances_table";
 import LedgerClaimsRow from "./ledger_claims_table";
 import LedgerExpensesRow from "./ledger_expenses_table";
@@ -73,6 +82,69 @@ import SeederMembersRow from "./seeder_members_table";
 
 /** The schema information for all tables in this module. This is defined the same was as the tables would have been defined in the server. */
 const tablesSchema = __schema({
+  backendClaims: __table({
+    name: 'backend_claims',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendClaimsRow),
+  backendExpenses: __table({
+    name: 'backend_expenses',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendExpensesRow),
+  backendGroups: __table({
+    name: 'backend_groups',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendGroupsRow),
+  backendLineItems: __table({
+    name: 'backend_line_items',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendLineItemsRow),
+  backendMembers: __table({
+    name: 'backend_members',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendMembersRow),
+  backendMessages: __table({
+    name: 'backend_messages',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendMessagesRow),
+  backendOutbox: __table({
+    name: 'backend_outbox',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendOutboxRow),
+  backendShares: __table({
+    name: 'backend_shares',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendSharesRow),
+  backendTransfers: __table({
+    name: 'backend_transfers',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendTransfersRow),
   ledgerBalances: __table({
     name: 'ledger_balances',
     indexes: [
@@ -169,6 +241,24 @@ const proceduresSchema = __procedures(
 
 type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "tables"> & {
   tables: typeof tablesSchema.schemaType.tables & {
+    /** @deprecated Use `backendClaims` instead. This alias will be removed in the next major version. */
+    readonly "backend_claims": Omit<typeof tablesSchema.schemaType.tables["backendClaims"], "accessorName"> & { readonly accessorName: "backend_claims" };
+    /** @deprecated Use `backendExpenses` instead. This alias will be removed in the next major version. */
+    readonly "backend_expenses": Omit<typeof tablesSchema.schemaType.tables["backendExpenses"], "accessorName"> & { readonly accessorName: "backend_expenses" };
+    /** @deprecated Use `backendGroups` instead. This alias will be removed in the next major version. */
+    readonly "backend_groups": Omit<typeof tablesSchema.schemaType.tables["backendGroups"], "accessorName"> & { readonly accessorName: "backend_groups" };
+    /** @deprecated Use `backendLineItems` instead. This alias will be removed in the next major version. */
+    readonly "backend_line_items": Omit<typeof tablesSchema.schemaType.tables["backendLineItems"], "accessorName"> & { readonly accessorName: "backend_line_items" };
+    /** @deprecated Use `backendMembers` instead. This alias will be removed in the next major version. */
+    readonly "backend_members": Omit<typeof tablesSchema.schemaType.tables["backendMembers"], "accessorName"> & { readonly accessorName: "backend_members" };
+    /** @deprecated Use `backendMessages` instead. This alias will be removed in the next major version. */
+    readonly "backend_messages": Omit<typeof tablesSchema.schemaType.tables["backendMessages"], "accessorName"> & { readonly accessorName: "backend_messages" };
+    /** @deprecated Use `backendOutbox` instead. This alias will be removed in the next major version. */
+    readonly "backend_outbox": Omit<typeof tablesSchema.schemaType.tables["backendOutbox"], "accessorName"> & { readonly accessorName: "backend_outbox" };
+    /** @deprecated Use `backendShares` instead. This alias will be removed in the next major version. */
+    readonly "backend_shares": Omit<typeof tablesSchema.schemaType.tables["backendShares"], "accessorName"> & { readonly accessorName: "backend_shares" };
+    /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
+    readonly "backend_transfers": Omit<typeof tablesSchema.schemaType.tables["backendTransfers"], "accessorName"> & { readonly accessorName: "backend_transfers" };
     /** @deprecated Use `ledgerBalances` instead. This alias will be removed in the next major version. */
     readonly "ledger_balances": Omit<typeof tablesSchema.schemaType.tables["ledgerBalances"], "accessorName"> & { readonly accessorName: "ledger_balances" };
     /** @deprecated Use `ledgerClaims` instead. This alias will be removed in the next major version. */
@@ -205,6 +295,15 @@ const REMOTE_MODULE = {
 >;
 
 const tableAccessorAliases = {
+  "backend_claims": "backendClaims",
+  "backend_expenses": "backendExpenses",
+  "backend_groups": "backendGroups",
+  "backend_line_items": "backendLineItems",
+  "backend_members": "backendMembers",
+  "backend_messages": "backendMessages",
+  "backend_outbox": "backendOutbox",
+  "backend_shares": "backendShares",
+  "backend_transfers": "backendTransfers",
   "ledger_balances": "ledgerBalances",
   "ledger_claims": "ledgerClaims",
   "ledger_expenses": "ledgerExpenses",
@@ -234,6 +333,24 @@ function __withTableAccessorAliases<T extends object>(target: T, freeze = false)
 
 type __DbViewBase = __DbConnectionImpl<typeof REMOTE_MODULE>["db"];
 export type DbView = __DbViewBase & {
+  /** @deprecated Use `backendClaims` instead. This alias will be removed in the next major version. */
+  readonly "backend_claims": __DbViewBase["backendClaims"];
+  /** @deprecated Use `backendExpenses` instead. This alias will be removed in the next major version. */
+  readonly "backend_expenses": __DbViewBase["backendExpenses"];
+  /** @deprecated Use `backendGroups` instead. This alias will be removed in the next major version. */
+  readonly "backend_groups": __DbViewBase["backendGroups"];
+  /** @deprecated Use `backendLineItems` instead. This alias will be removed in the next major version. */
+  readonly "backend_line_items": __DbViewBase["backendLineItems"];
+  /** @deprecated Use `backendMembers` instead. This alias will be removed in the next major version. */
+  readonly "backend_members": __DbViewBase["backendMembers"];
+  /** @deprecated Use `backendMessages` instead. This alias will be removed in the next major version. */
+  readonly "backend_messages": __DbViewBase["backendMessages"];
+  /** @deprecated Use `backendOutbox` instead. This alias will be removed in the next major version. */
+  readonly "backend_outbox": __DbViewBase["backendOutbox"];
+  /** @deprecated Use `backendShares` instead. This alias will be removed in the next major version. */
+  readonly "backend_shares": __DbViewBase["backendShares"];
+  /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
+  readonly "backend_transfers": __DbViewBase["backendTransfers"];
   /** @deprecated Use `ledgerBalances` instead. This alias will be removed in the next major version. */
   readonly "ledger_balances": __DbViewBase["ledgerBalances"];
   /** @deprecated Use `ledgerClaims` instead. This alias will be removed in the next major version. */
@@ -256,6 +373,24 @@ export type DbView = __DbViewBase & {
 
 type __TablesBase = __QueryBuilder<typeof tablesSchema.schemaType>;
 export type Tables = __TablesBase & {
+  /** @deprecated Use `backendClaims` instead. This alias will be removed in the next major version. */
+  readonly "backend_claims": __TablesBase["backendClaims"];
+  /** @deprecated Use `backendExpenses` instead. This alias will be removed in the next major version. */
+  readonly "backend_expenses": __TablesBase["backendExpenses"];
+  /** @deprecated Use `backendGroups` instead. This alias will be removed in the next major version. */
+  readonly "backend_groups": __TablesBase["backendGroups"];
+  /** @deprecated Use `backendLineItems` instead. This alias will be removed in the next major version. */
+  readonly "backend_line_items": __TablesBase["backendLineItems"];
+  /** @deprecated Use `backendMembers` instead. This alias will be removed in the next major version. */
+  readonly "backend_members": __TablesBase["backendMembers"];
+  /** @deprecated Use `backendMessages` instead. This alias will be removed in the next major version. */
+  readonly "backend_messages": __TablesBase["backendMessages"];
+  /** @deprecated Use `backendOutbox` instead. This alias will be removed in the next major version. */
+  readonly "backend_outbox": __TablesBase["backendOutbox"];
+  /** @deprecated Use `backendShares` instead. This alias will be removed in the next major version. */
+  readonly "backend_shares": __TablesBase["backendShares"];
+  /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
+  readonly "backend_transfers": __TablesBase["backendTransfers"];
   /** @deprecated Use `ledgerBalances` instead. This alias will be removed in the next major version. */
   readonly "ledger_balances": __TablesBase["ledgerBalances"];
   /** @deprecated Use `ledgerClaims` instead. This alias will be removed in the next major version. */

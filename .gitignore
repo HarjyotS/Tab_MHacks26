@@ -7,5 +7,5 @@ spacetime/build/
 *.log
 .env.*
 !.env.example
-backend/eval-runs/
 .DS_Store
+*.tsbuildinfo

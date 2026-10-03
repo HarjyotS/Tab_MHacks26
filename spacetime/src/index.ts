@@ -730,6 +730,10 @@ const seederMemberRow = t.row('SeederMember', {
   customer_id: t.option(t.string()), account_id: t.option(t.string()), deposit_created: t.bool(),
   seeded_balance_cents: t.i64(),
 });
+const backendMemberRow = t.row('BackendMember', {
+  member_id: t.string().primaryKey(), ledger_member_id: t.string(), group_id: t.string(), phone: t.string(),
+  name: t.option(t.string()), joined_at: t.timestamp(), left_at: t.option(t.timestamp()),
+});
 
 function grantedGroups(ctx: any): string[] {
   return [...ctx.db.ledger_grants.by_identity.filter(ctx.sender)].map((grant: any) => grant.group_id);
@@ -738,6 +742,61 @@ function grantedGroups(ctx: any): string[] {
 function ledgerMemberFor(ctx: any, groupId: string, phone: string): any {
   return ctx.db.members.by_group_phone.filter([groupId, phone]).next().value;
 }
+
+function canReadBackendViews(ctx: any): boolean {
+  if (isOwner(ctx)) return true;
+  return ctx.db.service_roles.identity.find(ctx.sender)?.role === 'backend';
+}
+
+export const backend_messages = spacetime.view(
+  { name: 'backend_messages', public: true }, t.array(messages.rowType), ctx =>
+    canReadBackendViews(ctx)
+      ? [...ctx.db.messages].filter(message => message.status === 'new' || message.status === 'processing')
+      : []
+);
+
+export const backend_groups = spacetime.view(
+  { name: 'backend_groups', public: true }, t.array(groups.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.groups] : []
+);
+
+export const backend_members = spacetime.view(
+  { name: 'backend_members', public: true }, t.array(backendMemberRow), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.members].map(member => ({
+      member_id: member.member_id, ledger_member_id: member.ledger_member_id, group_id: member.group_id,
+      phone: member.phone, name: member.name, joined_at: member.joined_at, left_at: member.left_at,
+    })) : []
+);
+
+export const backend_outbox = spacetime.view(
+  { name: 'backend_outbox', public: true }, t.array(outbox.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.outbox] : []
+);
+
+export const backend_expenses = spacetime.view(
+  { name: 'backend_expenses', public: true }, t.array(expenses.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.expenses] : []
+);
+
+export const backend_line_items = spacetime.view(
+  { name: 'backend_line_items', public: true }, t.array(line_items.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.line_items] : []
+);
+
+export const backend_claims = spacetime.view(
+  { name: 'backend_claims', public: true }, t.array(claims.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.claims] : []
+);
+
+export const backend_shares = spacetime.view(
+  { name: 'backend_shares', public: true }, t.array(shares.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.shares] : []
+);
+
+export const backend_transfers = spacetime.view(
+  { name: 'backend_transfers', public: true }, t.array(transfers.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.transfers] : []
+);
 
 export const ledger_groups = spacetime.view(
   { name: 'ledger_groups', public: true }, t.array(ledgerGroupRow), ctx =>

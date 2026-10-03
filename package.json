@@ -18,7 +18,8 @@
     "seed:nessie": "npm run seed:nessie -w seeders",
     "verify:settlement": "npm run verify:settlement -w seeders",
     "verify:access": "npm run verify:access -w seeders",
-    "fixtures": "npm run fixtures -w gate --"
+    "fixtures": "npm run fixtures -w gate --",
+    "verify:backend-access": "npm run verify:backend-access -w seeders"
   },
   "engines": {
     "node": ">=22"
