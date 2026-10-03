@@ -21,7 +21,7 @@ try {
   }
 
   await connection.reducers.redeemLedgerAccess({ secret: LEDGER_SECRET });
-  await waitFor(() => [...connection.db.ledgerGroups.iter()].length === 1 && [...connection.db.ledgerMembers.iter()].length === 3);
+  await waitFor(() => [...connection.db.ledgerGroups.iter()].length === 1 && [...connection.db.ledgerMembers.iter()].length === 5);
 
   const rows = [
     ...connection.db.ledgerGroups.iter(),
