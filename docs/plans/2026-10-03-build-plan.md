@@ -7,7 +7,7 @@ Written Sat Oct 3, ~4 PM. Hacking ends **Sun Oct 4, 12:00 PM** (Devpost hard dea
 | Decision                     | Was                                     | Now                                                                                                                                              |
 | ---------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
 | iMessage client              | Photon Spectrum, managed cloud provider | **Photon Spectrum local** (`@spectrum-ts/imessage-local`) on Harjyot's Mac. Try to upgrade to Spectrum Cloud via the Photon sponsor (see below). |
-| LLM                          | Grok extraction, Jev classifier         | **Grok for everything**: classify, extract, receipt vision, plus **Grok Voice STT** for voice memos                                              |
+| LLM | Grok extraction, Jev classifier | Grok extraction, receipt vision, and **Grok Voice STT**. Classifier: a Grok stub behind the §6.3 interface now; Harjyot swaps in Jev once the client is stable. |
 | SpaceXAI "Make it Legendary" | Optional                                | **Target**: requires building in **Cursor** + using Grok Voice or Imagine                                                                        |
 | Spacetime                    | Core backend                            | Unchanged, still the core                                                                                                                        |
 
@@ -51,9 +51,9 @@ Still open: ask in Discord how many sponsor tracks one project can enter.
 
 | Area                                                                            | Owner       |
 | ------------------------------------------------------------------------------- | ----------- |
-| iMessage client (`client/`): Photon Spectrum local, tapback reader, outbox loop | **Harjyot** |
-| Backend: Grok classify/extract/vision/voice, handlers, scheduler, copy          | Joe         |
-| SpacetimeDB module, split math, Nessie worker, web ledger                       | Kian        |
+| Integrations (`client/`): Photon client, outbox loop, image hosting, contact card, **Nessie worker**, swapping in Jev | **Harjyot** |
+| Brain: classifier stub, Grok extraction, intent handlers, expense state machine, scheduler, message templates | Joe |
+| Data and ledger: SpacetimeDB module, `recompute_expense` with the test vectors, web ledger | Kian |
 
 ## Client (SPEC §10, adjusted for local mode)
 
@@ -69,7 +69,7 @@ Everything in SPEC §10 still applies except the items in the gaps table above. 
 - [ ] Check SpacetimeDB module language support (TypeScript module vs Rust) and the TS client SDK; pick one.
 - [ ] Get API keys: `XAI_API_KEY`, `NESSIE_API_KEY`. Confirm the Grok structured-output model, the vision model, and the Voice STT endpoint against docs.x.ai.
 - [ ] Repo scaffold per SPEC §21, `.env.example`, `.gitignore`, `fixtures/`.
-- [ ] Update SPEC.md: §2.1 prizes (Grok/SpaceXAI), §3 client owner = Harjyot, §6.5 Jev → Grok classifier, §10 local-mode gaps, §13 tapbacks. Announce in team chat (contract change).
+- [ ] Update SPEC.md: §2.1 prizes (Grok/SpaceXAI), §3 client owner = Harjyot, §3 Nessie owner = Harjyot, §10 local-mode gaps, §13 tapbacks. Announce in team chat (contract change).
 - [ ] **M0:** module deployed with all §5 tables and reducers (stubs OK); each person can write and read fake rows.
 
 ### Phase 1 — Echo loop (6:00 → 8:30 PM)
@@ -87,7 +87,7 @@ Everything in SPEC §10 still applies except the items in the gaps table above. 
 - [ ] Joe: Grok `ExpenseExtraction` + grounding check (§9.1); text-expense flow §7.3; split proposal; objection window; finalize; settle request. Templates for every number (P6).
 - [ ] Joe: onboarding §7.2 (intro, name prompt, contact card .vcf via file send, `name_reply`).
 - [ ] Joe: config file §11.3 with `DEMO_MODE`; scheduler loop §11.2.
-- [ ] Kian: Nessie worker §12.2 (account creation, seeding, idempotent transfers); `create_transfer`, `update_transfer`, `set_nessie_ids`.
+- [ ] Harjyot: Nessie worker §12.2 (account creation, seeding, idempotent transfers); `create_transfer`, `update_transfer`, `set_nessie_ids`.
 - [ ] **M2:** "got pizza for everyone, $48" → proposal → "not even, John only had a diet coke" → updated split → finalized in DEMO_MODE.
 - [ ] **M3:** 👍 on the settle request → transfer → Nessie done → share paid → receipt DM.
 
