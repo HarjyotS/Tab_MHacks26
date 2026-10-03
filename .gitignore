@@ -5,3 +5,4 @@ dist/
 coverage/
 spacetime/build/
 *.log
+*.tsbuildinfo
