@@ -77,9 +77,9 @@ curl -X POST localhost:8787/dev/outbox -H 'content-type: application/json' \
 
 ## Connecting to SpacetimeDB
 
-Set `HUB=spacetime` (plus `SPACETIME_HOST` and `SPACETIME_DB`) to use the real module instead of DevHub. The client calls `ingest_message` and `mark_outbox`, and reads its work from the `client_outbox` view.
+Set `HUB=spacetime` (plus `SPACETIME_HOST` and `SPACETIME_DB`) to use the real module instead of DevHub. The shared database is `SPACETIME_HOST=https://maincloud.spacetimedb.com` with `SPACETIME_DB=tabmhacks2026-268xk`; on Maincloud, Kian grants the role with `spacetime call tabmhacks2026-268xk grant_service_role <identity> client --server maincloud`. The client calls `ingest_message` and `mark_outbox`, and reads its work from the `client_outbox` view.
 
-1. Start the bridge once. It creates its own SpacetimeDB identity, saves the token in `.state/spacetime-token`, and logs the identity.
+1. Start the bridge once. It creates its own SpacetimeDB identity, saves the token in `.state/spacetime-token-<database>`, and logs the identity.
 2. The module owner grants that identity the client role from the repo root:
    ```sh
    npm run grant:role -- <identity> client

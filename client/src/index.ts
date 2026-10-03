@@ -36,7 +36,8 @@ for (const id of config.groupIds) gate.enable(id);
 let devHub: DevHub | null = null;
 let hub: Hub;
 if (config.hub === "spacetime") {
-  const tokenPath = join(dirname(config.statePath), "spacetime-token");
+  // Tokens are per server, so keep one per database (local and Maincloud can't share).
+  const tokenPath = join(dirname(config.statePath), `spacetime-token-${config.spacetime.database}`);
   const saved = config.spacetime.token ?? (existsSync(tokenPath) ? readFileSync(tokenPath, "utf8").trim() : undefined);
   const spacetime = await spacetimeHub({
     uri: config.spacetime.uri,
