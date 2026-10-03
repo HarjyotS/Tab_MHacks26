@@ -30,7 +30,7 @@ export const INTENT_RULES: Record<TextIntent, string> = {
   name_reply:
     "Tab recently asked members for their names, and the sender is answering with their own name or nickname.",
   expense:
-    "The sender reports that someone (usually themselves) paid for something that other people in this chat share or owe part of. It must describe an actual purchase or bill, not a price mentioned in passing. Asking to be paid back for a named purchase counts even without an amount. Stating what a shared thing cost ('the cab home was 30') counts even when the payer is unclear, with lower confidence.",
+    "The sender reports a purchase or bill, or asks to be paid back for one. People post purchases in this chat because they want them split, so treat a reported purchase as shared unless the sender makes clear it was only for themselves ('my gym membership', 'a jacket for me'). Counts even when the amount or the payer is missing; use lower confidence when the payer is unclear. Prices of things nobody bought, plans, and bets are not expenses.",
   split_adjustment:
     "There is an open expense, and the sender says its split should not be even, names what a specific person had or paid for, or says someone (often themselves) was not there and should be left out.",
   claim:
