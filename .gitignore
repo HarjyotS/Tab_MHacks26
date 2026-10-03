@@ -6,3 +6,5 @@ coverage/
 spacetime/build/
 *.log
 *.tsbuildinfo
+.state/
+.DS_Store
