@@ -12,6 +12,7 @@ export const INTENTS = [
   'balance_query',
   'breakdown_request',
   'payment_reported',
+  'settle_up',
   'help',
   'ignore',
 ] as const;
