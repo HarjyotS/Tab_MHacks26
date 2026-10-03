@@ -1,0 +1,22 @@
+{
+  "name": "@tab/gate",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Tab's classifier gate (SPEC 6.3): Jev, plus a keyword stub.",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "fixtures": "tsx src/run-fixtures.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
