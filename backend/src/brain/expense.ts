@@ -4,7 +4,7 @@ import type {
   Extracted,
   Problem,
 } from "../extraction/types.js";
-import type { Person } from "../copy/format.js";
+import { money, type Person } from "../copy/format.js";
 import * as T from "../copy/templates.js";
 import type { Expense, Message, Share } from "../store/types.js";
 import {
@@ -265,6 +265,8 @@ export async function handleAdjustment(
   m: Message,
   text = m.text ?? "",
   target?: Expense,
+  // The gate was unsure (§6.4 clarify band): explain or confirm, never apply.
+  opts: { confirmOnly?: boolean } = {},
 ): Promise<void> {
   const group_id = groupFor(ctx, m);
   const expense = target ?? latestOpen(ctx, group_id, ["proposed"]);
@@ -309,6 +311,28 @@ export async function handleAdjustment(
       text: "What's uneven?",
       expense_id: expense.expense_id,
     });
+    return;
+  }
+  // A pinned amount can't exceed what was spent (the split math would fail).
+  const base = expense.subtotal_cents ?? expense.total_cents;
+  const pinned = result.fixed.reduce((sum, f) => sum + (f.amount_cents ?? 0), 0);
+  if (pinned > base) {
+    const who = result.fixed.find((f) => f.amount_cents !== undefined)!;
+    const name = activeMembers(ctx, expense.group_id).find((x) => x.phone === who.phone)?.name ?? "they";
+    await tapback(ctx, m, "question", expense.expense_id);
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `clarify:${m.message_id}`,
+      text: `That's more than the ${money(base)} total. What did ${name} actually have?`,
+      expense_id: expense.expense_id,
+    });
+    return;
+  }
+  if (opts.confirmOnly) {
+    await tapback(ctx, m, "question", expense.expense_id);
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, text: `Change the split on ${expense.description}?`, expense_id: expense.expense_id });
+    ctx.memory.pending.set(chatKey(chatOf(m)), { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() });
     return;
   }
   await tapback(ctx, m, "like", expense.expense_id);

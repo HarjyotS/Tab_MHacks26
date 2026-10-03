@@ -154,6 +154,12 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
+  // §6.4: an unsure adjustment is about an open expense, so ask rather than
+  // stay silent: explain what's wrong, or confirm before applying.
+  if (intent === "split_adjustment") {
+    const bound = repliedExpense(ctx, m);
+    return handleAdjustment(ctx, m, m.text ?? "", bound?.status === "proposed" ? bound : undefined, { confirmOnly: true });
+  }
   const question = CONFIRM_QUESTION[intent];
   if (!question) return; // e.g. a possible name: never guess (P3), stay quiet (P1)
   await tapback(ctx, m, "question");
@@ -256,7 +262,13 @@ async function answerConfirm(
   if (!YES.test(text)) return false;
   ctx.memory.pending.delete(key);
   if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source);
-  else if (p.then === "large_amount" && p.extraction) {
+  else if (p.then === "adjustment" && p.extraction && p.expense_id) {
+    const expense = ctx.store.expense(p.expense_id);
+    if (expense?.status === "proposed") {
+      await tapback(ctx, m, "like", expense.expense_id);
+      await applyAdjustment(ctx, expense, p.extraction.result);
+    }
+  } else if (p.then === "large_amount" && p.extraction) {
     const group_id = groupFor(ctx, p.source);
     const rest = p.extraction.problems.filter((x) => x.kind !== "large_amount");
     if (group_id && rest.length === 0)

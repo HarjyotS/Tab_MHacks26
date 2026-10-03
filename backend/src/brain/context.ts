@@ -45,7 +45,7 @@ export type Pending =
   | {
       kind: "confirm"; // "yes" proceeds with `then`
       source: Message;
-      then: "expense" | "large_amount";
+      then: "expense" | "large_amount" | "adjustment";
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
       asked_at: Date;
