@@ -12,10 +12,8 @@ import {
   type Example,
   type Split,
 } from "../src/classifier/dataset.js";
-import {
-  createGrokClassifier,
-  createXaiClient,
-} from "../src/classifier/grok.js";
+import { createGrokClassifier } from "../src/classifier/grok.js";
+import { createXaiClient } from "../src/grok/structured.js";
 import { decide, type Decision } from "../src/classifier/decide.js";
 import { TEXT_INTENTS, type TextIntent } from "../src/classifier/intents.js";
 import type { ClassifyResult } from "../src/classifier/types.js";

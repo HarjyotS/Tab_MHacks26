@@ -1,9 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  createGrokClassifier,
-  ClassifierOutputError,
-  type ChatClient,
-} from "../src/classifier/grok.js";
+import { createGrokClassifier } from "../src/classifier/grok.js";
+import { GrokOutputError as ClassifierOutputError, type ChatClient } from "../src/grok/structured.js";
 import { renderInput } from "../src/classifier/prompt.js";
 import { decide } from "../src/classifier/decide.js";
 import { loadSplit } from "../src/classifier/dataset.js";
