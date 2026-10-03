@@ -54,8 +54,9 @@ export async function onboardNewGroups(ctx: BrainCtx) {
   }
 }
 
+// Text arrives normalized to ASCII quotes (process.ts), so "I’m" is "I'm".
 const NAME_PREFIX =
-  /^(hi|hey|hello|yo)?[\s,!]*(it'?s|i'?m|im|i am|call me|name'?s|my name is|this is)?\s*/i;
+  /^(@?tab\b[\s,:]*)?(hi|hey|hello|yo)?[\s,!]*(it'?s|i'?m|im|i am|call me|name'?s|my name is|this is)?\s*/i;
 
 // "it's Kian" → "Kian". One word, letters only, capitalized.
 export function parseName(text: string): string | undefined {
@@ -71,7 +72,10 @@ export function parseName(text: string): string | undefined {
 export async function handleNameReply(ctx: BrainCtx, m: Message) {
   if (!m.group_id) return;
   const name = parseName(m.text ?? "");
-  if (!name) return;
+  if (!name) {
+    ctx.log("name_not_parsed", { message_id: m.message_id, group_id: m.group_id });
+    return;
+  }
   await ctx.db.set_member_name({
     member_id: `${m.group_id}:${m.sender_phone}`,
     name,

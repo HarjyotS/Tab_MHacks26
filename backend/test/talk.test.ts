@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import { normalizeText, processMessage } from "../src/brain/process.js";
+import { parseName } from "../src/brain/talk.js";
 import { world } from "./support/harness.js";
 
 const raw = {
@@ -45,5 +47,26 @@ describe("what do i owe", () => {
     const w = world({});
     await w.say("Priya", "why");
     expect(w.said("breakdown_reply")).toEqual([]);
+  });
+});
+
+describe("names from iPhones (Harjyot's live bug on #14)", () => {
+  it.each([
+    ["I\u2019m Tanuj", "Tanuj"],
+    ["it\u2019s Priya", "Priya"],
+    ["@tab I\u2019m Tanuj ", "Tanuj"],
+    ["I'm Tanuj", "Tanuj"],
+    ["joe", "Joe"],
+  ])("parses %j as %s once curly quotes are normalized", (text, name) => {
+    expect(parseName(normalizeText(text)!)).toBe(name);
+  });
+
+  it("saves a plain first name end to end after the name prompt", async () => {
+    const w = world({});
+    w.db.addGroup("new", [{ phone: "+15555550111" }, { phone: "+15555550112" }], "pending");
+    await w.wait(1000); // onboarding: intro and name prompt go out
+    w.advance(1000);
+    await processMessage(w.ctx, w.db.ingest({ sender_phone: "+15555550111", group_id: "new", text: "tanuj" }));
+    expect(w.db.members("new").find((x) => x.phone === "+15555550111")!.name).toBe("Tanuj");
   });
 });

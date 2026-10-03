@@ -43,7 +43,13 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
   expense: "Want me to split that?",
 };
 
-export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
+// iPhones type curly quotes ("I’m", "didn’t"); every parser expects ASCII.
+export function normalizeText(text: string | undefined): string | undefined {
+  return text?.replace(/[\u2018\u2019\u02BC]/g, "'").replace(/[\u201C\u201D]/g, '"');
+}
+
+export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void> {
+  const m: Message = { ...raw, text: normalizeText(raw.text) };
   await ctx.db.set_message_result({
     message_id: m.message_id,
     status: "processing",
