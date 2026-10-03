@@ -10,6 +10,33 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
+export const BackendClaims = __t.object("BackendClaims", {});
+export type BackendClaims = __Infer<typeof BackendClaims>;
+
+export const BackendExpenses = __t.object("BackendExpenses", {});
+export type BackendExpenses = __Infer<typeof BackendExpenses>;
+
+export const BackendGroups = __t.object("BackendGroups", {});
+export type BackendGroups = __Infer<typeof BackendGroups>;
+
+export const BackendLineItems = __t.object("BackendLineItems", {});
+export type BackendLineItems = __Infer<typeof BackendLineItems>;
+
+export const BackendMembers = __t.object("BackendMembers", {});
+export type BackendMembers = __Infer<typeof BackendMembers>;
+
+export const BackendMessages = __t.object("BackendMessages", {});
+export type BackendMessages = __Infer<typeof BackendMessages>;
+
+export const BackendOutbox = __t.object("BackendOutbox", {});
+export type BackendOutbox = __Infer<typeof BackendOutbox>;
+
+export const BackendShares = __t.object("BackendShares", {});
+export type BackendShares = __Infer<typeof BackendShares>;
+
+export const BackendTransfers = __t.object("BackendTransfers", {});
+export type BackendTransfers = __Infer<typeof BackendTransfers>;
+
 export const Claims = __t.object("Claims", {
   claimId: __t.string(),
   itemId: __t.string(),

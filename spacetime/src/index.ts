@@ -867,3 +867,40 @@ export const seeder_members = spacetime.view(
     });
   }
 );
+
+// Read access for the backend service (SPEC 11.1). Tables stay private; these views
+// return full rows, but only to the backend role and the owner. Messages include
+// history, not just new ones, because classify() needs recent chat context (SPEC 6.3).
+function isBackend(ctx: any): boolean {
+  const config = ctx.db.module_config.config_key.find('main');
+  if (config?.owner_identity?.isEqual(ctx.sender)) return true;
+  return ctx.db.service_roles.identity.find(ctx.sender)?.role === 'backend';
+}
+
+export const backend_messages = spacetime.view(
+  { name: 'backend_messages', public: true }, t.array(messages.rowType), ctx => (isBackend(ctx) ? [...ctx.db.messages] : [])
+);
+export const backend_groups = spacetime.view(
+  { name: 'backend_groups', public: true }, t.array(groups.rowType), ctx => (isBackend(ctx) ? [...ctx.db.groups] : [])
+);
+export const backend_members = spacetime.view(
+  { name: 'backend_members', public: true }, t.array(members.rowType), ctx => (isBackend(ctx) ? [...ctx.db.members] : [])
+);
+export const backend_outbox = spacetime.view(
+  { name: 'backend_outbox', public: true }, t.array(outbox.rowType), ctx => (isBackend(ctx) ? [...ctx.db.outbox] : [])
+);
+export const backend_expenses = spacetime.view(
+  { name: 'backend_expenses', public: true }, t.array(expenses.rowType), ctx => (isBackend(ctx) ? [...ctx.db.expenses] : [])
+);
+export const backend_line_items = spacetime.view(
+  { name: 'backend_line_items', public: true }, t.array(line_items.rowType), ctx => (isBackend(ctx) ? [...ctx.db.line_items] : [])
+);
+export const backend_claims = spacetime.view(
+  { name: 'backend_claims', public: true }, t.array(claims.rowType), ctx => (isBackend(ctx) ? [...ctx.db.claims] : [])
+);
+export const backend_shares = spacetime.view(
+  { name: 'backend_shares', public: true }, t.array(shares.rowType), ctx => (isBackend(ctx) ? [...ctx.db.shares] : [])
+);
+export const backend_transfers = spacetime.view(
+  { name: 'backend_transfers', public: true }, t.array(transfers.rowType), ctx => (isBackend(ctx) ? [...ctx.db.transfers] : [])
+);
