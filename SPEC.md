@@ -423,7 +423,7 @@ classify(input: {
 }): Promise<{ intent: Intent, confidence: number }>
 ```
 
-Ship a stub first (keyword rules or a single Grok call), then swap in Jev without touching anything else. This is why the order of building Grok and Jev doesn't matter.
+Ship a stub first (keyword rules or a single Grok call), then swap in Jev without touching anything else. This is why the order of building Grok and Jev doesn't matter. Both live in the `gate/` package (`@tab/gate`): `stubClassifier` and `jevClassifier`, with the same signature.
 
 ### 6.4 Confidence thresholds [DEFAULT]
 
@@ -441,7 +441,7 @@ Jev is TypeSafe's classification model. Instead of generating text, it picks fro
 
 ### 6.6 Test fixtures [DEFAULT, extend freely]
 
-Put these in `fixtures/messages.json` and run every classifier change against them.
+They live in `fixtures/messages.json` with the context each needs. Run every classifier change against them with `npm run fixtures -- jev` (or `-- stub`).
 
 | #  | Context                    | Message                                              | Expected                         | Notes                                                                 |
 | -- | -------------------------- | ---------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------- |
