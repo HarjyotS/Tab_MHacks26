@@ -5,7 +5,8 @@
   "scripts": {
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
-    "eval": "tsx scripts/eval-classifier.ts"
+    "eval": "tsx scripts/eval-classifier.ts",
+    "extract": "tsx scripts/extract.ts"
   },
   "dependencies": {
     "dotenv": "^18.0.5",
