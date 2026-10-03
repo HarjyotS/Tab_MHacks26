@@ -1030,6 +1030,279 @@
       "expect": {
         "not_acted_as": "approval"
       }
+    },
+    {
+      "id": 158,
+      "context": [
+        {
+          "from": "Jake",
+          "text": "Venmo me for the Uber"
+        },
+        {
+          "from": "Tab",
+          "text": "How much was the Uber?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-uber",
+          "description": "Uber",
+          "expense_status": "needs_info"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "23",
+        "reply": true
+      },
+      "expect": {
+        "intent": "expense"
+      },
+      "note": "Bare number as an inline reply to Tab's question"
+    },
+    {
+      "id": 159,
+      "context": [
+        {
+          "from": "Jake",
+          "text": "Venmo me for the Uber"
+        },
+        {
+          "from": "Tab",
+          "text": "How much was the Uber?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-uber",
+          "description": "Uber",
+          "expense_status": "needs_info"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "it was like 31 with tip",
+        "reply": true
+      },
+      "expect": {
+        "intent": "expense"
+      }
+    },
+    {
+      "id": 160,
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-frita",
+          "description": "Frita Batidos",
+          "expense_status": "finalized",
+          "my_share_status": "locked"
+        }
+      ],
+      "message": {
+        "from": "Kian",
+        "text": "yep",
+        "reply": true
+      },
+      "expect": {
+        "intent": "approval",
+        "min_confidence": 0.9
+      }
+    },
+    {
+      "id": 161,
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-frita",
+          "description": "Frita Batidos",
+          "expense_status": "finalized",
+          "my_share_status": "locked"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "not right",
+        "reply": true
+      },
+      "expect": {
+        "intent": "dispute"
+      }
+    },
+    {
+      "id": 162,
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-frita",
+          "description": "Frita Batidos",
+          "expense_status": "finalized",
+          "my_share_status": "locked"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "lmao",
+        "reply": true
+      },
+      "expect": {
+        "not_acted_as": "approval"
+      },
+      "note": "A reply is not automatically an approval"
+    },
+    {
+      "id": 163,
+      "context": [
+        {
+          "from": "Joe",
+          "text": "got pizza for everyone, $48"
+        },
+        {
+          "from": "Tab",
+          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-pizza",
+          "description": "Pizza House",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "message": {
+        "from": "Joe",
+        "text": "38",
+        "reply": true
+      },
+      "expect": {
+        "intent": "correction"
+      },
+      "note": "Payer replying to the proposal with a different total"
+    },
+    {
+      "id": 164,
+      "context": [
+        {
+          "from": "Joe",
+          "text": "got pizza for everyone, $48"
+        },
+        {
+          "from": "Tab",
+          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-pizza",
+          "description": "Pizza House",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "message": {
+        "from": "Priya",
+        "text": "I wasn't there",
+        "reply": true
+      },
+      "expect": {
+        "intent": "split_adjustment"
+      }
+    },
+    {
+      "id": 165,
+      "context": [
+        {
+          "from": "Joe",
+          "text": "got pizza for everyone, $48"
+        },
+        {
+          "from": "Tab",
+          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-pizza",
+          "description": "Pizza House",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "message": {
+        "from": "Priya",
+        "text": "lol nice",
+        "reply": true
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "Chatter is still chatter when it is a reply"
+    },
+    {
+      "id": 166,
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-frita",
+          "description": "Frita Batidos",
+          "expense_status": "itemizing",
+          "my_share_status": "awaiting_claim"
+        }
+      ],
+      "message": {
+        "from": "Priya",
+        "text": "2",
+        "reply": true
+      },
+      "expect": {
+        "intent": "claim"
+      }
+    },
+    {
+      "id": 167,
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e-frita",
+          "description": "Frita Batidos",
+          "expense_status": "itemizing",
+          "my_share_status": "awaiting_claim"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "the fries and a batido",
+        "reply": true
+      },
+      "expect": {
+        "intent": "claim"
+      }
     }
   ]
 }
