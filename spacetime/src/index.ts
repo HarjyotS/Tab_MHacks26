@@ -379,7 +379,13 @@ export const set_message_result = spacetime.reducer(
     requireValue(input.status, ['new', 'processing', 'done', 'error'], 'message status');
     const row = ctx.db.messages.message_id.find(input.message_id);
     if (!row) throw new Error('Unknown message');
-    ctx.db.messages.message_id.update({ ...row, ...input });
+    ctx.db.messages.message_id.update({
+      ...row,
+      ...input,
+      // Ignored chat content is not needed after classification. Keep the row for
+      // idempotency and audit state, but discard its user-authored text.
+      text: input.intent === 'ignore' ? undefined : row.text,
+    });
   }
 );
 
@@ -417,7 +423,9 @@ export const upsert_expense = spacetime.reducer(
     requireRole(ctx, 'backend', 'seeder');
     requireValue(input.split_mode, ['even', 'custom', 'itemized'], 'split mode');
     requireValue(input.status, ['needs_info', 'proposed', 'itemizing', 'finalized', 'settled', 'void'], 'expense status');
-    if (input.total_cents <= 0n) throw new Error('Expense total must be positive');
+    if (input.total_cents < 0n || (input.total_cents === 0n && input.status !== 'needs_info')) {
+      throw new Error('Expense total must be positive unless more information is needed');
+    }
     const bySource = ctx.db.expenses.source_message_id.find(input.source_message_id);
     if (bySource && bySource.expense_id !== input.expense_id) throw new Error('Source message already has an expense');
     const existing = ctx.db.expenses.expense_id.find(input.expense_id);
@@ -505,7 +513,9 @@ export const set_share = spacetime.reducer(
     };
     if (existing) ctx.db.shares.share_id.update(row);
     else ctx.db.shares.insert(row);
-    recompute(ctx, input.expense_id);
+    // A dispute changes workflow state, not the already-finalized amount. In
+    // particular, recompute() intentionally rejects finalized expenses.
+    if (input.status !== 'disputed') recompute(ctx, input.expense_id);
   }
 );
 
@@ -756,9 +766,7 @@ function canReadBackendViews(ctx: any): boolean {
 
 export const backend_messages = spacetime.view(
   { name: 'backend_messages', public: true }, t.array(messages.rowType), ctx =>
-    canReadBackendViews(ctx)
-      ? [...ctx.db.messages].filter(message => message.status === 'new' || message.status === 'processing')
-      : []
+    canReadBackendViews(ctx) ? [...ctx.db.messages] : []
 );
 
 export const backend_groups = spacetime.view(
