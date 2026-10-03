@@ -15,6 +15,51 @@ export const thresholds = {
 } as const;
 
 export const LARGE_AMOUNT_CENTS = 100_000;
+export const CONTEXT_MESSAGES = 10;
+export const GROUP_TIMEZONE = "America/Detroit";
+
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+// SPEC §11.3 durations, in milliseconds, before DEMO_MODE scaling.
+const BASE_DURATIONS = {
+  OBJECTION_WINDOW: 3 * HOUR,
+  OBJECTION_REMINDER_BEFORE: 1 * HOUR,
+  OBJECTION_EXTENSION: 1 * HOUR,
+  // How long Tab waits for an answer to one of its questions.
+  PENDING_QUESTION_TTL: 2 * HOUR,
+};
+
+export type Durations = typeof BASE_DURATIONS;
+
+export type Timing = {
+  demo: boolean;
+  durations: Durations;
+  // SPEC §11.3 QUIET_HOURS 23:00 to 09:00; off in DEMO_MODE.
+  quietHours: { start: number; end: number } | null;
+  schedulerIntervalMs: number;
+};
+
+export function timing(
+  env: { DEMO_MODE?: string; DEMO_TIME_SCALE?: string } = process.env,
+): Timing {
+  const demo = env.DEMO_MODE === "true";
+  const scale = demo ? Number(env.DEMO_TIME_SCALE || 360) : 1;
+  if (!Number.isFinite(scale) || scale <= 0)
+    throw new Error(
+      `DEMO_TIME_SCALE must be a positive number, got ${env.DEMO_TIME_SCALE}`,
+    );
+  const durations = Object.fromEntries(
+    Object.entries(BASE_DURATIONS).map(([k, v]) => [k, Math.round(v / scale)]),
+  ) as Durations;
+  return {
+    demo,
+    durations,
+    quietHours: demo ? null : { start: 23, end: 9 },
+    // SPEC: 30 seconds; DEMO_MODE needs a faster tick to show 30-second windows.
+    schedulerIntervalMs: demo ? 2_000 : 30_000,
+  };
+}
 
 export function grokConfig() {
   return {
