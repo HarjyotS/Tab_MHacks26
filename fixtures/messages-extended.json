@@ -1303,6 +1303,90 @@
       "expect": {
         "intent": "claim"
       }
+    },
+    {
+      "id": 168,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "let's settle up"
+      },
+      "expect": {
+        "intent": "settle_up"
+      }
+    },
+    {
+      "id": 169,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "trip's over, square us up"
+      },
+      "expect": {
+        "intent": "settle_up"
+      }
+    },
+    {
+      "id": 170,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "can we close out the tab"
+      },
+      "expect": {
+        "intent": "settle_up"
+      }
+    },
+    {
+      "id": 171,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "ok everyone pay up, we're home"
+      },
+      "expect": {
+        "intent": "settle_up"
+      }
+    },
+    {
+      "id": 172,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "how much do I owe before we settle up?"
+      },
+      "expect": {
+        "intent": "balance_query"
+      }
+    },
+    {
+      "id": 173,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "settle down lol"
+      },
+      "expect": {
+        "not_acted_as": "settle_up"
+      }
+    },
+    {
+      "id": 174,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "we should settle on a restaurant"
+      },
+      "expect": {
+        "not_acted_as": "settle_up"
+      }
     }
   ]
 }

@@ -12,7 +12,7 @@ const classify = process.env.TYPESAFE_API_KEY
 const { intent, confidence } = await classify({ message, context, members, open_items });
 ```
 
-- **`jevClassifier`** asks TypeSafe's Jev one choice question over the 13 intents in SPEC 6.1. Each option is written as a rule (SPEC 6.5). The state it sends is labeled data: chat type, members, the sender's open items, recent messages, and the new message. `confidence` is Jev's probability for the chosen intent, which is what the 0.85 and 0.50 thresholds in SPEC 6.4 expect. Reactions, system events, and bare photos never reach Jev.
+- **`jevClassifier`** asks TypeSafe's Jev one choice question over the 14 intents in SPEC 6.1. Each option is written as a rule (SPEC 6.5). The state it sends is labeled data: chat type, members, the sender's open items, recent messages, and the new message. `confidence` is Jev's probability for the chosen intent, which is what the 0.85 and 0.50 thresholds in SPEC 6.4 expect. Reactions, system events, and bare photos never reach Jev.
 - **`stubClassifier`** is conservative keyword rules, for working offline or when Jev is down.
 
 ## Input conventions
@@ -29,12 +29,12 @@ npm run fixtures -- jev    # needs TYPESAFE_API_KEY
 npm run fixtures -- stub
 ```
 
-`fixtures/messages-extended.json` adds 58 realistic cases: varied phrasings for every intent, money talk that isn't an expense, injection attempts, and agreement words with no settle request open. A third argument repeats the run, and the summary counts **wrong and confident enough to act**, the failure that matters:
+`fixtures/messages-extended.json` adds 75 realistic cases (including inline replies and `settle_up`): varied phrasings for every intent, money talk that isn't an expense, injection attempts, and agreement words with no settle request open. A third argument repeats the run, and the summary counts **wrong and confident enough to act**, the failure that matters:
 
 ```sh
 npm run fixtures -- jev messages-extended 3
 ```
 
-Last run (2026-10-03, 3 runs each): **spec fixtures 54/54, extended 174/174, and 0 wrong-and-confident results.** Median latency is about 130 ms, p95 about 210 ms.
+Last run (2026-10-03, 2 runs each): **spec fixtures 36/36, extended 150/150, and 0 wrong-and-confident results.** Median latency is about 125 ms, p95 about 200 ms.
 
 Like the seed scripts, this reads `.env` from the package folder; use `DOTENV_CONFIG_PATH=$PWD/.env` from the repo root.

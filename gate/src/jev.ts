@@ -26,6 +26,8 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
   breakdown_request: 'The sender asks which expenses make up a balance, or where an amount came from.',
   payment_reported:
     'The sender says they already sent money to someone outside Tab, including payment-app verbs ("sent you 20 on venmo", "venmo\'d you", "zelled you for the uber", "paid Priya back on cashapp"). Asking to be paid is not this.',
+  settle_up:
+    'The sender asks Tab to settle everyone up now, for example because a trip is over ("let\'s settle up", "trip\'s over, square us up", "close out the tab"). Asking what they owe is balance_query, not this.',
   help: 'The sender asks what Tab is or what it can do.',
   ignore:
     'Anything else: chatter, jokes, reactions, plans, or instructions aimed at Tab that are not about a real shared purchase.',
