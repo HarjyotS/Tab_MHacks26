@@ -41,7 +41,15 @@ Set `NESSIE_API_KEY`, then provision one mock customer, checking account, and st
 npm run seed:nessie
 ```
 
-The command checkpoints the customer ID, account ID, and deposit state in SpacetimeDB after each step. It is safe to rerun. Use `npm run seed:nessie -- --force-new` only when a fresh set of Nessie fixtures is intentional. Nessie is never contacted by the running app.
+The command checkpoints the customer ID, account ID, and deposit state in SpacetimeDB after each step. It is safe to rerun. Use `npm run seed:nessie -- --force-new` only when a fresh set of Nessie fixtures is intentional.
+
+Settlement never depends on Nessie: SpacetimeDB completes it itself. Optionally, run the mirror to record each completed settlement in Nessie as a withdrawal from the payer and a deposit to the payee:
+
+```powershell
+npm run nessie:mirror
+```
+
+It reads the `nessie_mirror` view (seeder role or owner), tags both records `[tab:<transfer_id>]`, and looks them up by tag before creating anything, so restarts never record twice. It never writes to SpacetimeDB. Nessie stores whole dollars only, so the exact amount stays in SpacetimeDB and in each description.
 
 ## Verification
 
@@ -58,4 +66,5 @@ With a seeded local database running, the acceptance checks exercise scheduled s
 ```powershell
 npm run verify:settlement
 npm run verify:access
+npm run verify:nessie   # with nessie:mirror running, after seed:nessie
 ```
