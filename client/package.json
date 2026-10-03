@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@spectrum-ts/imessage-local": "12.10.1",
+    "spacetimedb": "2.10.2",
     "spectrum-ts": "12.10.1"
   },
   "devDependencies": {

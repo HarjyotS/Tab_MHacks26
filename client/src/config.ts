@@ -18,6 +18,13 @@ export const config = {
   sendVia: env.SEND_VIA === "osascript" ? "osascript" : "spectrum",
   tapbacks: env.TAPBACK_MODE !== "off",
   hub: env.HUB ?? "dev",
+  spacetime: {
+    uri: env.SPACETIME_HOST ?? "http://127.0.0.1:3000",
+    database: env.SPACETIME_DB ?? "tab-local",
+    /** Optional fixed token; otherwise the client keeps its own in .state/spacetime-token. */
+    token: env.SPACETIME_CLIENT_TOKEN || undefined,
+  },
+  timezone: env.GROUP_TIMEZONE ?? "America/Detroit",
   echo: env.ECHO !== "0",
   port,
   imageBaseUrl: (env.IMAGE_BASE_URL ?? `http://localhost:${port}`).replace(/\/$/, ""),
