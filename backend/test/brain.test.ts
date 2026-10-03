@@ -52,7 +52,7 @@ const GROK: Record<string, object> = {
     description: "Pizza",
     payer: "unknown",
   },
-  "new|pizza was $48 lol\nKian: joe did": {
+  "new|pizza was $48 lol\njoe did": {
     ...base,
     amount_cents: 4800,
     description: "Pizza",
@@ -296,7 +296,7 @@ describe("Tab's questions (SPEC 7.3 step 2)", () => {
     });
   });
 
-  it("asks who paid, and takes the answer from anyone in the chat", async () => {
+  it("asks who paid, and takes the answer from the person it asked", async () => {
     await send(PRIYA, "pizza was $48 lol");
     expect(said("clarifying_question")).toEqual(["Want me to split that?"]); // the stub is unsure (0.6)
     await send(PRIYA, "yes");
@@ -305,7 +305,9 @@ describe("Tab's questions (SPEC 7.3 step 2)", () => {
       status: "needs_info",
       total_cents: 4800,
     });
-    await send(KIAN, "joe did");
+    await send(KIAN, "lol who cares"); // a bystander: never sent to Grok
+    expect(db.expenses()[0]).toMatchObject({ status: "needs_info" });
+    await send(PRIYA, "joe did");
     expect(db.expenses()[0]).toMatchObject({
       status: "proposed",
       payer_phone: JOE,

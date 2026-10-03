@@ -23,6 +23,13 @@ import {
 } from "./talk.js";
 import * as T from "../copy/templates.js";
 
+// Intents whose messages are about money: the only ones kept as context and
+// the only ones (besides answers from the person Tab asked) sent to Grok.
+const MONEY_INTENTS = new Set<Intent>([
+  "expense", "receipt", "split_adjustment", "claim", "correction",
+  "approval", "dispute", "payment_reported", "balance_query", "breakdown_request",
+]);
+
 const YES =
   /^(yes|yep|yeah|ya|yup|sure|ok|okay|correct|right|do it|go ahead|that's right)\b/i;
 const NO = /^(no|nope|nah|wrong|not right)\b/i;
@@ -40,27 +47,29 @@ export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
     status: "processing",
   });
   try {
-    ctx.memory.remember(m);
     let intent: Intent | undefined;
     let confidence: number | undefined;
 
     if (m.kind === "reaction") {
       await routeReaction(ctx, m); // §6.2: never classified
-    } else if (!(await answerPending(ctx, m))) {
+    } else {
+      // The gate sees every message; Grok only sees what the gate passes
+      // (§19, §16.3). Memory, and so all later context, holds only
+      // money-related messages.
       const input = extractInput(ctx, m);
       const result = await ctx.classify(input);
       intent = result.intent;
       confidence = result.confidence;
       const decision = decide(result, input);
-      ctx.log("classified", {
-        message_id: m.message_id,
-        group_id: m.group_id,
-        intent,
-        confidence,
-        decision,
-      });
-      if (decision === "act") await act(ctx, m, intent);
-      else if (decision === "clarify") await clarify(ctx, m, intent);
+      const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent);
+      ctx.log("classified", { message_id: m.message_id, group_id: m.group_id, intent, confidence, decision });
+
+      const answered = (await mayAnswerPending(ctx, m, moneyRelated)) && (await answerPending(ctx, m));
+      if (answered || moneyRelated) ctx.memory.remember(m);
+      if (!answered) {
+        if (decision === "act") await act(ctx, m, intent);
+        else if (decision === "clarify") await clarify(ctx, m, intent);
+      }
     }
     await ctx.db.set_message_result({
       message_id: m.message_id,
@@ -117,12 +126,6 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
 }
 
 async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
-  if (
-    intent === "balance_query" ||
-    intent === "breakdown_request" ||
-    intent === "help"
-  )
-    return act(ctx, m, intent);
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
@@ -146,6 +149,13 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
 // If Tab asked something in this chat, try the message as the answer. An
 // answer is accepted only if it actually resolves something; otherwise the
 // message is classified normally.
+// An open question is answered by the person Tab asked, or by anyone whose
+// message the gate itself judged money-related.
+async function mayAnswerPending(ctx: BrainCtx, m: Message, moneyRelated: boolean): Promise<boolean> {
+  const p = ctx.memory.pending.get(chatKey(chatOf(m)));
+  return Boolean(p) && (m.sender_phone === p!.source.sender_phone || moneyRelated);
+}
+
 async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
   const key = chatKey(chatOf(m));
   const p = ctx.memory.pending.get(key);

@@ -368,7 +368,6 @@ describe("wit line", () => {
     allowed_names: ["Joe"],
     all_member_names: ["Joe", "Jake", "Priya"],
     style: { lowercase: false, emoji: false },
-    recent: [],
     previous_had_wit: false,
   };
 

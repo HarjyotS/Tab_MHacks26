@@ -24,10 +24,6 @@ export async function onboardNewGroups(ctx: BrainCtx) {
             .map((m) => m.name)
             .filter((n): n is string => Boolean(n)),
           style: styleFor(ctx, chat),
-          recent: ctx.memory
-            .humanHistory(chat)
-            .slice(-5)
-            .map((h) => h.text),
           previous_had_wit: false,
         })
         .catch((err: unknown) => {
