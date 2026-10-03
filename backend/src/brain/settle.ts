@@ -13,7 +13,7 @@ const person = (ctx: BrainCtx, group_id: string, phone: string) => ({
 // Order matters: the module recomputes on set_share and refuses to once the
 // expense is finalized.
 export async function finalize(ctx: BrainCtx, expense: Expense) {
-  if (expense.status !== "proposed" || !expense.payer_phone) return;
+  if ((expense.status !== "proposed" && expense.status !== "itemizing") || !expense.payer_phone) return;
   await ctx.db.cancel_outbox({ expense_id: expense.expense_id });
   for (const s of liveShares(ctx, expense.expense_id)) {
     if (s.status === "locked") continue;

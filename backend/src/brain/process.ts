@@ -5,6 +5,7 @@ import type { Message } from "../store/types.js";
 import { type BrainCtx, chatKey, chatOf, inWords, type Pending, say, tapback } from "./context.js";
 import { applyAdjustment, groupFor, handleAdjustment, handleExpense, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
+import { claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   announceSettlements,
   approve,
@@ -84,7 +85,8 @@ export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
 async function act(ctx: BrainCtx, m: Message, intent: Intent) {
   switch (intent) {
     case "expense":
-      return handleExpense(ctx, m);
+      // A captioned photo ("dinner, i paid") is still a receipt.
+      return m.kind === "image" ? handleReceipt(ctx, m) : handleExpense(ctx, m);
     case "split_adjustment":
       return handleAdjustment(ctx, m);
     case "name_reply":
@@ -103,8 +105,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return handleBreakdown(ctx, m);
     case "help":
       return handleHelp(ctx, m);
-    // Not built yet: receipt and claim (M4), correction (§7.7). payment_reported
-    // is ignored in the MVP; ignore needs nothing.
+    case "receipt":
+      return handleReceipt(ctx, m);
+    case "claim":
+      return handleClaim(ctx, m);
+    // Not built yet: correction (§7.7). payment_reported is ignored in the
+    // MVP; ignore needs nothing.
     default:
       ctx.log("intent_not_handled", { message_id: m.message_id, intent });
   }
@@ -152,6 +158,8 @@ async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
     return false;
   }
   if (p.kind === "confirm") return answerConfirm(ctx, m, p, key);
+  if (p.kind === "receipt") return answerReceipt(ctx, m, p, key);
+  if (p.kind === "which") return answerWhich(ctx, m, p, key);
 
   const answerer =
     m.sender_phone === p.source.sender_phone
@@ -286,7 +294,61 @@ export async function tick(ctx: BrainCtx): Promise<void> {
       });
     }
   }
+  await claimFollowups(ctx);
   await announceSettlements(ctx);
 }
 
 
+
+// §7.4: only the payer answers questions about their receipt.
+async function answerReceipt(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind: "receipt" }>, key: string): Promise<boolean> {
+  if (m.sender_phone !== p.source.sender_phone) return false;
+  const text = (m.text ?? "").trim();
+  const { receipt } = p.read;
+  if (p.stage === "confirm_total") {
+    if (YES.test(text)) {
+      ctx.memory.pending.delete(key);
+      await tapback(ctx, m, "like");
+      // The items didn't add up, so split the confirmed total evenly.
+      await proposeReceipt(ctx, p.source, p.read, { itemsTrusted: false });
+      return true;
+    }
+    if (!NO.test(text)) return false;
+    ctx.memory.pending.set(key, { ...p, stage: "total", asked_at: ctx.now() });
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, text: "What was the total?" });
+    return true;
+  }
+  if (p.stage === "total") {
+    const total = answerCents(text);
+    if (total === undefined || total <= 0) return false;
+    ctx.memory.pending.delete(key);
+    await tapback(ctx, m, "like");
+    await proposeReceipt(ctx, p.source, { ...p.read, receipt: { ...receipt, total_cents: total } }, { itemsTrusted: false });
+    return true;
+  }
+  // stage "tip"
+  const tip = /^(none|no tip|nothing|zero|didn'?t|no)\b/i.test(text) ? 0 : answerCents(text);
+  if (tip === undefined) return false;
+  ctx.memory.pending.delete(key);
+  await tapback(ctx, m, "like");
+  const withTip = { ...receipt, tip_cents: tip, total_cents: (receipt.total_cents ?? 0) + tip };
+  await proposeReceipt(ctx, p.source, { ...p.read, receipt: withTip, tip_line_blank: false }, { itemsTrusted: true });
+  return true;
+}
+
+async function answerWhich(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind: "which" }>, key: string): Promise<boolean> {
+  if (m.sender_phone !== p.source.sender_phone) return false;
+  const n = Number((m.text ?? "").trim().replace(/^#/, ""));
+  const id = Number.isInteger(n) ? p.expense_ids[n - 1] : undefined;
+  const target = id ? ctx.store.expense(id) : undefined;
+  if (!target) return false;
+  ctx.memory.pending.delete(key);
+  await handleClaim(ctx, p.source, target);
+  return true;
+}
+
+// "22", "$18.50", "it was 30": the first amount typed.
+function answerCents(text: string): number | undefined {
+  const match = text.match(/\$?(\d{1,6}(?:\.\d{1,2})?)/);
+  return match ? Math.round(Number(match[1]) * 100) : undefined;
+}

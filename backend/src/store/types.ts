@@ -113,6 +113,24 @@ export type Transfer = {
   completed_at?: Date;
 };
 
+export type LineItem = {
+  item_id: string;
+  expense_id: string;
+  position: number;
+  description: string;
+  quantity: number;
+  amount_cents: number;
+};
+
+export type Claim = {
+  claim_id: string;
+  item_id: string;
+  expense_id: string;
+  phone: string;
+  source_message_id: string;
+  created_at: Date;
+};
+
 // Reads the backend needs. Kian's views back the real implementation; tests
 // use an in-memory one that mimics the module.
 export interface Store {
@@ -125,4 +143,6 @@ export interface Store {
   expenses(): Expense[];
   shares(expense_id: string): Share[];
   transfers(): Transfer[];
+  lineItems(expense_id: string): LineItem[];
+  claims(expense_id: string): Claim[];
 }

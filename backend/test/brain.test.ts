@@ -99,6 +99,8 @@ beforeEach(() => {
           input,
           mode,
         ),
+      receipt: () => Promise.reject(new Error("no receipts in these tests")),
+      claim: () => Promise.reject(new Error("no claims in these tests")),
     },
     timing: timing({ DEMO_MODE: "true" }),
     memory: new Memory(),

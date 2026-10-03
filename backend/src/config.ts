@@ -16,6 +16,8 @@ export const thresholds = {
 
 export const LARGE_AMOUNT_CENTS = 100_000;
 export const CONTEXT_MESSAGES = 10;
+export const LOPSIDED_FACTOR = 1.5;
+export const MAX_DMS_PER_EXPENSE = 3;
 export const GROUP_TIMEZONE = "America/Detroit";
 
 const MINUTE = 60_000;
@@ -26,6 +28,13 @@ const BASE_DURATIONS = {
   OBJECTION_WINDOW: 3 * HOUR,
   OBJECTION_REMINDER_BEFORE: 1 * HOUR,
   OBJECTION_EXTENSION: 1 * HOUR,
+  CLAIM_DEADLINE: 48 * HOUR,
+  FOLLOWUP_DM1_AFTER: 2 * HOUR,
+  // SPEC says 10:00 the next morning; quiet hours already push DMs there,
+  // so this is the gap after DM1 before the second nudge.
+  FOLLOWUP_DM2_AFTER: 12 * HOUR,
+  GROUP_MENTION_AFTER: 40 * HOUR,
+  FOLLOWUP_DM3_AFTER: 44 * HOUR,
   // How long Tab waits for an answer to one of its questions.
   PENDING_QUESTION_TTL: 2 * HOUR,
 };

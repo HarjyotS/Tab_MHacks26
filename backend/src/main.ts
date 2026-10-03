@@ -7,6 +7,9 @@ import { createReducers } from "./db/reducers.js";
 import { createClassify } from "./gate/index.js";
 import { createXaiClient } from "./grok/structured.js";
 import { extractExpense } from "./extraction/expense.js";
+import { extractReceipt } from "./extraction/receipt.js";
+import { resolveClaim } from "./extraction/claim.js";
+import { imageAsDataUrl } from "./extraction/image.js";
 import { witLine } from "./copy/wit.js";
 import { Memory, type BrainCtx } from "./brain/context.js";
 import { processMessage, tick } from "./brain/process.js";
@@ -55,6 +58,8 @@ const ctx: BrainCtx = {
   classify,
   extract: {
     expense: (input, mode) => extractExpense(xai, grok.model, input, mode),
+    receipt: async (url, caption) => extractReceipt(xai, grok.model, await imageAsDataUrl(url), caption),
+    claim: (input, items) => resolveClaim(xai, grok.model, input, items),
   },
   wit: (w) => witLine(xai, grok.model, w),
   timing: t,

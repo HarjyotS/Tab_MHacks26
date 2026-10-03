@@ -4,16 +4,7 @@
 import { Timestamp } from "spacetimedb";
 import { computeSplit } from "../../../spacetime/src/split-math.js";
 import { createReducers, type ReducerClient } from "../../src/db/reducers.js";
-import type {
-  Expense,
-  Group,
-  Member,
-  Message,
-  Outbox,
-  Share,
-  Store,
-  Transfer,
-} from "../../src/store/types.js";
+import type { Claim, Expense, Group, LineItem, Member, Message, Outbox, Share, Store, Transfer } from "../../src/store/types.js";
 
 type Args<K extends keyof ReducerClient> = Parameters<ReducerClient[K]>[0];
 
@@ -29,6 +20,8 @@ export class MemoryDb implements Store {
   exps = new Map<string, Expense>();
   shrs = new Map<string, Share>();
   trs = new Map<string, Transfer>();
+  items = new Map<string, LineItem>();
+  clms = new Map<string, Claim>();
   constructor(private now: () => Date) {}
 
   // ── Store (backend_messages only shows new and processing rows) ────────
@@ -46,6 +39,8 @@ export class MemoryDb implements Store {
   shares = (id: string) =>
     [...this.shrs.values()].filter((s) => s.expense_id === id);
   transfers = () => [...this.trs.values()];
+  lineItems = (id: string) => [...this.items.values()].filter((i) => i.expense_id === id).sort((a, b) => a.position - b.position);
+  claims = (id: string) => [...this.clms.values()].filter((c) => c.expense_id === id);
 
   // ── What the client does ───────────────────────────────────────────────
   addGroup(
@@ -119,6 +114,8 @@ export class MemoryDb implements Store {
       throw new Error("Expense amounts are locked");
     const shares = this.shares(expense_id);
     if (shares.length === 0) return;
+    const items = this.lineItems(expense_id);
+    if (e.split_mode === "itemized" && items.length === 0) return;
     const result = computeSplit({
       mode: e.split_mode,
       participants: shares.map((s) => ({
@@ -132,7 +129,7 @@ export class MemoryDb implements Store {
       tipCents: BigInt(e.tip_cents),
       feesCents: BigInt(e.fees_cents),
       discountCents: BigInt(e.discount_cents),
-      items: [],
+      items: items.map((i) => ({ amountCents: BigInt(i.amount_cents), claimers: [...this.clms.values()].filter((c) => c.item_id === i.item_id).map((c) => c.phone) })),
     });
     const sum = [...result.values()].reduce((a, b) => a + b, 0n);
     if (sum !== BigInt(e.total_cents))
@@ -276,9 +273,25 @@ export class MemoryDb implements Store {
       });
     },
     setLedgerSecret: async () => {},
-    addClaim: async () => {},
-    removeClaim: async () => {},
-    setLineItems: async () => {},
+    setLineItems: async (a: Args<"setLineItems">) => {
+      for (const [k, i] of this.items) if (i.expense_id === a.expenseId) this.items.delete(k);
+      for (const i of a.items) {
+        this.items.set(i.itemId, { item_id: i.itemId, expense_id: a.expenseId, position: i.position, description: i.description, quantity: i.quantity, amount_cents: n(i.amountCents) });
+      }
+      if (this.shares(a.expenseId).length > 0) this.recompute(a.expenseId);
+    },
+    addClaim: async (a: Args<"addClaim">) => {
+      const item = this.items.get(a.itemId);
+      if (!item) throw new Error("Unknown line item");
+      const id = `${a.itemId}:${a.phone}`;
+      if (!this.clms.has(id)) this.clms.set(id, { claim_id: id, item_id: a.itemId, expense_id: item.expense_id, phone: a.phone, source_message_id: a.sourceMessageId, created_at: this.now() });
+      this.recompute(item.expense_id);
+    },
+    removeClaim: async (a: Args<"removeClaim">) => {
+      const item = this.items.get(a.itemId);
+      this.clms.delete(`${a.itemId}:${a.phone}`);
+      if (item) this.recompute(item.expense_id);
+    },
   };
 
   reducers = () => createReducers(this.client as unknown as ReducerClient);

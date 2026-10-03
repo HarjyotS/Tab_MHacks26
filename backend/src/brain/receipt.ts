@@ -1,0 +1,412 @@
+// SPEC §7.4 receipts and §7.5 itemizing, claims, and claim follow-ups.
+import type { ClaimResolution } from "../extraction/types.js";
+import { LOPSIDED_FACTOR, MAX_DMS_PER_EXPENSE } from "../config.js";
+import { extrasOf, type ReceiptRead } from "../extraction/receipt.js";
+import { money } from "../copy/format.js";
+import * as T from "../copy/templates.js";
+import type { Expense, Message } from "../store/types.js";
+import {
+  activeMembers,
+  chatKey,
+  chatOf,
+  inWords,
+  outsideQuietHours,
+  say,
+  tapback,
+  type BrainCtx,
+} from "./context.js";
+import {
+  expenseIdFor,
+  groupFor,
+  handleExpense,
+  postProposal,
+} from "./expense.js";
+import { extractInput } from "./inputs.js";
+import { finalize } from "./settle.js";
+
+
+// Entry point for a photo (§7.4 steps 2–7).
+export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
+  const group_id = groupFor(ctx, m);
+  if (!group_id) {
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `clarify:${m.message_id}`,
+      text: "Post that in the group chat and I'll split it.",
+    });
+    return;
+  }
+  if (!m.image_url) return;
+  const read = await ctx.extract.receipt(m.image_url, m.text);
+  const { receipt } = read;
+
+  if (!receipt.is_receipt) {
+    // §14: ignore a non-receipt photo unless the caption mentions money.
+    if (m.text && /\d/.test(m.text)) await handleExpense(ctx, m);
+    return;
+  }
+  if (receipt.total_cents === undefined || receipt.items.length === 0) {
+    await askAbout(ctx, m, "Can you send a clearer photo of the receipt?");
+    return;
+  }
+  if (read.currency !== "USD") {
+    await askAbout(ctx, m, T.foreignCurrencyQuestion());
+    ctx.memory.pending.set(chatKey(chatOf(m)), {
+      kind: "receipt",
+      stage: "total",
+      source: m,
+      read,
+      asked_at: ctx.now(),
+    });
+    return;
+  }
+  if (read.math_problem) {
+    ctx.log("receipt_math_failed", {
+      message_id: m.message_id,
+      problem: read.math_problem,
+    });
+    await askAbout(
+      ctx,
+      m,
+      `I read the total as ${money(receipt.total_cents)}. Is that right?`,
+    );
+    ctx.memory.pending.set(chatKey(chatOf(m)), {
+      kind: "receipt",
+      stage: "confirm_total",
+      source: m,
+      read,
+      asked_at: ctx.now(),
+    });
+    return;
+  }
+  if (read.tip_line_blank) {
+    // §7.4 step 5: the only routine question for receipts.
+    await askAbout(ctx, m, "What tip did you leave?");
+    ctx.memory.pending.set(chatKey(chatOf(m)), {
+      kind: "receipt",
+      stage: "tip",
+      source: m,
+      read,
+      asked_at: ctx.now(),
+    });
+    return;
+  }
+  await proposeReceipt(ctx, m, read, { itemsTrusted: true });
+}
+
+async function askAbout(ctx: BrainCtx, m: Message, question: string) {
+  await tapback(ctx, m, "question");
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "clarifying_question",
+    id: `clarify:${m.message_id}`,
+    text: question,
+  });
+}
+
+// Writes the expense and either proposes an even split or starts itemizing
+// (§7.4 steps 6–7). Without trusted items (the math didn't add up), always even.
+export async function proposeReceipt(
+  ctx: BrainCtx,
+  source: Message,
+  read: ReceiptRead,
+  opts: { itemsTrusted: boolean },
+) {
+  const group_id = groupFor(ctx, source)!;
+  const { receipt } = read;
+  const total = receipt.total_cents!;
+  const expense_id = expenseIdFor(source.message_id);
+  const members = activeMembers(ctx, group_id);
+  const extras = opts.itemsTrusted
+    ? extrasOf(receipt)
+    : {
+        subtotal_cents: total,
+        tax_cents: 0,
+        tip_cents: 0,
+        fees_cents: 0,
+        discount_cents: 0,
+      };
+  const evenShare = total / members.length;
+  const lopsided =
+    opts.itemsTrusted &&
+    receipt.items.some((i) => i.amount_cents > LOPSIDED_FACTOR * evenShare);
+
+  await ctx.db.upsert_expense({
+    expense_id,
+    group_id,
+    payer_phone: source.sender_phone,
+    description: receipt.merchant ?? "Receipt",
+    source_message_id: source.message_id,
+    split_mode: lopsided ? "itemized" : "even",
+    status: lopsided ? "itemizing" : "proposed",
+    ...extras,
+    total_cents: total,
+    objection_deadline: lopsided
+      ? undefined
+      : deadline(ctx, group_id, ctx.timing.durations.OBJECTION_WINDOW),
+    claim_deadline: lopsided
+      ? deadline(ctx, group_id, ctx.timing.durations.CLAIM_DEADLINE)
+      : undefined,
+  });
+  if (opts.itemsTrusted) {
+    await ctx.db.set_line_items({
+      expense_id,
+      items: receipt.items.map((i, k) => ({
+        item_id: `${expense_id}:${k + 1}`,
+        position: k + 1,
+        description: i.description,
+        quantity: i.quantity,
+        amount_cents: i.amount_cents,
+      })),
+    });
+  }
+  for (const mem of members) {
+    await ctx.db.set_share({
+      expense_id,
+      phone: mem.phone,
+      role: mem.phone === source.sender_phone ? "payer" : "participant",
+      // §7.5: the payer claims like everyone else.
+      status: lopsided ? "awaiting_claim" : "proposed",
+      responded: !lopsided && mem.phone === source.sender_phone,
+      followup_count: 0,
+    });
+  }
+  await tapback(ctx, source, "like", expense_id);
+  if (lopsided) await postItemList(ctx, expense_id);
+  else await postProposal(ctx, expense_id, false);
+}
+
+function deadline(ctx: BrainCtx, group_id: string, ms: number): Date {
+  return outsideQuietHours(
+    ctx,
+    new Date(ctx.now().getTime() + ms),
+    ctx.store.group(group_id)?.timezone ?? "America/Detroit",
+  );
+}
+
+async function postItemList(ctx: BrainCtx, expense_id: string) {
+  const e = ctx.store.expense(expense_id)!;
+  await say(ctx, {
+    chat: { group_id: e.group_id },
+    purpose: "item_list",
+    id: `item_list:${expense_id}`,
+    text: T.itemList({
+      merchant: e.description,
+      total_cents: e.total_cents,
+      items: ctx.store.lineItems(expense_id),
+    }),
+    expense_id,
+  });
+}
+
+// §7.5 "uneven without specifics": a receipt switches to itemizing.
+export async function startItemizing(ctx: BrainCtx, e: Expense) {
+  await ctx.db.upsert_expense({
+    ...e,
+    split_mode: "itemized",
+    status: "itemizing",
+    objection_deadline: undefined,
+    claim_deadline: deadline(
+      ctx,
+      e.group_id,
+      ctx.timing.durations.CLAIM_DEADLINE,
+    ),
+  });
+  for (const s of ctx.store
+    .shares(e.expense_id)
+    .filter((x) => x.status !== "opted_out")) {
+    await ctx.db.set_share({
+      ...s,
+      status: "awaiting_claim",
+      responded: false,
+      followup_count: 0,
+    });
+  }
+  await postItemList(ctx, e.expense_id);
+}
+
+// Itemizing expenses where this sender still has a share to claim on.
+export function claimTargets(ctx: BrainCtx, m: Message): Expense[] {
+  return ctx.store
+    .expenses()
+    .filter(
+      (e) =>
+        e.status === "itemizing" && (!m.group_id || e.group_id === m.group_id),
+    )
+    .filter((e) =>
+      ctx.store
+        .shares(e.expense_id)
+        .some((s) => s.phone === m.sender_phone && s.status !== "opted_out"),
+    )
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime());
+}
+
+export async function handleClaim(
+  ctx: BrainCtx,
+  m: Message,
+  target?: Expense,
+): Promise<void> {
+  const targets = target ? [target] : claimTargets(ctx, m);
+  if (targets.length === 0) return;
+  if (targets.length > 1 && !m.group_id) {
+    // §14: two open lists in a DM: ask which one with a numbered list.
+    await tapback(ctx, m, "question");
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `clarify:${m.message_id}`,
+      text: `Which one?\n${targets.map((e, i) => `${i + 1}. ${e.description}`).join("\n")}`,
+    });
+    ctx.memory.pending.set(chatKey(chatOf(m)), {
+      kind: "which",
+      source: m,
+      expense_ids: targets.map((e) => e.expense_id),
+      asked_at: ctx.now(),
+    });
+    return;
+  }
+  const e = targets[0]!;
+  const items = ctx.store.lineItems(e.expense_id);
+  const { result } = await ctx.extract.claim(extractInput(ctx, m), items);
+  if (result.kind === "unclear") {
+    await tapback(ctx, m, "question", e.expense_id);
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `clarify:${m.message_id}`,
+      text: 'Which ones? Reply with the numbers, or "even".',
+      expense_id: e.expense_id,
+    });
+    return;
+  }
+  await applyClaim(ctx, m, e, result);
+  await tapback(ctx, m, "like", e.expense_id);
+  // §7.5: as soon as everyone has responded, finalize. Nobody waits.
+  const live = ctx.store
+    .shares(e.expense_id)
+    .filter((s) => s.status !== "opted_out");
+  if (live.every((s) => s.responded))
+    await finalize(ctx, ctx.store.expense(e.expense_id)!);
+}
+
+async function applyClaim(
+  ctx: BrainCtx,
+  m: Message,
+  e: Expense,
+  r: ClaimResolution,
+) {
+  const items = ctx.store.lineItems(e.expense_id);
+  const itemAt = (pos: number) => items.find((i) => i.position === pos)!;
+  const claim = (item_id: string, phone: string) =>
+    ctx.db.add_claim({ item_id, phone, source_message_id: m.message_id });
+
+  if (r.kind === "items")
+    for (const p of r.item_positions)
+      await claim(itemAt(p).item_id, m.sender_phone);
+  if (r.kind === "everyone_shares") {
+    const live = ctx.store
+      .shares(e.expense_id)
+      .filter((s) => s.status !== "opted_out");
+    for (const p of r.item_positions)
+      for (const s of live) await claim(itemAt(p).item_id, s.phone);
+  }
+  if (r.kind === "same_as" && r.same_as_phone) {
+    // Copy their claims as they are right now (§7.5).
+    for (const c of ctx.store
+      .claims(e.expense_id)
+      .filter((x) => x.phone === r.same_as_phone))
+      await claim(c.item_id, m.sender_phone);
+  }
+  // "even": no claims; their share is part of the unclaimed pool.
+  const share = ctx.store
+    .shares(e.expense_id)
+    .find((s) => s.phone === m.sender_phone)!;
+  await ctx.db.set_share({ ...share, status: "locked", responded: true });
+}
+
+// §7.5 follow-ups for people who haven't claimed, generated when due.
+export async function claimFollowups(ctx: BrainCtx) {
+  const now = ctx.now();
+  const d = ctx.timing.durations;
+  for (const e of ctx.store
+    .expenses()
+    .filter((x) => x.status === "itemizing" && x.claim_deadline)) {
+    const end = e.claim_deadline!;
+    if (now >= end) {
+      await finalize(ctx, e); // unclaimed items split evenly by the module
+      continue;
+    }
+    const start = end.getTime() - d.CLAIM_DEADLINE;
+    const tz = ctx.store.group(e.group_id)?.timezone ?? "America/Detroit";
+    const members = activeMembers(ctx, e.group_id);
+    for (const s of ctx.store
+      .shares(e.expense_id)
+      .filter((x) => x.status === "awaiting_claim" && !x.responded)) {
+      const dm = { dm_phone: s.phone };
+      const due = [
+        start + d.FOLLOWUP_DM1_AFTER,
+        start + d.FOLLOWUP_DM1_AFTER + d.FOLLOWUP_DM2_AFTER,
+        start + d.FOLLOWUP_DM3_AFTER,
+      ][s.followup_count];
+      if (
+        due !== undefined &&
+        s.followup_count < MAX_DMS_PER_EXPENSE &&
+        now.getTime() >= due
+      ) {
+        const text =
+          s.followup_count === 0
+            ? T.claimFollowupFirst({
+                merchant: e.description,
+                total_cents: e.total_cents,
+                items: ctx.store.lineItems(e.expense_id),
+              })
+            : s.followup_count === 1
+              ? T.claimFollowupSecond({
+                  seed: e.expense_id,
+                  merchant: e.description,
+                })
+              : T.claimLastCall({
+                  merchant: e.description,
+                  amount_cents: s.amount_cents,
+                  when: capitalize(inWords(end.getTime() - now.getTime())),
+                });
+        await say(ctx, {
+          chat: dm,
+          purpose: "claim_followup",
+          id: `claim_followup:${e.expense_id}:${s.phone}:${s.followup_count + 1}`,
+          text,
+          expense_id: e.expense_id,
+          send_after: outsideQuietHours(ctx, now, tz),
+        });
+        await ctx.db.set_share({
+          ...s,
+          followup_count: s.followup_count + 1,
+          last_followup_at: now,
+        });
+      }
+      // The group mention only after DMs went unanswered (§7.5), never a call-out of amounts (P5).
+      const mentionId = `group_mention:${e.expense_id}:${s.phone}`;
+      if (
+        s.followup_count >= 1 &&
+        now.getTime() >= start + d.GROUP_MENTION_AFTER &&
+        !ctx.store.outbox().some((o) => o.action_id === mentionId)
+      ) {
+        const person = {
+          phone: s.phone,
+          name: members.find((x) => x.phone === s.phone)?.name,
+        };
+        await say(ctx, {
+          chat: { group_id: e.group_id },
+          purpose: "group_mention",
+          id: mentionId,
+          text: T.groupMention({ seed: e.expense_id, person }),
+          expense_id: e.expense_id,
+          send_after: outsideQuietHours(ctx, now, tz),
+        });
+      }
+    }
+  }
+}
+
+const capitalize = (s: string) => s[0]!.toUpperCase() + s.slice(1);

@@ -18,6 +18,7 @@ import {
   type Pending,
 } from "./context.js";
 import { extractInput } from "./inputs.js";
+import { startItemizing } from "./receipt.js";
 
 export const expenseIdFor = (source_message_id: string) =>
   `exp_${source_message_id}`;
@@ -55,7 +56,7 @@ async function ask(
     purpose: "clarifying_question",
     id: `clarify:${m.message_id}`,
     text: q,
-    expense_id: pending.expense_id,
+    expense_id: "expense_id" in pending ? pending.expense_id : undefined,
   });
   ctx.memory.pending.set(chatKey(chatOf(m)), pending);
 }
@@ -295,7 +296,13 @@ export async function handleAdjustment(
     return;
   }
   if (result.exclusions.length === 0 && result.fixed.length === 0) {
-    // "not even" with no specifics (§7.5): ask what's uneven, stay proposed.
+    // "not even" with no specifics (§7.5): a receipt switches to itemizing;
+    // a text expense asks what's uneven and stays proposed.
+    if (ctx.store.lineItems(expense.expense_id).length > 0) {
+      await tapback(ctx, m, "like", expense.expense_id);
+      await startItemizing(ctx, expense);
+      return;
+    }
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
@@ -306,8 +313,8 @@ export async function handleAdjustment(
     });
     return;
   }
-  await applyAdjustment(ctx, expense, result);
   await tapback(ctx, m, "like", expense.expense_id);
+  await applyAdjustment(ctx, expense, result);
 }
 
 export async function applyAdjustment(

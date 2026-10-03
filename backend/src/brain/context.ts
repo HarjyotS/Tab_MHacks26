@@ -14,6 +14,8 @@ import type {
   ExtractInput,
   Problem,
 } from "../extraction/types.js";
+import type { ReceiptRead } from "../extraction/receipt.js";
+import type { ClaimResolution, LineItem as ClaimItem } from "../extraction/types.js";
 import type { Message, Store } from "../store/types.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
@@ -46,6 +48,19 @@ export type Pending =
       then: "expense" | "approval" | "large_amount";
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
+      asked_at: Date;
+    }
+  | {
+      kind: "receipt"; // §7.4: confirming the total, a total in dollars, or the tip
+      stage: "confirm_total" | "total" | "tip";
+      source: Message;
+      read: ReceiptRead;
+      asked_at: Date;
+    }
+  | {
+      kind: "which"; // a DM claim with two open lists (§14)
+      source: Message;
+      expense_ids: string[];
       asked_at: Date;
     };
 
@@ -82,6 +97,9 @@ export type Extractors = {
     input: ExtractInput,
     mode: ExpenseMode,
   ) => Promise<Extracted<ExpenseExtraction>>;
+  // `image_url` comes from the client; main.ts fetches it for Grok.
+  receipt: (image_url: string, caption?: string) => Promise<ReceiptRead>;
+  claim: (input: ExtractInput, items: ClaimItem[]) => Promise<Extracted<ClaimResolution>>;
 };
 
 export type BrainCtx = {
