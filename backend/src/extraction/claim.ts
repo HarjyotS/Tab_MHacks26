@@ -82,10 +82,10 @@ export async function resolveClaim(
     return unclear;
   }
   if (r.kind === "same_as") {
-    const phone = r.same_as_name ? resolveName(r.same_as_name, input.members, input.message.sender) : null;
+    const phone = r.same_as_name ? resolveName(r.same_as_name, input.members, input.message.sender_phone) : null;
     if (
       !phone ||
-      phone === input.message.sender ||
+      phone === input.message.sender_phone ||
       !input.members.some((m) => m.phone === phone)
     )
       return unclear;

@@ -1,9 +1,12 @@
-import type { Member } from "../classifier/types.js";
+import { TAB } from "./prompt.js";
+
+type Member = { phone: string; name?: string };
 
 const SELF = new Set(["me", "i", "myself", "my", "sender"]);
 
 // SPEC §9.1 "map every name to a member", done in code so the model can
 // never invent a phone. Returns null when the name is not clearly one member.
+// Tab is never a person who can pay or owe.
 export function resolveName(
   name: string,
   members: Member[],
@@ -12,8 +15,8 @@ export function resolveName(
   const n = name.trim().toLowerCase().replace(/^@/, "");
   if (!n) return null;
   if (SELF.has(n)) return sender;
-  const named = members.filter((m): m is Member & { name: string } =>
-    Boolean(m.name),
+  const named = members.filter(
+    (m): m is Member & { name: string } => Boolean(m.name) && m.phone !== TAB,
   );
   const exact = named.filter((m) => m.name.toLowerCase() === n);
   if (exact.length === 1) return exact[0]!.phone;

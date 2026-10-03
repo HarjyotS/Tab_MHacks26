@@ -1,14 +1,30 @@
 // Argument shapes for the reducers the backend calls (SPEC §5.5), using the
 // §5.2 field names. Money is integer cents as a number, times are Dates;
 // reducers.ts converts both to what SpacetimeDB expects.
-import type { Intent } from "../classifier/intents.js";
-import type {
-  ExpenseStatus,
-  OutboxPurpose,
-  ShareStatus,
-} from "../classifier/types.js";
+import type { ExpenseStatus, Intent, ShareStatus } from "@tab/gate";
 
-export type { ExpenseStatus, OutboxPurpose, ShareStatus };
+export type { ExpenseStatus, ShareStatus };
+
+// SPEC §5.2
+export type OutboxPurpose =
+  | "onboarding_intro"
+  | "name_prompt"
+  | "split_proposal"
+  | "objection_reminder"
+  | "item_list"
+  | "claim_followup"
+  | "group_mention"
+  | "settle_request"
+  | "approval_followup"
+  | "payment_receipt"
+  | "all_square"
+  | "clarifying_question"
+  | "balance_reply"
+  | "breakdown_reply"
+  | "dispute_followup"
+  | "help_reply"
+  | "tapback"
+  | "other";
 
 export type MessageStatus = "new" | "processing" | "done" | "error";
 export type GroupStatus = "pending" | "active";

@@ -6,6 +6,7 @@ import type {
   Problem,
 } from "../src/extraction/types.js";
 import type { ExpenseMode } from "../src/extraction/expense.js";
+import type { GateMessage } from "@tab/gate";
 
 export const PHONES = {
   Joe: "+15555550101",
@@ -17,10 +18,11 @@ export const PHONES = {
 } as const;
 const { Joe, Kian, Harjyot, Priya, Jake, John } = PHONES;
 
-const MEMBERS = Object.entries(PHONES).map(([name, phone]) => ({
-  name,
-  phone,
-}));
+// Tab is a member with phone "tab", the same convention @tab/gate uses.
+export const MEMBERS = [
+  { name: "Tab", phone: "tab" },
+  ...Object.entries(PHONES).map(([name, phone]) => ({ name, phone })),
+];
 
 export const FRITA_ITEMS: LineItem[] = [
   { position: 1, description: "Cuban burger", amount_cents: 1500 },
@@ -29,80 +31,45 @@ export const FRITA_ITEMS: LineItem[] = [
   { position: 4, description: "Batido x2", amount_cents: 1400 },
 ];
 
-const fresh = (text: string, sender: string = Joe): ExtractInput => ({
-  chat: "group",
+// A §5.2 messages row, reduced to the fields the gate reads.
+const msg = (sender_phone: string, text: string, is_dm = false): GateMessage => ({
+  sender_phone,
+  is_dm,
+  kind: "text",
+  text,
+});
+
+export const fresh = (text: string, sender: string = Joe): ExtractInput => ({
   members: MEMBERS,
   context: [],
   open_items: [],
-  message: { sender, text },
+  message: msg(sender, text),
 });
 
 const onProposal = (text: string, sender: string = Kian): ExtractInput => ({
-  chat: "group",
   members: MEMBERS,
   context: [
-    { from: Joe, text: "dinner was 96, i got it" },
-    {
-      from: "tab",
-      purpose: "split_proposal",
-      text: "Dinner, $96.00. Split 6 ways, that's $16.00 each.\nAnything uneven, or anyone not there?",
-    },
+    msg(Joe, "dinner was 96, i got it"),
+    msg("tab", "Dinner, $96.00. Split 6 ways, that's $16.00 each.\nAnything uneven, or anyone not there?"),
   ],
-  open_items: [
-    {
-      expense_id: "e_dinner",
-      description: "Dinner",
-      expense_status: "proposed",
-      my_share_status: "proposed",
-    },
-  ],
-  message: { sender, text, reply_to_tab_purpose: "split_proposal" },
+  open_items: [{ expense_id: "e_dinner", description: "Dinner", expense_status: "proposed", my_share_status: "proposed" }],
+  message: msg(sender, text),
 });
 
-const onItemList = (
-  text: string,
-  chat: "group" | "dm" = "group",
-): ExtractInput => ({
-  chat,
+const onItemList = (text: string, dm = false): ExtractInput => ({
   members: MEMBERS,
   context: [
-    {
-      from: "tab",
-      purpose: chat === "dm" ? "claim_followup" : "item_list",
-      text: "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00",
-    },
+    msg("tab", "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00", dm),
   ],
-  open_items: [
-    {
-      expense_id: "e_frita",
-      description: "Frita Batidos",
-      expense_status: "itemizing",
-      my_share_status: "awaiting_claim",
-    },
-  ],
-  message: { sender: Kian, text },
+  open_items: [{ expense_id: "e_frita", description: "Frita Batidos", expense_status: "itemizing", my_share_status: "awaiting_claim" }],
+  message: msg(Kian, text, dm),
 });
 
 const onPizza = (text: string): ExtractInput => ({
-  chat: "group",
   members: MEMBERS,
-  context: [
-    { from: Kian, text: "paid 48 for pizza for everyone" },
-    {
-      from: "tab",
-      purpose: "split_proposal",
-      text: "Pizza, $48.00. Split 6 ways, that's $8.00 each.",
-    },
-  ],
-  open_items: [
-    {
-      expense_id: "e_pizza",
-      description: "Pizza",
-      expense_status: "proposed",
-      my_share_status: "proposed",
-    },
-  ],
-  message: { sender: Kian, text, reply_to_tab_purpose: "split_proposal" },
+  context: [msg(Kian, "paid 48 for pizza for everyone"), msg("tab", "Pizza, $48.00. Split 6 ways, that's $8.00 each.")],
+  open_items: [{ expense_id: "e_pizza", description: "Pizza", expense_status: "proposed", my_share_status: "proposed" }],
+  message: msg(Kian, text),
 });
 
 // `expect` is a partial match: listed keys must match; strings match
@@ -224,7 +191,7 @@ export const CASES: Case[] = [
   adjust("spec15-wasnt-at-dinner", onProposal("I wasn't at dinner", Kian), {
     exclusions: [Kian],
   }),
-  claim("spec16-dm-2", onItemList("2", "dm"), {
+  claim("spec16-dm-2", onItemList("2", true), {
     kind: "items",
     item_positions: [2],
   }),

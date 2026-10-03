@@ -5,28 +5,23 @@ import { resolveClaim } from "../src/extraction/claim.js";
 import { extractCorrection } from "../src/extraction/correction.js";
 import { resolveName } from "../src/extraction/names.js";
 import type { ExtractInput } from "../src/extraction/types.js";
-import { FRITA_ITEMS, PHONES } from "../scripts/extraction-cases.js";
+import { FRITA_ITEMS, MEMBERS, PHONES } from "../scripts/extraction-cases.js";
 
-const members = Object.entries(PHONES).map(([name, phone]) => ({
-  name,
-  phone,
-}));
+const members = MEMBERS;
+const people = MEMBERS.filter((m) => m.phone !== "tab");
 const input = (text: string, sender: string = PHONES.Joe): ExtractInput => ({
-  chat: "group",
   members,
   context: [],
   open_items: [
     { expense_id: "e1", description: "Pizza", expense_status: "proposed" },
   ],
-  message: { sender, text },
+  message: { sender_phone: sender, is_dm: false, kind: "text", text },
 });
 
 function fake(output: Record<string, unknown>): ChatClient {
-  const create = vi
-    .fn()
-    .mockResolvedValue({
-      choices: [{ message: { content: JSON.stringify(output) } }],
-    });
+  const create = vi.fn().mockResolvedValue({
+    choices: [{ message: { content: JSON.stringify(output) } }],
+  });
   return { chat: { completions: { create } } } as unknown as ChatClient;
 }
 
@@ -49,6 +44,10 @@ describe("resolveName", () => {
     expect(resolveName("me", members, PHONES.Kian)).toBe(PHONES.Kian);
     expect(resolveName("Priya", members, PHONES.Joe)).toBe(PHONES.Priya);
     expect(resolveName("harj", members, PHONES.Joe)).toBe(PHONES.Harjyot);
+  });
+
+  it("never resolves a name to Tab", () => {
+    expect(resolveName("tab", members, PHONES.Joe)).toBeNull();
   });
 
   it("returns null for strangers and ambiguous prefixes instead of guessing", () => {
@@ -89,7 +88,7 @@ describe("extractExpense validation", () => {
       "m",
       input("venmo me 15 each for firewood"),
     );
-    expect(each.result.amount_cents).toBe(1500 * members.length);
+    expect(each.result.amount_cents).toBe(1500 * people.length);
 
     const notEach = await extractExpense(
       fake(expenseRaw({ amount_cents: 10000, amount_is_per_person: true })),

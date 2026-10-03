@@ -1,5 +1,5 @@
+import type { ClassifyInput, ClassifyResult } from "@tab/gate";
 import { thresholds as defaults } from "../config.js";
-import type { ClassifyInput, ClassifyResult } from "./types.js";
 
 export type Decision = "act" | "clarify" | "ignore";
 
@@ -11,9 +11,9 @@ function hasSettleRequestFor(input: ClassifyInput): boolean {
   );
 }
 
-// SPEC §6.4 thresholds, plus a code-level check for approvals: the only
-// intent that moves money must clear a higher bar AND have something to
-// approve, regardless of what the model says.
+// SPEC §6.4 thresholds on the gate's result, plus a code-level check for
+// approvals: the only intent that moves money must clear a higher bar AND
+// have something to approve, regardless of what the classifier says.
 export function decide(
   result: ClassifyResult,
   input: ClassifyInput,

@@ -61,7 +61,7 @@ export async function extractCorrection(
 
   const problems: Problem[] = [];
   let amount = r.new_amount_cents ?? undefined;
-  if (amount !== undefined && !isGrounded(amount, input.message.text)) {
+  if (amount !== undefined && !isGrounded(amount, input.message.text ?? "")) {
     problems.push({ kind: "ungrounded_amount", amount_cents: amount });
     amount = undefined;
   }

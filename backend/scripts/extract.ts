@@ -8,7 +8,7 @@ import { createXaiClient, type ChatClient } from "../src/grok/structured.js";
 import { extractExpense } from "../src/extraction/expense.js";
 import { resolveClaim } from "../src/extraction/claim.js";
 import { extractCorrection } from "../src/extraction/correction.js";
-import { CASES, FRITA_ITEMS, PHONES, type Case } from "./extraction-cases.js";
+import { CASES, FRITA_ITEMS, fresh, PHONES, type Case } from "./extraction-cases.js";
 
 function matches(expected: unknown, actual: unknown): boolean {
   if (typeof expected === "string") {
@@ -104,13 +104,7 @@ async function main() {
     throw new Error(
       `--sender must be one of ${Object.keys(PHONES).join(", ")}`,
     );
-  const input = {
-    chat: "group" as const,
-    members: Object.entries(PHONES).map(([name, phone]) => ({ name, phone })),
-    context: [],
-    open_items: [],
-    message: { sender, text },
-  };
+  const input = fresh(text, sender);
   const out =
     kind === "expense" || kind === "adjustment"
       ? await extractExpense(

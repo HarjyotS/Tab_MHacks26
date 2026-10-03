@@ -1,8 +1,9 @@
 import { z } from "zod";
 import { structuredCall, type ChatClient } from "../grok/structured.js";
+import { LARGE_AMOUNT_CENTS } from "../config.js";
 import { isGrounded } from "./grounding.js";
 import { resolveName } from "./names.js";
-import { renderExtractInput, UNTRUSTED_RULE } from "./prompt.js";
+import { renderExtractInput, TAB, UNTRUSTED_RULE } from "./prompt.js";
 import type {
   ExpenseExtraction,
   Extracted,
@@ -10,7 +11,6 @@ import type {
   Problem,
 } from "./types.js";
 
-export const LARGE_AMOUNT_CENTS = 100_000;
 
 // Only multiply when the message itself says the amount is per person.
 const PER_PERSON = /\b(each|apiece|per person|per head|a head|a person)\b/i;
@@ -112,9 +112,10 @@ function toContract(
 ): Extracted<ExpenseExtraction> {
   const problems: Problem[] = [];
   const { members, message } = input;
-  const ground = (cents: number) => isGrounded(cents, message.text);
+  const text = message.text ?? "";
+  const ground = (cents: number) => isGrounded(cents, text);
   const resolve = (name: string): string | null => {
-    const phone = resolveName(name, members, message.sender);
+    const phone = resolveName(name, members, message.sender_phone);
     if (!phone) problems.push({ kind: "unknown_name", name });
     return phone;
   };
@@ -128,7 +129,7 @@ function toContract(
     const phone = resolve(r.payer_name);
     if (phone)
       payer =
-        phone === message.sender
+        phone === message.sender_phone
           ? { kind: "sender" }
           : { kind: "member", phone };
   }
@@ -147,11 +148,11 @@ function toContract(
     } else if (amount <= 0) {
       problems.push({ kind: "invalid_amount", amount_cents: amount });
       amount = undefined;
-    } else if (r.amount_is_per_person && PER_PERSON.test(message.text)) {
+    } else if (r.amount_is_per_person && PER_PERSON.test(text)) {
       const headcount =
         participants.kind === "list"
           ? participants.phones.length
-          : members.filter((m) => !exclusions.includes(m.phone)).length;
+          : members.filter((m) => m.phone !== TAB && !exclusions.includes(m.phone)).length;
       amount *= headcount;
     }
   }

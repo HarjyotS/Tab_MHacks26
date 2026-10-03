@@ -1,4 +1,4 @@
-import type { ClassifyInput } from "../classifier/types.js";
+import type { ClassifyInput } from "@tab/gate";
 
 // SPEC §9.2 [CONTRACT] output shapes.
 export type ExpenseExtraction = {
@@ -41,7 +41,8 @@ export type Problem =
 
 export type Extracted<T> = { result: T; problems: Problem[] };
 
-// Extraction sees the same chat state as the classifier.
+// Extraction sees the same chat state as the gate (SPEC §6.3). Tab's own
+// messages appear in `context` with sender_phone "tab".
 export type ExtractInput = ClassifyInput;
 
 export type LineItem = {
