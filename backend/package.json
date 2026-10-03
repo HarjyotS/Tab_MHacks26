@@ -6,7 +6,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "extract": "tsx scripts/extract.ts",
-    "db:check": "tsx scripts/db-check.ts"
+    "db:check": "tsx scripts/db-check.ts",
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
     "dotenv": "^18.0.5",

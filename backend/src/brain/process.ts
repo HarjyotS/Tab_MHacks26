@@ -1,0 +1,292 @@
+// SPEC §11.1 processing loop and §11.2 scheduler.
+import type { Intent } from "@tab/gate";
+import { decide } from "../gate/decide.js";
+import type { Message } from "../store/types.js";
+import { type BrainCtx, chatKey, chatOf, inWords, type Pending, say, tapback } from "./context.js";
+import { applyAdjustment, groupFor, handleAdjustment, handleExpense, proposeNew } from "./expense.js";
+import { extractInput } from "./inputs.js";
+import {
+  announceSettlements,
+  approve,
+  dispute,
+  finalize,
+  routeReaction,
+  settleTarget,
+} from "./settle.js";
+import {
+  handleBalanceQuery,
+  handleBreakdown,
+  handleHelp,
+  handleNameReply,
+  onboardNewGroups,
+} from "./talk.js";
+import * as T from "../copy/templates.js";
+
+const YES =
+  /^(yes|yep|yeah|ya|yup|sure|ok|okay|correct|right|do it|go ahead|that's right)\b/i;
+const NO = /^(no|nope|nah|wrong|not right)\b/i;
+
+// Questions Tab asks when the gate is unsure (§6.4 clarify band). Intents
+// that only read data are answered directly; names are never guessed.
+const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
+  expense: "Want me to split that?",
+  approval: "Want to pay your part?",
+};
+
+export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
+  await ctx.db.set_message_result({
+    message_id: m.message_id,
+    status: "processing",
+  });
+  try {
+    ctx.memory.remember(m);
+    let intent: Intent | undefined;
+    let confidence: number | undefined;
+
+    if (m.kind === "reaction") {
+      await routeReaction(ctx, m); // §6.2: never classified
+    } else if (!(await answerPending(ctx, m))) {
+      const input = extractInput(ctx, m);
+      const result = await ctx.classify(input);
+      intent = result.intent;
+      confidence = result.confidence;
+      const decision = decide(result, input);
+      ctx.log("classified", {
+        message_id: m.message_id,
+        group_id: m.group_id,
+        intent,
+        confidence,
+        decision,
+      });
+      if (decision === "act") await act(ctx, m, intent);
+      else if (decision === "clarify") await clarify(ctx, m, intent);
+    }
+    await ctx.db.set_message_result({
+      message_id: m.message_id,
+      intent,
+      confidence,
+      status: "done",
+    });
+  } catch (err) {
+    ctx.log("message_failed", {
+      message_id: m.message_id,
+      group_id: m.group_id,
+      error: String(err),
+    });
+    await ctx.db.set_message_result({
+      message_id: m.message_id,
+      status: "error",
+      error: String(err).slice(0, 500),
+    });
+  }
+}
+
+async function act(ctx: BrainCtx, m: Message, intent: Intent) {
+  switch (intent) {
+    case "expense":
+      return handleExpense(ctx, m);
+    case "split_adjustment":
+      return handleAdjustment(ctx, m);
+    case "name_reply":
+      return handleNameReply(ctx, m);
+    case "approval": {
+      const e = settleTarget(ctx, m);
+      return e ? approve(ctx, m, e) : undefined;
+    }
+    case "dispute": {
+      const e = settleTarget(ctx, m);
+      return e ? dispute(ctx, m, e) : undefined;
+    }
+    case "balance_query":
+      return handleBalanceQuery(ctx, m);
+    case "breakdown_request":
+      return handleBreakdown(ctx, m);
+    case "help":
+      return handleHelp(ctx, m);
+    // Not built yet: receipt and claim (M4), correction (§7.7). payment_reported
+    // is ignored in the MVP; ignore needs nothing.
+    default:
+      ctx.log("intent_not_handled", { message_id: m.message_id, intent });
+  }
+}
+
+async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
+  if (
+    intent === "balance_query" ||
+    intent === "breakdown_request" ||
+    intent === "help"
+  )
+    return act(ctx, m, intent);
+  // A possible name is acted on only right after Tab asked an unnamed sender
+  // for theirs; otherwise never guess a name (P3).
+  if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
+  const question = CONFIRM_QUESTION[intent];
+  if (!question) return; // e.g. a possible name: never guess (P3), stay quiet (P1)
+  await tapback(ctx, m, "question");
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "clarifying_question",
+    id: `clarify:${m.message_id}`,
+    text: question,
+  });
+  ctx.memory.pending.set(chatKey(chatOf(m)), {
+    kind: "confirm",
+    then: intent === "expense" ? "expense" : "approval",
+    source: m,
+    asked_at: ctx.now(),
+  });
+}
+
+// If Tab asked something in this chat, try the message as the answer. An
+// answer is accepted only if it actually resolves something; otherwise the
+// message is classified normally.
+async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
+  const key = chatKey(chatOf(m));
+  const p = ctx.memory.pending.get(key);
+  if (!p || m.kind !== "text" || !m.text) return false;
+  if (
+    ctx.now().getTime() - p.asked_at.getTime() >
+    ctx.timing.durations.PENDING_QUESTION_TTL
+  ) {
+    ctx.memory.pending.delete(key);
+    return false;
+  }
+  if (p.kind === "confirm") return answerConfirm(ctx, m, p, key);
+
+  const answerer =
+    m.sender_phone === p.source.sender_phone
+      ? m.text
+      : `${nameOf(ctx, m)}: ${m.text}`;
+  const text = `${p.text}\n${answerer}`;
+  const mode = p.kind === "expense" ? "new" : "adjustment";
+  const retry = await ctx.extract.expense(
+    extractInput(ctx, { ...p.source, text }),
+    mode,
+  );
+  if (retry.problems.length >= p.problems.length) return false; // didn't help
+  ctx.memory.pending.delete(key);
+  if (p.kind === "adjustment") {
+    const expense = ctx.store.expense(p.expense_id);
+    if (!expense) return true;
+    if (retry.problems.length > 0) {
+      ctx.memory.pending.set(key, {
+        ...p,
+        text,
+        problems: retry.problems,
+        asked_at: ctx.now(),
+      });
+      await say(ctx, {
+        chat: chatOf(m),
+        purpose: "clarifying_question",
+        id: `clarify:${m.message_id}`,
+        text: T.clarifyingQuestion(retry.problems[0]!, {
+          description: expense.description,
+          people: [],
+        }),
+        expense_id: expense.expense_id,
+      });
+      return true;
+    }
+    await applyAdjustment(ctx, expense, retry.result);
+    await tapback(ctx, m, "like", expense.expense_id);
+    return true;
+  }
+  await handleExpense(ctx, m, text, p.source);
+  return true;
+}
+
+async function answerConfirm(
+  ctx: BrainCtx,
+  m: Message,
+  p: Extract<Pending, { kind: "confirm" }>,
+  key: string,
+) {
+  const text = (m.text ?? "").trim();
+  if (m.sender_phone !== p.source.sender_phone) return false;
+  if (NO.test(text)) {
+    ctx.memory.pending.delete(key);
+    await tapback(ctx, m, "like");
+    return true;
+  }
+  if (!YES.test(text)) return false;
+  ctx.memory.pending.delete(key);
+  if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source);
+  else if (p.then === "approval") {
+    const e = settleTarget(ctx, p.source);
+    if (e) await approve(ctx, { ...m }, e);
+  } else if (p.then === "large_amount" && p.extraction) {
+    const group_id = groupFor(ctx, p.source);
+    const rest = p.extraction.problems.filter((x) => x.kind !== "large_amount");
+    if (group_id && rest.length === 0)
+      await proposeNew(ctx, {
+        group_id,
+        source: p.source,
+        extracted: { ...p.extraction, problems: [] },
+      });
+  }
+  return true;
+}
+
+function answeringNamePrompt(ctx: BrainCtx, m: Message): boolean {
+  if (!m.group_id) return false;
+  const me = ctx.store.members(m.group_id).find((x) => x.phone === m.sender_phone);
+  if (!me || me.name) return false;
+  const lastTab = ctx.store
+    .outbox()
+    .filter((o) => o.group_id === m.group_id && o.kind !== "reaction" && o.status !== "cancelled" && o.created_at <= m.received_at)
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+  // The intro, name prompt, and contact card go out together; any of them counts.
+  return lastTab?.purpose === "name_prompt" || lastTab?.purpose === "onboarding_intro";
+}
+
+function nameOf(ctx: BrainCtx, m: Message): string {
+  const g = groupFor(ctx, m);
+  return (
+    (g && ctx.store.members(g).find((x) => x.phone === m.sender_phone)?.name) ||
+    "someone"
+  );
+}
+
+// §11.2: due work is generated from current state on every tick, so it is
+// always fresh and needs no cancellation bookkeeping.
+export async function tick(ctx: BrainCtx): Promise<void> {
+  const now = ctx.now();
+  await onboardNewGroups(ctx);
+  for (const e of ctx.store
+    .expenses()
+    .filter((x) => x.status === "proposed" && x.objection_deadline)) {
+    const deadline = e.objection_deadline!;
+    if (now >= deadline) {
+      await finalize(ctx, e);
+      continue;
+    }
+    const remindAt =
+      deadline.getTime() - ctx.timing.durations.OBJECTION_REMINDER_BEFORE;
+    const id = `objection_reminder:${e.expense_id}`;
+    if (
+      now.getTime() >= remindAt &&
+      !ctx.store.outbox().some((o) => o.action_id === id)
+    ) {
+      const shares = ctx.store
+        .shares(e.expense_id)
+        .filter((s) => s.status !== "opted_out");
+      await say(ctx, {
+        chat: { group_id: e.group_id },
+        purpose: "objection_reminder",
+        id,
+        text: T.objectionReminder({
+          seed: e.expense_id,
+          shares: shares.map((s) => ({
+            person: { phone: s.phone },
+            amount_cents: s.amount_cents,
+          })),
+          when: inWords(deadline.getTime() - now.getTime()),
+        }),
+        expense_id: e.expense_id,
+      });
+    }
+  }
+  await announceSettlements(ctx);
+}
+
+
