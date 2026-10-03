@@ -1,0 +1,21 @@
+{
+  "name": "tab-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "eval": "tsx scripts/eval-classifier.ts"
+  },
+  "dependencies": {
+    "dotenv": "^18.0.5",
+    "openai": "^7.27.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.4",
+    "tsx": "^4.23.15",
+    "typescript": "^7.0.2",
+    "vitest": "^3.2.7"
+  }
+}
