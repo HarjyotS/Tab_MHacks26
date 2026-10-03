@@ -5,18 +5,20 @@
   "workspaces": [
     "spacetime",
     "seeders",
-    "web"
+    "web",
+    "gate"
   ],
   "scripts": {
     "build": "npm run build -w spacetime && npm run build -w seeders && npm run build -w web",
     "bindings": "spacetime generate --lang typescript -p spacetime -o web/src/module_bindings -y && spacetime generate --lang typescript -p spacetime -o seeders/src/module_bindings -y",
-    "test": "npm run test -w spacetime && npm run test -w seeders",
-    "typecheck": "npm run typecheck -w spacetime && npm run typecheck -w seeders && npm run typecheck -w web",
+    "test": "npm run test -w spacetime && npm run test -w seeders && npm run test -w gate",
+    "typecheck": "npm run typecheck -w spacetime && npm run typecheck -w seeders && npm run typecheck -w web && npm run typecheck -w gate",
     "seed:demo": "npm run seed:demo -w seeders",
     "seed:nessie": "npm run seed:nessie -w seeders",
     "verify:settlement": "npm run verify:settlement -w seeders",
     "verify:access": "npm run verify:access -w seeders",
-    "verify:backend-access": "npm run verify:backend-access -w seeders"
+    "verify:backend-access": "npm run verify:backend-access -w seeders",
+    "fixtures": "npm run fixtures -w gate --"
   },
   "engines": {
     "node": ">=22"
