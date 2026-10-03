@@ -60,7 +60,7 @@ These settle most design arguments. A feature that breaks one needs a very good 
 | MHacks Grand Prize ($5,000) | Overall judging | The whole product | Everyone |
 | Best Use of Spacetime ($1,000 / $500 / $200) | Spacetime must be the core real-time backend and used meaningfully, not added on the side | Every component communicates through SpacetimeDB tables, split math runs in reducers next to the data, and the web ledger updates live | Kian, Joe |
 | Photon: Agents in iMessage (1st: $400 cash + $300 credits + fast-track to Photon's final interview round; 2nd: $200 cash + $100 credits) | Must integrate Photon's Spectrum framework and use it to connect the agent to iMessage | The client is built on Spectrum and uses groups, DMs, and tapbacks | Client owner |
-| Capital One: Best Use of Nessie (Giftogram cards per member) | Creative use of the Nessie API | One mock account per member, with real Nessie transfers on settlement | Kian |
+| Capital One: Best Use of Nessie (Giftogram cards per member) | Creative use of the Nessie API | A setup-time seeder provisions one mock customer, checking account, and starting deposit per member; live settlement is explicitly simulated in SpacetimeDB | Kian |
 | Optional: SpaceXAI "Make it Legendary" (keyboards) | Built with Cursor, and uses the Grok Imagine or Grok Voice API | Only if we add a Grok Voice feature (see section 18) | TBD |
 | Optional: Notability (1 year Pro + merch) | Use Notability Pro during the hackathon, tag it on Devpost, include 2+ screenshots | Recreate or annotate the whiteboard in Notability | Anyone |
 | Optional: MLH Best .Tech Domain | Register a .tech domain | Host the web ledger on it | Anyone |
@@ -79,7 +79,7 @@ Three moments matter more than any individual feature: a receipt turning into a 
 |---|---|---|
 | Client | [client owner] | Photon Spectrum integration, ingesting every inbound event, sending outbox rows, the onboarding contact card, hosting images |
 | Backend | Joe | Classifier gate (stub first, then Jev), Grok extraction, intent handlers, the expense state machine, the follow-up scheduler, message copy |
-| Data and money | Kian | SpacetimeDB module (tables and reducers), web ledger, Nessie worker |
+| Data and money | Kian | SpacetimeDB module (tables, reducers, scheduled settlement), web ledger, Nessie seed scripts |
 | Shared | Joe and Kian | The schema in section 5 and the split math in section 8 |
 | Demo and Devpost | Everyone | Interviews, demo script, backup video, submission |
 
@@ -102,16 +102,15 @@ flowchart LR
   BE -- extract --> GROK[Grok]
   BE -- reducers --> DB
   DB -- live subscription --> WL[Web ledger]
-  DB -- transfers subscription --> NW[Nessie worker]
-  NW -- transfer --> NES[Nessie API]
-  NW -- reducers --> DB
+  NS[Nessie seed script] -. one-time setup .-> NES[Nessie API]
+  NS -. account ids .-> DB
 ```
 
 ### 4.2 Why everything goes through SpacetimeDB
 
 Routing every interaction through shared tables instead of HTTP calls between services has four payoffs. Each person can build and test against fake rows from minute one without waiting on anyone else. Follow-ups and deadlines become plain data instead of timers scattered across services. The web ledger gets live updates for free. And Spacetime becomes the backbone of the system rather than a side database, which is exactly what its prize asks for.
 
-SpacetimeDB basics the whole team should know: clients read tables through subscriptions, which push changes in real time, and all writes go through reducers, which are transactional functions defined in the module. Keep external API calls (Photon, Grok, Jev, Nessie) out of reducers. Those live in separate processes that subscribe to tables and call reducers.
+SpacetimeDB basics the whole team should know: clients read tables through subscriptions, which push changes in real time, and all writes go through reducers, which are transactional functions defined in the module. Keep external API calls (Photon, Grok, Jev, and setup-time Nessie seeding) out of reducers. Nessie is not a runtime dependency: SpacetimeDB schedules and completes simulated settlement itself.
 
 ### 4.3 Processes
 
@@ -119,7 +118,7 @@ SpacetimeDB basics the whole team should know: clients read tables through subsc
 |---|---|---|
 | Client service | TypeScript with spectrum-ts **[DEFAULT]** | Holds the Photon connection, ingests events, sends the outbox |
 | Backend service | **[YOUR CALL]**, TypeScript recommended | Classification, extraction, intent handling, scheduling |
-| Nessie worker | **[YOUR CALL]**, can live inside the backend or web server process | Account setup and transfer execution |
+| Nessie seed scripts | TypeScript | One-time mock customer/account/deposit provisioning and deterministic local demo data |
 | SpacetimeDB module | Any module language Spacetime supports **[YOUR CALL]** | Tables, reducers, split math |
 | Web ledger | React **[DEFAULT]** | Live balances, expense drill-down, money-flow graph |
 
@@ -178,8 +177,8 @@ table members {
   group_id: string
   phone: string
   name?: string                 // null until they answer the onboarding prompt
-  nessie_customer_id?: string
-  nessie_account_id?: string
+  nessie_customer_id?: string     // setup-time fixture reference only
+  nessie_account_id?: string      // setup-time fixture reference only
   joined_at: Timestamp
   left_at?: Timestamp
 }
@@ -277,13 +276,13 @@ table shares {
 table transfers {
   transfer_id: string
   group_id: string
-  expense_id?: string           // null only for net settlements across expenses (stretch goal)
+  expense_id: string
   from_phone: string
   to_phone: string
   amount_cents: number
-  status: "pending" | "submitted" | "done" | "failed"
+  provider: "spacetime_simulated"
+  status: "pending" | "done" | "failed"
   approved_by_message_id: string  // the tapback or reply that approved it
-  nessie_transfer_id?: string
   created_at: Timestamp
   completed_at?: Timestamp
   error?: string
@@ -331,11 +330,11 @@ The payer has a share too, with `role: "payer"`, representing what they themselv
 | Table | Written by | Read by |
 |---|---|---|
 | groups | Client creates; backend updates status | Everyone |
-| members | Client creates on first sight; backend sets names; Nessie worker sets account ids | Everyone |
+| members | Client creates on first sight; backend sets names; Nessie seeder sets optional fixture ids | Everyone |
 | messages | Client ingests; backend sets intent, confidence, status | Backend; web ledger optionally, for an activity feed |
 | outbox | Backend enqueues and cancels; client updates status | Client; web ledger optionally |
-| expenses, line_items, claims, shares | Backend, through reducers | Web ledger, Nessie worker |
-| transfers | Backend creates on approval; Nessie worker updates status | Web ledger, backend |
+| expenses, line_items, claims, shares | Backend, through reducers | Web ledger |
+| transfers | Backend creates on approval; scheduled reducer completes | Web ledger, backend |
 
 ### 5.5 Reducers
 
@@ -355,8 +354,8 @@ Reducer names and the fields they set are **[CONTRACT]**. Argument order, helper
 | `recompute_expense` | Backend, or internally after any change | Runs the split math in section 8 and writes `amount_cents` on every share. Must run after any change to items, claims, shares, or amounts until the expense is finalized. |
 | `enqueue_outbox` / `cancel_outbox` | Backend | Queues an outbound action, or cancels queued actions matching an `expense_id` and phone. |
 | `create_transfer` | Backend | Creates a pending transfer after an approval. |
-| `update_transfer` | Nessie worker | Sets transfer status, `nessie_transfer_id`, `error`. |
-| `set_nessie_ids` | Nessie worker | Stores a member's Nessie customer and account ids. |
+| `complete_simulated_transfer` | SpacetimeDB scheduler | Marks the transfer done, pays its share, and settles the expense when every participant has paid. |
+| `set_nessie_ids` | Nessie seed script | Stores resumable setup progress and the member's mock customer/account ids. |
 
 **[DEFAULT]** Implement the split math inside `recompute_expense` in the SpacetimeDB module. That makes it the single source of truth for every amount, keeps it next to the data, and is a strong talking point for the Spacetime judges.
 
@@ -485,7 +484,7 @@ Trigger: the client sees a group for the first time, either through a system eve
 | 1 | `ingest_message` creates the `groups` row with `onboarding_status: "pending"` and a `members` row for the sender | If Photon exposes the participant list, create all members up front **[YOUR CALL]**. Otherwise members appear as they speak. |
 | 2 | The backend enqueues the intro, the name prompt, and a contact card | The contact card helps keep Tab's DMs out of iOS's Unknown Senders filter. |
 | 3 | Members reply with their names, and Tab likes each reply | Until named, a member is displayed by the last four digits of their number. |
-| 4 | The Nessie worker sees members without accounts and creates them (12.2) | Runs in the background and never blocks onboarding. |
+| 4 | Optional Nessie fixtures are created before the demo with `seed:nessie` (12.2) | Setup-only and never blocks onboarding or runtime. |
 | 5 | The group becomes `active` once every known member is named, or after the first expense | Tab works fully before onboarding completes. Nothing blocks on it (P4). |
 
 Default intro **[YOUR CALL on voice and wording]**, at most four short lines:
@@ -596,8 +595,8 @@ Tap 👍 on this message to pay your part, or reply if something's off.
 
 | Event | What happens |
 |---|---|
-| A participant likes the settle request, or replies "yes" | Their share becomes `approved`, and `create_transfer` runs for their amount, from them to the payer. Nobody else is affected (P4). |
-| The Nessie worker completes the transfer | The share becomes `paid`, and Tab DMs a receipt: "You paid Joe $38.25 for Frita Batidos." |
+| A participant likes the settle request, or replies "yes" | Their share becomes `approved`; `create_transfer` inserts one pending simulated transfer and schedules its completion. Nobody else is affected (P4). |
+| The scheduled reducer completes the transfer | The share becomes `paid`, the ledger updates atomically, and Tab DMs: "Simulated settlement complete: you paid Joe $38.25 for Frita Batidos." |
 | Every participant share is paid | The expense becomes `settled`. Tab may post one short "Everyone's square on Frita Batidos." **[YOUR CALL]** |
 | A participant dislikes it or replies "no" | Their share becomes `disputed`. Tab asks what's off, in the group if they replied there, otherwise by DM. |
 | A participant hasn't approved | Same DM schedule as claims, using the `approval_followup` purpose. After the last DM, the balance simply stays outstanding. Tab never pays on anyone's behalf (P7). |
@@ -821,7 +820,7 @@ Keep all of these in one config file.
 | LOPSIDED_FACTOR | 1.5 | |
 | LARGE_AMOUNT_CENTS | 100000 | $1,000 |
 | SCHEDULER_INTERVAL | 30 seconds | |
-| DEMO_STARTING_BALANCE | 50000 | $500 per Nessie account |
+| DEMO_STARTING_BALANCE | 50000 | $500 per setup-time Nessie fixture account |
 | DEMO_MODE | false | When true, every duration above is divided by DEMO_TIME_SCALE and quiet hours are off |
 | DEMO_TIME_SCALE | 360 | 3 hours becomes 30 seconds, and 48 hours becomes 8 minutes |
 
@@ -835,17 +834,14 @@ DEMO_MODE matters: without it, nothing time-based can be shown on stage.
 
 Implements the tables and reducers in section 5. Indexes worth having: messages by status, outbox by status and `send_after`, shares by expense and by phone, claims by item, and transfers by status. `recompute_expense` implements section 8 and must pass the test vectors in 8.2.
 
-### 12.2 Nessie worker
+### 12.2 Nessie and demo seeders
 
-| Task | Requirement |
+| Command | Requirement |
 |---|---|
-| Account setup | For each member without one, create a Nessie customer and a checking account, seed it with DEMO_STARTING_BALANCE through a deposit, and store the ids with `set_nessie_ids`. |
-| Fallback | If per-member accounts aren't working in time, use the judge's suggestion: one account seeded with example data that every payment comes from, and one account that receives transfers. Keep the same tables so nothing else changes. |
-| Executing transfers | Watch transfers with status `pending`. Mark each one `submitted` before calling Nessie, then call Nessie's transfer endpoint between the two members' accounts. On success, mark it `done` with `nessie_transfer_id`; on failure, mark it `failed` with the error. |
-| Idempotency | Never call Nessie twice for one `transfer_id`. Put the `transfer_id` in the Nessie transfer description so a restart can reconcile anything left in `submitted`. |
-| After completion | The backend watches for `done` transfers, sets the share to `paid`, and enqueues the payment receipt DM. **[YOUR CALL]** whether this happens in the backend or inside `update_transfer`. |
+| `seed:nessie` | For each member without fixtures, create a Nessie customer, checking account, and DEMO_STARTING_BALANCE deposit, checkpointing the returned ids after every step. A rerun reuses checkpoints; `--force-new` explicitly creates a fresh set. |
+| `seed:demo` | Insert deterministic 555-number members, open and settled expenses, claims, shares, historical simulated transfers, and a private ledger link for local development. A rerun detects and reuses the existing demo group. |
 
-API reference: api.nessieisreal.com. Nessie is a sandbox with mock data, so no real money ever moves.
+The Nessie API key is required only while `seed:nessie` runs. Nessie availability never affects app startup, approval, settlement, or the live demo. Nessie is a sandbox with mock data; the mock profile ids are fixture provenance, not proof that the live transfer ran through Nessie.
 
 ### 12.3 Web ledger
 
@@ -854,7 +850,7 @@ API reference: api.nessieisreal.com. Nessie is a sandbox with mock data, so no r
 | Must | Group balances: who owes whom, updating live as the chat happens |
 | Must | An expense list with drill-down into line items, claims, and each person's share |
 | Should | A money-flow graph: members as nodes, net debts as edges. Clicking an edge highlights the expenses behind it. |
-| Should | A visible animation when a Nessie transfer completes and an edge shrinks or disappears |
+| Should | A visible animation when the scheduled simulated transfer completes and an edge shrinks or disappears |
 | Could | An activity feed showing what Tab understood from each message, which doubles as a great explainer for judges |
 
 Access: an unguessable group URL such as `/g/<random id>`, with no login for the demo **[DEFAULT]**. Tab can post the link when someone asks "@tab ledger".
@@ -907,7 +903,7 @@ Fill in target times at kickoff. Everyone builds against fake rows until M1 land
 | M0 Contract | Tables and reducer names agreed, repo created, module deployed, and each person can read and write fake rows | All | |
 | M1 Echo loop | A message in the group appears in `messages`, the backend writes an outbox row, and the reply appears in iMessage | Client, Joe, Kian | |
 | M2 Text expenses | Expense, proposal, reminder, and lock-in all work in DEMO_MODE | Joe | |
-| M3 Settlement | A 👍 on the settle request creates a transfer, Nessie executes it, the share is paid, and the receipt DM arrives | Kian, Joe, client | |
+| M3 Settlement | A 👍 creates and schedules exactly one simulated transfer; SpacetimeDB pays the share, the live ledger updates, and the truthful receipt DM arrives | Kian, Joe, client | |
 | M4 Receipts and itemizing | Receipt, item list, claims in the group and in DMs, follow-ups, and finalization all work | Joe, client | |
 | M5 Live web ledger | Balances and drill-down update live during a chat | Kian | |
 | M6 Jev gate | Jev replaces the stub and passes the fixtures in 6.6 | Joe | |
@@ -925,7 +921,7 @@ M1 is the most important milestone, because it proves the whole pipe works end t
 |---|---|
 | Group chat | 3 or 4 team phones plus Tab. Decide which phones now, and keep one free to hand to judges. |
 | Web ledger | On a laptop or projector beside the phones |
-| Config | DEMO_MODE on, Nessie accounts seeded |
+| Config | DEMO_MODE on; optional Nessie fixture accounts seeded before runtime |
 | Receipts | 3 or 4 tested in advance, including a crumpled one and one with a handwritten tip |
 | Backup | A screen recording of the full flow, made as soon as M4 works |
 
@@ -937,7 +933,7 @@ M1 is the most important milestone, because it proves the whole pipe works end t
 | 0:20 | Onboarding | A judge's phone joins the group, Tab asks for names, the judge replies, and Tab likes it |
 | 0:45 | Text expense | "got pizza for everyone, $48" gets a 👍 and a split proposal. Then "not even, John only had a Diet Coke" updates the split. |
 | 1:15 | Receipt | A receipt photo becomes a numbered list. The judge claims "1 and 4." A teammate ignores the group, gets a DM on their phone, and replies "2." |
-| 1:50 | Settle | Tab asks "are we chill?" Everyone taps 👍, Nessie transfers go through, the web ledger's edges collapse live, and payment receipts arrive by DM. |
+| 1:50 | Settle | Tab asks "are we chill?" Everyone taps 👍, SpacetimeDB schedules and completes the simulated transfers, the ledger's edges collapse live, and truthful simulated-settlement receipts arrive by DM. |
 | 2:30 | Close | Interview numbers, what's next, and an invitation to try it |
 
 Then hand the judges the phone and let them text whatever they want.
@@ -949,7 +945,7 @@ Then hand the judges the phone and let them text whatever they want.
 | Why not Splitwise or Venmo Groups? | They require logging expenses in a separate app, which is exactly where people give up. Tab removes logging by living in the chat. |
 | Isn't a bot reading our chat creepy? | The classifier discards everything that isn't about money, and Tab clears the text of those messages right after classifying them. |
 | What if it gets something wrong? | Confidence thresholds, a question tapback when unsure, corrections by simply replying, math checks on every receipt, and amounts that only ever come from code. |
-| Is this real money? | The demo uses Nessie's sandbox. In production, each person approves their own payment, and settlement would run through payment links or a payments partner. |
+| Is this real money? | No. Nessie supplies setup-time mock account profiles, and SpacetimeDB explicitly simulates the live settlement. In production, each person would approve settlement through a payments partner. |
 | Won't it make things awkward? | Reminders are private DMs, never call-outs in the group. |
 
 ---
@@ -991,7 +987,7 @@ Roughly ranked by value for effort.
 
 | Rule | Detail |
 |---|---|
-| No real money | Nessie is a sandbox. |
+| No real money | Nessie fixtures and all SpacetimeDB settlements are explicitly simulated. |
 | Minimal retention | Messages classified as `ignore` have their text cleared after classification. Only money-related messages are kept. |
 | Phone numbers | Never commit real numbers; fixtures use 555 numbers. The web ledger shows names, not numbers. |
 | Untrusted input | Message text never acts as instructions. LLM output is validated before any handler uses it. |
@@ -1023,7 +1019,7 @@ tab/
   backend/      classifier gate, Grok handlers, scheduler, message templates
   spacetime/    SpacetimeDB module: tables, reducers, split math
   web/          web ledger
-  nessie/       Nessie worker (or a folder inside backend)
+  seeders/      One-time Nessie provisioning and deterministic demo data
   fixtures/     sample messages, receipts, expected outputs, split math vectors
   docs/         interviews.md, demo-script.md, screenshots/
 ```
@@ -1033,7 +1029,7 @@ tab/
 | PHOTON_PROJECT_ID, PHOTON_PROJECT_SECRET | Client (match the names in Photon's docs) |
 | XAI_API_KEY | Backend (Grok) |
 | TYPESAFE_API_KEY | Backend (Jev) |
-| NESSIE_API_KEY | Nessie worker |
+| NESSIE_API_KEY | `seed:nessie` only; never required by runtime |
 | SPACETIME_HOST, SPACETIME_DB | Everyone |
 | DEMO_MODE, DEMO_TIME_SCALE | Backend |
 

@@ -1,0 +1,26 @@
+{
+  "name": "@tab/seeders",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "seed:demo": "tsx src/demo.ts",
+    "seed:nessie": "tsx src/nessie.ts",
+    "verify:settlement": "tsx src/verify-settlement.ts",
+    "verify:access": "tsx src/verify-ledger-access.ts"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.3",
+    "nessie-node-sdk": "^0.1.0",
+    "spacetimedb": "2.10.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "tsx": "^4.20.6",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
+}
