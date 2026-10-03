@@ -36,10 +36,8 @@ export class MemoryDb implements Store {
   constructor(private now: () => Date) {}
 
   // ── Store (backend_messages only shows new and processing rows) ────────
-  messages = () =>
-    [...this.msgs.values()].filter(
-      (m) => m.status === "new" || m.status === "processing",
-    );
+  // backend_messages returns full history (Kian's #16).
+  messages = () => [...this.msgs.values()];
   group = (id: string) => this.grps.get(id);
   groups = () => [...this.grps.values()];
   members = (id: string) =>
@@ -161,6 +159,8 @@ export class MemoryDb implements Store {
     setMessageResult: async (a: Args<"setMessageResult">) => {
       const m = this.msgs.get(a.messageId);
       if (!m) throw new Error("Unknown message");
+      // Ignored chat text is discarded after classification (Kian\'s #16).
+      if (a.intent === "ignore") m.text = undefined;
       Object.assign(m, {
         intent: a.intent,
         confidence: a.confidence,
@@ -179,7 +179,9 @@ export class MemoryDb implements Store {
       g.onboarding_status = a.status as Group["onboarding_status"];
     },
     upsertExpense: async (a: Args<"upsertExpense">) => {
-      if (a.totalCents <= 0n) throw new Error("Expense total must be positive");
+      if (a.totalCents < 0n || (a.totalCents === 0n && a.status !== "needs_info")) {
+        throw new Error("Expense total must be positive unless more information is needed");
+      }
       const bySource = [...this.exps.values()].find(
         (e) => e.source_message_id === a.sourceMessageId,
       );
@@ -229,7 +231,8 @@ export class MemoryDb implements Store {
         followup_count: a.followupCount,
         last_followup_at: od(a.lastFollowupAt),
       });
-      this.recompute(a.expenseId);
+      // A dispute changes state, not the locked amount (Kian's #16).
+      if (a.status !== "disputed") this.recompute(a.expenseId);
     },
     recomputeExpense: async (a: Args<"recomputeExpense">) =>
       this.recompute(a.expenseId),

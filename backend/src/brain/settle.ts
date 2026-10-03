@@ -197,22 +197,17 @@ export async function textApproval(ctx: BrainCtx, m: Message) {
   });
 }
 
-// Disputes (§7.6): ask what's off. The module can't mark shares `disputed`
-// yet: set_share recomputes, which it refuses on a finalized expense.
+// Disputes (§7.6): the share becomes `disputed` (Kian's #16 allows it on a
+// finalized expense without touching the amount), then Tab asks what's off.
 export async function dispute(ctx: BrainCtx, m: Message, expense: Expense) {
-  const share = ctx.store
-    .shares(expense.expense_id)
-    .find((s) => s.phone === m.sender_phone);
+  const share = ctx.store.shares(expense.expense_id).find((s) => s.phone === m.sender_phone);
   if (!share || share.role !== "participant") return;
+  if (share.status === "locked") await ctx.db.set_share({ ...share, status: "disputed" });
   await say(ctx, {
     chat: chatOf(m),
     purpose: "dispute_followup",
     id: `dispute_followup:${m.message_id}`,
-    text: T.disputeFollowup({
-      seed: m.message_id,
-      description: expense.description,
-      amount_cents: share.amount_cents,
-    }),
+    text: T.disputeFollowup({ seed: m.message_id, description: expense.description, amount_cents: share.amount_cents }),
     expense_id: expense.expense_id,
   });
 }

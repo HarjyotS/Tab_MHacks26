@@ -57,8 +57,8 @@ export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
     } else {
       ctx.memory.observeStyle(m); // flags only, no text
       // The gate sees every message; Grok only sees what the gate passes
-      // (§19, §16.3). Memory, and so all later context, holds only
-      // money-related messages.
+      // (§19, §16.3). Anything not money-related is reported as `ignore`, so
+      // the module clears its text and later context never includes it.
       const input = extractInput(ctx, m);
       const result = await ctx.classify(input);
       intent = result.intent;
@@ -71,10 +71,10 @@ export async function processMessage(ctx: BrainCtx, m: Message): Promise<void> {
       // "why?" right after Tab's balance reply: the short explanation.
       const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleBreakdown(ctx, m);
-      if (answered || moneyRelated || why) ctx.memory.remember(m);
+      if (!(answered || moneyRelated || why)) intent = "ignore";
       if (!answered && !why) {
-        if (decision === "act") await act(ctx, m, intent);
-        else if (decision === "clarify") await clarify(ctx, m, intent);
+        if (decision === "act") await act(ctx, m, result.intent);
+        else if (decision === "clarify") await clarify(ctx, m, result.intent);
       }
     }
     await ctx.db.set_message_result({

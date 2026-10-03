@@ -20,6 +20,9 @@ describe("privacy", () => {
     expect(calls).toHaveLength(1);
     expect(calls[0]!.text).toBe("got groceries, $63");
     expect(calls[0]!.context.filter((t) => chatter.includes(t))).toEqual([]);
-    expect(w.said("clarifying_question")).toEqual([]); // and Tab stayed quiet through the chatter (P1)
+    expect(w.said("clarifying_question")).toEqual([]);
+    // §19: the module clears the text of everything reported as ignore.
+    const stored = [...w.db.msgs.values()].filter((m) => m.sender_phone !== "+15555550101").map((m) => m.text);
+    expect(stored.every((t) => t === undefined)).toBe(true); // and Tab stayed quiet through the chatter (P1)
   });
 });

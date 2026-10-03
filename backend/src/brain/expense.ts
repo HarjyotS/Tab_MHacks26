@@ -89,12 +89,10 @@ export async function handleExpense(
   const { result, problems } = extracted;
   const expense_id = expenseIdFor(source.message_id);
 
-  // Keep a needs_info row when the amount is known, so the ledger shows it.
-  // (The module requires a positive total, so no row without an amount.)
-  const rowable = result.amount_cents !== undefined;
+  // Always keep a needs_info row while Tab asks, so the ledger shows it.
+  // The module accepts a $0 total for needs_info (Kian's #16).
   if (problems.length > 0) {
-    if (rowable)
-      await upsertNeedsInfo(ctx, { expense_id, group_id, source, result });
+    await upsertNeedsInfo(ctx, { expense_id, group_id, source, result });
     if (problems.every((p) => CONFIRM.has(p.kind))) {
       await ask(
         ctx,
@@ -105,7 +103,7 @@ export async function handleExpense(
           then: "large_amount",
           source,
           extraction: extracted,
-          expense_id: rowable ? expense_id : undefined,
+          expense_id,
           asked_at: ctx.now(),
         },
         result.description,
@@ -120,7 +118,7 @@ export async function handleExpense(
           source,
           text,
           problems,
-          expense_id: rowable ? expense_id : undefined,
+          expense_id,
           asked_at: ctx.now(),
         },
         result.description,
@@ -152,7 +150,7 @@ async function upsertNeedsInfo(
     tip_cents: 0,
     fees_cents: 0,
     discount_cents: 0,
-    total_cents: a.result.amount_cents!,
+    total_cents: a.result.amount_cents ?? 0,
   });
 }
 

@@ -94,21 +94,7 @@ export class Memory {
     return this.style.get(chatKey(chat)) ?? [];
   }
 
-  remember(m: Message) {
-    if (m.kind !== "text" || !m.text) return;
-    const key = chatKey(chatOf(m));
-    const list = this.history.get(key) ?? [];
-    list.push({
-      sender_phone: m.sender_phone,
-      text: m.text,
-      at: m.received_at,
-    });
-    this.history.set(key, list.slice(-30));
-  }
 
-  humanHistory(chat: Chat) {
-    return this.history.get(chatKey(chat)) ?? [];
-  }
 }
 
 export type Extractors = {
@@ -150,18 +136,13 @@ export function recentContext(
   chat: Chat,
   before: Date,
 ): GateMessage[] {
-  const humans = ctx.memory
-    .humanHistory(chat)
-    .filter((h) => h.at < before)
-    .map((h) => ({
-      at: h.at,
-      msg: {
-        sender_phone: h.sender_phone,
-        is_dm: !chat.group_id,
-        kind: "text" as const,
-        text: h.text,
-      },
-    }));
+  // Kept messages only: the backend reports everything else as `ignore`,
+  // and the module clears that text (§19).
+  const humans = ctx.store
+    .messages()
+    .filter((x) => x.status === "done" && x.text && x.intent && x.intent !== "ignore" && x.received_at < before)
+    .filter((x) => (chat.group_id ? x.group_id === chat.group_id : !x.group_id && x.sender_phone === chat.dm_phone))
+    .map((x) => ({ at: x.received_at, msg: { sender_phone: x.sender_phone, is_dm: !chat.group_id, kind: "text" as const, text: x.text } }));
   const tab = ctx.store
     .outbox()
     .filter(

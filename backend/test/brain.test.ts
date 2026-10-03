@@ -310,7 +310,8 @@ describe("Tab's questions (SPEC 7.3 step 2)", () => {
   it("asks for a missing amount, then uses the answer", async () => {
     await send(KIAN, "venmo me for the uber");
     expect(said("clarifying_question")).toEqual(["How much was the Uber?"]);
-    expect(db.expenses()).toHaveLength(0);
+    // A $0 needs_info row holds the place while Tab asks (Kian's #16).
+    expect(db.expenses()[0]).toMatchObject({ status: "needs_info", total_cents: 0 });
     await send(KIAN, "22");
     expect(db.expenses()[0]).toMatchObject({
       total_cents: 2200,
