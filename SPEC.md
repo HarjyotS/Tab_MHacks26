@@ -54,7 +54,7 @@ These settle most design arguments. A feature that breaks one needs a very good 
 | P2 | Never ask before you need the answer | Names are asked once at onboarding. Everything else (who was there, who had what) is asked only when a specific expense requires it. |
 | P3 | Never guess silently about money     | When unsure, Tab asks. One wrong balance destroys trust faster than any amount of friction.                                          |
 | P4 | Nobody waits on anybody              | One slow person never blocks anyone else. Every share has its own status, and nobody is asked to act twice.                          |
-| P5 | Nudges are private                   | Tab never calls someone out in the group. Reminders about what someone owes go to their DMs.                                         |
+| P5 | Nudges are friendly, in the group | Tab never shames anyone. Claim nudges go in the group chat by name ("Jake, what was yours at Frita Batidos?"); private receipts still go by DM. |
 | P6 | Numbers come from code               | Every dollar amount Tab sends is computed deterministically from the database, never written by an LLM.                              |
 | P7 | Money moves only with consent        | A transfer happens only after the person whose money moves approves it.                                                              |
 
@@ -526,7 +526,7 @@ Groceries, $63.00. Split 4 ways, that's $15.75 each.
 Anything uneven, or anyone not there?
 ```
 
-Example reminder: `Locking in $15.75 each in an hour unless anything's off.`
+Example reminder: `Anything else?` About an hour later, the settle request (7.6) goes out.
 
 ### 7.4 Receipt
 
@@ -573,22 +573,21 @@ Reply with what you had, or "even" for an even share of whatever's left.
 
 As soon as every participant has responded, the expense finalizes. Nobody waits for the deadline when they don't have to.
 
-**Follow-ups for people who haven't claimed [DEFAULT].** The scheduler (11.2) sends these to anyone whose share is still `awaiting_claim`.
+**Follow-ups for people who haven't claimed [DEFAULT].** The scheduler (11.2) nudges anyone whose share is still `awaiting_claim`, in the group chat, by name (P5).
 
-| When                             | Channel | Content                                                     |
-| -------------------------------- | ------- | ----------------------------------------------------------- |
-| Item list posted                 | Group   | The numbered list                                           |
-| FOLLOWUP_DM1_AFTER               | DM      | The list again, plus "Reply with numbers, or 'even'."       |
-| FOLLOWUP_DM2_AT the next morning | DM      | A one-line reminder                                         |
-| GROUP_MENTION_AFTER              | Group   | "Jake, check your DMs from me" (only if DMs are unanswered) |
-| FOLLOWUP_DM3_AFTER               | DM      | Last call, with the dollar amount they'll be assigned       |
-| CLAIM_DEADLINE                   | None    | Assign an even share of the unclaimed pool and finalize     |
+| When | Channel | Content |
+|---|---|---|
+| Item list posted | Group | The numbered list |
+| FOLLOWUP_DM1_AFTER | Group | "Jake, what was yours at Frita Batidos? Numbers, or 'even'." |
+| FOLLOWUP_DM2_AT the next morning | Group | A one-line reminder |
+| FOLLOWUP_DM3_AFTER | Group | Last call, with the dollar amount they'll be assigned |
+| CLAIM_DEADLINE | None | Assign an even share of the unclaimed pool and finalize |
 
-Follow-up rules: never send during quiet hours, cap DMs at MAX_DMS_PER_EXPENSE per person, batch several pending expenses into one DM, and include the "even" escape hatch in every DM. The last call must show a dollar amount, because people answer fastest when they think they might be overcharged.
+Follow-up rules: never send during quiet hours, cap nudges at MAX_DMS_PER_EXPENSE per person, and include the "even" escape hatch in every nudge. The last call must show a dollar amount, because people answer fastest when they think they might be overcharged.
 
 ```
-Last call on Frita Batidos. Tonight I'll put you down for $24.75
-(an even share of what's unclaimed) unless you reply with what you had.
+Last call, Jake: in 4 hours I'll put you down for $24.75 for Frita Batidos
+(an even share of what's unclaimed) unless you say what you had.
 ```
 
 **On the dependency problem.** Waiting is not friction as long as nobody has to act twice. Claims lock the moment they arrive, so people who have answered are done. The only things that wait are the final amounts, and the deadline caps that wait. **[YOUR CALL]** if you want to go further: let people who claimed pay their claimed portion immediately and settle a small top-up for the unclaimed pool later.
@@ -598,7 +597,7 @@ Last call on Frita Batidos. Tonight I'll put you down for $24.75
 When an expense finalizes, every share that isn't opted out becomes `locked` with a final `amount_cents`, and Tab posts the settle request.
 
 ```
-Frita Batidos is final. Owed to Joe:
+Cool, here's what's owed to Joe for Frita Batidos:
 Jake $38.25, Priya $25.50, Kian $38.25.
 Tap 👍 on this message to pay your part, or reply if something's off.
 ```
@@ -629,7 +628,7 @@ A correction arrives as a reply to the original expense message, or to Tab's pro
 
 ### 7.8 Queries
 
-**Balance.** Tab replies with one line per nonzero debt between two people, at most six lines. Beyond that, it summarizes and links the web ledger. "What do I owe" gets a personal answer.
+**Balance.** Tab replies with one line per nonzero debt between two people, at most six lines. Beyond that, it summarizes and links the web ledger. "What do I owe" gets just the amount ("You owe Joe $38.25."), and nothing more unless they ask why.
 
 ```
 Here's where things stand:
@@ -638,7 +637,7 @@ Priya owes Joe $25.50
 Everyone else is square.
 ```
 
-**Breakdown.** Tab lists the recent expenses behind the requester's balance with their share of each, most recent first, at most five, plus the web ledger link for the rest.
+**Breakdown.** On "why" (or a breakdown request), Tab lists the recent expenses behind the requester's balance, one short line each with why it's that amount ("Pizza $15.00: split 3 ways after Jake's $3.00"), most recent first, at most five, plus the web ledger link for the rest.
 
 **Help.** Three lines on what Tab does and how to remove it.
 
@@ -820,9 +819,8 @@ Keep all of these in one config file.
 | CLAIM_DEADLINE            | 48 hours               |                                                                                       |
 | FOLLOWUP_DM1_AFTER        | 2 hours                |                                                                                       |
 | FOLLOWUP_DM2_AT           | 10:00 the next morning |                                                                                       |
-| GROUP_MENTION_AFTER       | 40 hours               |                                                                                       |
 | FOLLOWUP_DM3_AFTER        | 44 hours               |                                                                                       |
-| MAX_DMS_PER_EXPENSE       | 3                      | Per person, per stage                                                                 |
+| MAX_DMS_PER_EXPENSE       | 3                      | Claim nudges per person, per expense (the FOLLOWUP_* names are kept; nudges now go in the group) |
 | ACT_THRESHOLD             | 0.85                   |                                                                                       |
 | CLARIFY_THRESHOLD         | 0.50                   |                                                                                       |
 | APPROVAL_TEXT_THRESHOLD   | 0.90                   |                                                                                       |
@@ -879,7 +877,7 @@ Access: an unguessable group URL such as `/g/<random id>`, with no login for the
 | Message budget                    | Limit                                                                                                                     |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Group messages per expense        | The proposal, one reminder, the settle request, and an optional "all square." Updated proposals only when amounts change. |
-| DMs per person per expense stage  | MAX_DMS_PER_EXPENSE                                                                                                       |
+| Claim nudges per person per expense | MAX_DMS_PER_EXPENSE, in the group (P5) |
 | Unprompted group messages per day | 6**[DEFAULT]**; beyond that, batch                                                                                  |
 
 Tab never shames anyone in the group, never moves money without approval from the person paying, never sends an amount that didn't come from the database, and never replies to a message classified as `ignore`.
