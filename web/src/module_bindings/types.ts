@@ -281,6 +281,18 @@ export const ModuleConfig = __t.object("ModuleConfig", {
 });
 export type ModuleConfig = __Infer<typeof ModuleConfig>;
 
+export const NessieMirror = __t.object("NessieMirror", {});
+export type NessieMirror = __Infer<typeof NessieMirror>;
+
+export const NessieMirrorItem = __t.object("NessieMirrorItem", {
+  transferId: __t.string(),
+  amountCents: __t.i64(),
+  fromAccountId: __t.string(),
+  toAccountId: __t.string(),
+  completedAt: __t.option(__t.timestamp()),
+});
+export type NessieMirrorItem = __Infer<typeof NessieMirrorItem>;
+
 export const NessieSeedProgress = __t.object("NessieSeedProgress", {
   memberId: __t.string(),
   groupId: __t.string(),
