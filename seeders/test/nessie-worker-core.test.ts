@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import { executeTransfer, transferTag, type MoneyGateway, type WorkItem } from '../src/nessie-worker-core.js';
+import { mirrorTransfer, transferTag, type MirrorItem, type MoneyGateway } from '../src/nessie-worker-core.js';
 
-const item: WorkItem = {
-  transferId: 'transfer-1', status: 'pending', amountCents: 3825n, fromAccountId: 'acct-kian', toAccountId: 'acct-joe',
-};
+const item: MirrorItem = { transferId: 'transfer-1', amountCents: 3825n, fromAccountId: 'acct-kian', toAccountId: 'acct-joe' };
 const tag = transferTag('transfer-1');
 
 function gateway(existing: { withdrawals?: object[]; deposits?: object[] } = {}): MoneyGateway {
@@ -15,20 +13,10 @@ function gateway(existing: { withdrawals?: object[]; deposits?: object[] } = {})
   };
 }
 
-function recorder() {
-  const updates: unknown[][] = [];
-  return { updates, store: { update: async (...args: unknown[]) => { updates.push(args); } } };
-}
-
-describe('Nessie settlement worker', () => {
-  it('marks submitted first, then withdraws from the payer and deposits to the payee', async () => {
+describe('Nessie mirror', () => {
+  it('records a settlement as a withdrawal from the payer and a deposit to the payee', async () => {
     const api = gateway();
-    const { updates, store } = recorder();
-    expect(await executeTransfer(item, api, store, { today: '2026-10-03' })).toBe('done');
-    expect(updates).toEqual([
-      ['transfer-1', 'submitted'],
-      ['transfer-1', 'done', { withdrawalId: 'w-1', depositId: 'd-1' }],
-    ]);
+    expect(await mirrorTransfer(item, api, { today: '2026-10-03' })).toEqual({ withdrawalId: 'w-1', depositId: 'd-1', created: 2 });
     expect(api.withdraw).toHaveBeenCalledWith('acct-kian', {
       medium: 'balance', amount: 38, transaction_date: '2026-10-03', status: 'completed',
       description: `Tab settlement sent $38.25 ${tag}`,
@@ -38,42 +26,33 @@ describe('Nessie settlement worker', () => {
     }));
   });
 
-  it('after a restart, reuses the withdrawal Nessie already has and only makes the deposit', async () => {
+  it('finishes a half-recorded settlement without repeating the withdrawal', async () => {
     const api = gateway({ withdrawals: [{ _id: 'w-earlier', description: `Tab settlement sent $38.25 ${tag}` }] });
-    const { updates, store } = recorder();
-    expect(await executeTransfer({ ...item, status: 'submitted' }, api, store)).toBe('done');
+    expect(await mirrorTransfer(item, api)).toEqual({ withdrawalId: 'w-earlier', depositId: 'd-1', created: 1 });
     expect(api.withdraw).not.toHaveBeenCalled();
-    expect(api.deposit).toHaveBeenCalledTimes(1);
-    expect(updates).toEqual([['transfer-1', 'done', { withdrawalId: 'w-earlier', depositId: 'd-1' }]]);
   });
 
-  it('never creates either leg twice when both already exist', async () => {
+  it('records nothing when both legs already exist', async () => {
     const api = gateway({
       withdrawals: [{ _id: 'w-earlier', description: tag }],
       deposits: [{ _id: 'other', description: transferTag('transfer-2') }, { _id: 'd-earlier', description: tag }],
     });
-    const { updates, store } = recorder();
-    await executeTransfer({ ...item, status: 'submitted' }, api, store);
+    expect(await mirrorTransfer(item, api)).toEqual({ withdrawalId: 'w-earlier', depositId: 'd-earlier', created: 0 });
     expect(api.withdraw).not.toHaveBeenCalled();
     expect(api.deposit).not.toHaveBeenCalled();
-    expect(updates).toEqual([['transfer-1', 'done', { withdrawalId: 'w-earlier', depositId: 'd-earlier' }]]);
   });
 
   it('rounds to whole dollars for Nessie, never below $1', async () => {
     const api = gateway();
-    await executeTransfer({ ...item, amountCents: 30n }, api, recorder().store);
+    await mirrorTransfer({ ...item, amountCents: 30n }, api);
     expect(api.withdraw).toHaveBeenCalledWith('acct-kian', expect.objectContaining({
       amount: 1, description: `Tab settlement sent $0.30 ${tag}`,
     }));
   });
 
-  it('marks the transfer failed, saying which leg broke and keeping the leg that worked', async () => {
+  it('surfaces a Nessie failure to the caller, which retries later', async () => {
     const api = gateway();
-    vi.mocked(api.deposit).mockRejectedValueOnce(Object.assign(new Error('Nessie returned HTTP 400'), { body: 'bad payee' }));
-    const { updates, store } = recorder();
-    expect(await executeTransfer(item, api, store)).toBe('failed');
-    expect(updates.at(-1)).toEqual(['transfer-1', 'failed', {
-      withdrawalId: 'w-1', error: 'deposit failed: Nessie returned HTTP 400 bad payee',
-    }]);
+    vi.mocked(api.deposit).mockRejectedValueOnce(new Error('Nessie returned HTTP 503'));
+    await expect(mirrorTransfer(item, api)).rejects.toThrow('503');
   });
 });

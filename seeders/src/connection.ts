@@ -3,7 +3,11 @@ import { DbConnection, tables, type SubscriptionHandle } from './module_bindings
 
 export type TabConnection = DbConnection;
 
-export function connect(options: { anonymous?: boolean; onIdentity?: (identity: Identity) => void } = {}): Promise<DbConnection> {
+export function connect(options: {
+  anonymous?: boolean;
+  onIdentity?: (identity: Identity) => void;
+  onDisconnect?: (error?: Error) => void;
+} = {}): Promise<DbConnection> {
   const uri = process.env.SPACETIME_HOST ?? 'http://127.0.0.1:3000';
   const database = process.env.SPACETIME_DB ?? 'tab-local';
   const token = options.anonymous ? undefined : process.env.SPACETIME_AUTH_TOKEN;
@@ -16,7 +20,8 @@ export function connect(options: { anonymous?: boolean; onIdentity?: (identity: 
         options.onIdentity?.(identity);
         resolve(connection);
       })
-      .onConnectError((_ctx, error) => reject(error));
+      .onConnectError((_ctx, error) => reject(error))
+      .onDisconnect((_ctx, error) => options.onDisconnect?.(error));
     if (token) builder = builder.withToken(token);
     builder.build();
   });
@@ -68,6 +73,16 @@ export function subscribeBackend(connection: DbConnection): Promise<Subscription
         tables.backendShares,
         tables.backendTransfers,
       ]);
+  });
+}
+
+export function subscribeNessieMirror(connection: DbConnection): Promise<SubscriptionHandle> {
+  return new Promise((resolve, reject) => {
+    let handle: SubscriptionHandle;
+    handle = connection.subscriptionBuilder()
+      .onApplied(() => resolve(handle))
+      .onError(ctx => reject(new Error(String(ctx.event))))
+      .subscribe(tables.nessieMirror);
   });
 }
 

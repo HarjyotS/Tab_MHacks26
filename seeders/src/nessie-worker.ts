@@ -1,12 +1,13 @@
 import 'dotenv/config';
 import { NessieClient, NessieHttpError } from 'nessie-node-sdk';
-import { connect, disconnect, subscribeNessieWork } from './connection.js';
-import { executeTransfer, type MoneyGateway, type Outcome, type WorkItem } from './nessie-worker-core.js';
+import { connect, disconnect, subscribeNessieMirror } from './connection.js';
+import { mirrorTransfer, type MoneyGateway } from './nessie-worker-core.js';
 
+// Optional, non-blocking: settlement completes in SpacetimeDB whether or not this runs.
 const apiKey = process.env.NESSIE_API_KEY;
-if (!apiKey) throw new Error('NESSIE_API_KEY is required for nessie:worker');
-
+if (!apiKey) throw new Error('NESSIE_API_KEY is required for nessie:mirror');
 const nessie = new NessieClient({ apiKey, baseUrl: process.env.NESSIE_BASE_URL || undefined });
+
 // Nessie answers an empty list with HTTP 404 "No … found".
 async function orEmpty<T>(list: Promise<T[]>): Promise<T[]> {
   try {
@@ -24,46 +25,41 @@ const gateway: MoneyGateway = {
   listDeposits: accountId => orEmpty(nessie.deposits.listByAccount(accountId)),
 };
 
-// A worker that silently lost SpacetimeDB would never see new approvals, so exit loudly instead.
+// A mirror that silently lost SpacetimeDB would stop recording, so exit loudly instead.
 const connection = await connect({
   onDisconnect: error => {
-    console.error(`Lost the SpacetimeDB connection${error ? `: ${error.message}` : ''}. Restart the worker.`);
+    console.error(`Lost the SpacetimeDB connection${error ? `: ${error.message}` : ''}. Restart the mirror.`);
     process.exit(1);
   },
 });
-const subscription = await subscribeNessieWork(connection);
-const store = {
-  update: (transferId: string, status: 'submitted' | 'done' | 'failed', outcome: Outcome = {}) =>
-    connection.reducers.updateTransfer({
-      transferId, status,
-      nessieWithdrawalId: outcome.withdrawalId, nessieDepositId: outcome.depositId, error: outcome.error,
-    }),
-};
+const subscription = await subscribeNessieMirror(connection);
 
-// Each transfer is handled once per process; the view drops it once it's done or failed.
-const inFlight = new Set<string>();
+const mirrored = new Set<string>();
+const failures = new Map<string, number>();
 async function drain(): Promise<void> {
-  for (const row of connection.db.nessieWork.iter()) {
-    if (inFlight.has(row.transferId)) continue;
-    inFlight.add(row.transferId);
-    const item: WorkItem = {
-      transferId: row.transferId, status: row.status, amountCents: row.amountCents,
-      fromAccountId: row.fromAccountId, toAccountId: row.toAccountId,
-    };
-    const outcome = await executeTransfer(item, gateway, store);
-    console.log(`${new Date().toISOString()} ${row.transferId}: $${(Number(row.amountCents) / 100).toFixed(2)} ${outcome}`);
+  for (const row of connection.db.nessieMirror.iter()) {
+    if (mirrored.has(row.transferId) || (failures.get(row.transferId) ?? 0) >= 3) continue;
+    try {
+      const result = await mirrorTransfer(row, gateway);
+      mirrored.add(row.transferId);
+      if (result.created) {
+        console.log(`${new Date().toISOString()} ${row.transferId}: $${(Number(row.amountCents) / 100).toFixed(2)} recorded in Nessie (withdrawal ${result.withdrawalId}, deposit ${result.depositId})`);
+      }
+    } catch (err) {
+      failures.set(row.transferId, (failures.get(row.transferId) ?? 0) + 1);
+      console.error(`${row.transferId}: Nessie mirror failed (${failures.get(row.transferId)}/3): ${err instanceof Error ? err.message : err}`);
+    }
   }
 }
 
 let running = true;
-const stop = () => { running = false; };
-process.on('SIGINT', stop);
-process.on('SIGTERM', stop);
-console.log('Nessie worker watching for approved transfers.');
+process.on('SIGINT', () => { running = false; });
+process.on('SIGTERM', () => { running = false; });
+console.log('Nessie mirror watching for completed settlements.');
 try {
   while (running) {
-    await drain().catch(err => console.error('Nessie worker:', err));
-    await new Promise(resolve => setTimeout(resolve, 500));
+    await drain();
+    await new Promise(resolve => setTimeout(resolve, 1000));
   }
 } finally {
   subscription.unsubscribe();
