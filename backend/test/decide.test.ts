@@ -60,6 +60,16 @@ describe("decide", () => {
     expect(decide({ intent: "approval", confidence: 0.7 }, { ...toTab, open_items: [] })).toBe("ignore");
   });
 
+  it("never acts on a loose read of a money-changing reply to Tab", () => {
+    const toTab: ClassifyInput = {
+      ...base,
+      message: { ...base.message, reply_to_id: "tab-1", reply_to_tab: "Pizza, $40.00. Split 4 ways, that's $10.00 each." },
+    };
+    for (const intent of ["expense", "split_adjustment", "claim", "correction", "dispute"] as const)
+      expect(decide({ intent, confidence: 0.62 }, toTab)).toBe("clarify");
+    expect(decide({ intent: "split_adjustment", confidence: 0.9 }, toTab)).toBe("act");
+  });
+
   it("never acts on ignore, whatever the confidence", () => {
     expect(decide({ intent: "ignore", confidence: 1 }, base)).toBe("ignore");
   });
