@@ -175,6 +175,10 @@ function toContract(
       problems.push({ kind: "ungrounded_amount", amount_cents: cents });
       cents = undefined;
     }
+    // Nothing left to pin (its amount wasn't in the message, and no item).
+    // Keeping it made "thats not even" look specific, so a receipt went to
+    // `custom` with nothing changed instead of itemizing (playground run, #44).
+    if (cents === undefined && !f.item) continue;
     fixed.push({
       phone,
       ...(cents !== undefined ? { amount_cents: cents } : {}),
