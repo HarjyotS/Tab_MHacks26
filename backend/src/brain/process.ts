@@ -1,11 +1,11 @@
 // SPEC §11.1 processing loop and §11.2 scheduler.
-import type { ClassifyResult, Intent } from "@tab/gate";
+import type { ClassifyInput, ClassifyResult, Intent } from "@tab/gate";
 import { thresholds } from "../config.js";
 import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
+import { applyAdjustment, groupFor, handleAdjustment, handleExpense, latestOpen, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
@@ -30,6 +30,7 @@ import {
   handleNameReply,
   onboardNewGroups,
 } from "./talk.js";
+import { answerQuestion } from "./ask.js";
 import { addInvite, addThread, closeThread, holdsLockIn, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
 
@@ -39,7 +40,7 @@ import * as T from "../copy/templates.js";
 const MONEY_INTENTS = new Set<Intent>([
   "expense", "receipt", "split_adjustment", "claim", "correction",
   "approval", "dispute", "payment_reported", "balance_query", "breakdown_request",
-  "answer",
+  "answer", "money_question",
 ]);
 
 // A question about an amount that already exists, not a new expense.
@@ -47,7 +48,7 @@ const AMOUNT_QUESTION = /^(why|what'?s|whats|how|where)\b.*\d|\b(from|for)\?\s*$
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
 
 // Intents that ask Tab something rather than tell it.
-const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
 
 const YES =
   /^(yes|yep|yeah|ya|yup|sure|ok|okay|correct|right|do it|go ahead|that's right)\b/i;
@@ -66,7 +67,7 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
 
 // Intents that only read data or point to the 👍: answered even when unsure.
 // Not `receipt`: an unsure photo stays with Tab, never Grok's vision (§19).
-const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval"]);
+const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question", "approval"]);
 
 // "just me and priya", "only sam and alex went", "priya and I went, no one
 // else", "jordan didn't come": who was there, said to an open split.
@@ -78,7 +79,55 @@ export function normalizeText(text: string | undefined): string | undefined {
   return text?.replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"');
 }
 
-export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void> {
+// Counts what handlers write (outbox rows and money state), so the last
+// resort below knows when a message got neither a reply nor a change.
+function trackWrites(base: BrainCtx): { ctx: BrainCtx; wrote: () => boolean } {
+  let writes = 0;
+  const db = new Proxy(base.db, {
+    get(target, key, receiver) {
+      const v = Reflect.get(target, key, receiver) as unknown;
+      if (typeof v !== "function" || key === "set_message_result") return v;
+      return (...args: unknown[]) => {
+        writes++;
+        return (v as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+  return { ctx: { ...base, db }, wrote: () => writes > 0 };
+}
+
+// Intents that make an unanswered message worth a last-resort look by the
+// money brain. "answer" is the open-threads intent (#35).
+const FALLBACK_INTENTS = new Set<string>([...MONEY_INTENTS, "answer"]);
+const FALLBACK_MIN_CONFIDENCE = 0.3;
+
+// Why a message that got no reply and changed nothing should still get one
+// (Harjyot: "it just gives up"), or undefined to stay quiet (P1). Chatter
+// never qualifies: an ignore, or a non-money guess with nothing open.
+// A message the gate decided to ignore (below the clarify bar) only gets
+// here with open money context in the chat: one of Tab's questions open, or
+// an inline reply to Tab (Joe's review on #38, §19).
+export function fallbackReason(
+  m: Message,
+  result: { intent: Intent; confidence: number; prefiltered?: boolean },
+  decision: Decision,
+  input: ClassifyInput,
+  threadsOpen: boolean,
+): string | undefined {
+  if (m.kind !== "text" || !m.text?.trim() || result.prefiltered || result.intent === "ignore") return undefined;
+  if (result.confidence < FALLBACK_MIN_CONFIDENCE) return undefined;
+  if (decision === "ignore" && !threadsOpen && !input.message.reply_to_tab) return undefined;
+  if (FALLBACK_INTENTS.has(result.intent)) return `unsure_${result.intent}`;
+  if (input.message.reply_to_tab) return "reply_to_tab";
+  if (input.tab_question_open) return "open_question";
+  const open = input.open_items.some(
+    (o) => o.expense_status === "proposed" || o.expense_status === "itemizing" || (o.expense_status === "finalized" && o.my_share_status === "locked"),
+  );
+  return open ? "open_split" : undefined;
+}
+
+export async function processMessage(base: BrainCtx, raw: Message): Promise<void> {
+  const { ctx, wrote } = trackWrites(base);
   const m: Message = { ...raw, text: normalizeText(raw.text) };
   await ctx.db.set_message_result({
     message_id: m.message_id,
@@ -120,7 +169,11 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       const reply: Reply = breakdown ? { answered: false } : await answerThreads(ctx, m, result, decision);
       const answered = reply.answered;
       // "why?" right after Tab's balance reply: the short answer (Joe's rule).
-      const why = !breakdown && !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
+      // A full question the gate passed ("how much did we spend on food?")
+      // is answered as itself.
+      const why =
+        !breakdown && !answered && !(decision !== "ignore" && intent === "money_question") &&
+        WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleShortWhy(ctx, m);
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
       const ledger = !breakdown && !answered && !why && wantsLedger(m, intent, decision);
@@ -129,14 +182,39 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       // Stored as an answer, so it stays in later context (§19 keeps it).
       if (answered) intent = "answer";
       if (!keep) intent = "ignore";
+      let failed: unknown;
       if (!breakdown && !answered && !why && !ledger) {
-        if (decision === "act") await act(ctx, m, result.intent);
-        else if (decision === "clarify") await clarify(ctx, m, result.intent);
+        try {
+          if (decision === "act") await act(ctx, m, result.intent);
+          else if (decision === "clarify") await clarify(ctx, m, result.intent);
+        } catch (err) {
+          failed = err; // still worth a last-resort answer below
+        }
       } else if (reply.rest) {
         // The same message also said something else ("yep, and I got gas $30").
         if (reply.rest.decision === "act") await act(ctx, m, reply.rest.intent);
         else await clarify(ctx, m, reply.rest.intent, `clarify:${m.message_id}:rest`);
       }
+      // Last resort: a money-ish message that got no reply and changed
+      // nothing goes to the money brain, which answers or asks one specific
+      // question. It only writes text. Anything that already replied
+      // (including another fallback) wins.
+      // #35's own fallbacks (a clarify question, a follow-up) write, so
+      // they win; a reply already queued for this message wins too.
+      const replied = ctx.store.outbox().some((o) => o.target_message_id === m.message_id);
+      const reason = ctx.ask && !wrote() && !replied
+        ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0)
+        : undefined;
+      if (reason) {
+        ctx.log("fallback_ask", { message_id: m.message_id, group_id: m.group_id, reason, intent: result.intent, confidence: result.confidence });
+        const about = repliedExpense(ctx, m) ?? latestOpen(ctx, groupFor(ctx, m), ["proposed", "itemizing"]);
+        // Kept (§19) only if Tab actually answered it.
+        if (await answerQuestion(ctx, m, "fallback", about, result.intent)) {
+          keep = true;
+          intent = result.intent;
+        }
+      }
+      if (failed) throw failed;
     }
     await ctx.db.set_message_result({
       message_id: m.message_id,
@@ -162,7 +240,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
 
 const LEDGER_ASK = /\bledger\b/i;
 const TO_TAB = /^@?tab\b/i;
-const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
 
 function wantsLedger(m: Message, intent: Intent, decision: string): boolean {
   const text = (m.text ?? "").trim();
@@ -200,11 +278,16 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       const e = boundIf("finalized");
       return dispute(ctx, m, e ? [e] : disputeTargets(ctx, m));
     }
+    // Balances and breakdowns are templates: deterministic, and instant
+    // (Joe's review on #38). Anything else about money goes to the money
+    // brain (§7.8 Questions), with the expense an inline reply points at.
     case "balance_query":
       return handleBalanceQuery(ctx, m);
     case "breakdown_request":
       // Free-form ("what's the $90.70 from?"): only the command answers.
       return hintBreakdown(ctx, m);
+    case "money_question":
+      return void (await answerQuestion(ctx, m, "money_question", bound));
     case "help":
       return handleHelp(ctx, m);
     case "receipt":

@@ -72,6 +72,8 @@ const ctx: BrainCtx = {
     answer: (input, threads) => resolveAnswer(xai, grok.model, input, threads),
   },
   wit: (w) => witLine(xai, grok.model, w),
+  // The money brain: Grok with read-only lookup tools (brain/ask.ts).
+  ask: { client: xai, model: grok.model },
   summarize: (s) => summarizeBreakdown(xai, grok.model, s, (why, reason) => log("summary_dropped", { why, reason })),
   timing: t,
   ledger: ledgerConfig(),

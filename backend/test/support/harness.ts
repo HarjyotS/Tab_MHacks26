@@ -40,6 +40,33 @@ const grok = (out: object): ChatClient =>
     },
   }) as unknown as ChatClient;
 
+// A scripted tool-calling Grok: each chat call takes the next step. `call`
+// asks for tools, `reply` answers through the reply tool, `text` answers in
+// plain content, `fail` throws. `advance` moves the agent's clock first, to
+// test the time budget. Running out of steps throws, like a missing Script entry.
+export type AgentStep = ({ call: { name: string; args?: object }[] } | { reply: string } | { text: string } | { fail: string }) & { advance?: number };
+
+export function toolClient(steps: AgentStep[], clock?: { now: number }) {
+  const requests: { tools: string[]; tool_choice: unknown; messages: { role: string; content?: unknown }[] }[] = [];
+  let id = 0;
+  const create = vi.fn(async (params: { tools: { function: { name: string } }[]; tool_choice: unknown; messages: { role: string; content?: unknown }[] }, _options?: unknown) => {
+    requests.push({ tools: params.tools.map((t) => t.function.name), tool_choice: params.tool_choice, messages: structuredClone(params.messages) });
+    const step = steps.shift();
+    if (!step) throw new Error("no scripted agent step");
+    if (step.advance && clock) clock.now += step.advance;
+    if ("fail" in step) throw new Error(step.fail);
+    const call = (name: string, args: object) => ({ id: `call_${++id}`, type: "function", function: { name, arguments: JSON.stringify(args) } });
+    const message =
+      "call" in step
+        ? { role: "assistant", content: null, tool_calls: step.call.map((c) => call(c.name, c.args ?? {})) }
+        : "reply" in step
+          ? { role: "assistant", content: null, tool_calls: [call("reply", { text: step.reply })] }
+          : { role: "assistant", content: step.text };
+    return { choices: [{ message }] };
+  });
+  return { client: { chat: { completions: { create } } } as unknown as ChatClient, requests, create };
+}
+
 export type Script = {
   // "new|text" or "adjustment|text" → raw expense extraction
   expense?: Record<string, object>;

@@ -17,7 +17,8 @@ export const stubClassifier: Classify = async ({ message, context, open_items, o
   if (/^@?tab\b.*\b(help|what can you do)\b|^what can you do/.test(text)) return hit('help');
   if (/\bwho owes|what do i owe|how much do i owe\b/.test(text)) return hit('balance_query');
   if (/\bsettle (us |everyone |it |things )?up\b|\bsquare (us|everyone) up\b|\bclose out the tab\b/.test(text)) return hit('settle_up');
-  if (/\bbreakdown\b|what'?s the \$?\d+(\.\d{1,2})? (from|for)\b|\bwhy do i owe\b/.test(text)) return hit('breakdown_request');
+  if (/\bbreakdown\b|what'?s the \$?\d+(\.\d{1,2})? (from|for)\b|\bwhy do (i|we) owe\b/.test(text)) return hit('breakdown_request');
+  if (/^(what|how|who|which|when|did|does|was|were|is|are|has|have)\b/.test(text) && /\b(receipt|spend|spent|cost|costs|paid|split|total|settle|price|charged?|how much)\b/.test(text)) return hit('money_question');
   if (/\b(sent|paid) you\b.*\b(venmo|cash ?app|zelle)\b/.test(text)) return hit('payment_reported');
   if (has('finalized') && /^(yes|yep|yeah|we'?re chill|pay it|ok|okay)\b/.test(text)) return hit('approval', 0.92);
   if (has('finalized') && /^(no|nope)\b|didn'?t (get|have|eat)|\bwrong\b|only had/.test(text)) return hit('dispute');
