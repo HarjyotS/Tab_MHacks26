@@ -1,0 +1,252 @@
+{
+  "members": [
+    { "name": "Tab", "phone": "tab" },
+    { "name": "Joe", "phone": "+15555550101" },
+    { "name": "Kian", "phone": "+15555550102" },
+    { "name": "Priya", "phone": "+15555550103" },
+    { "name": "Jake", "phone": "+15555550104" },
+    { "name": "John", "phone": "+15555550105" }
+  ],
+  "fixtures": [
+    {
+      "id": 301,
+      "note": "Harjyot's playground: who went, right after a split proposal, with the full state (Jev said name_reply 0.41 without it)",
+      "context": [
+        {
+          "from": "Priya",
+          "photo": {
+            "kind": "receipt",
+            "description": "A restaurant receipt from THE BISTRO totaling $47.07.",
+            "transcription": "THE BISTRO\nBURGER DELUXE 14.99\nCAESAR SALAD 9.99\n2 x SOFT DRINK @ $2.99 5.98\nCHEESECAKE 7.99\nSUBTOTAL 38.95\nTAX 3.12\nTIP 5.00\nTOTAL 47.07",
+            "money_related": true
+          }
+        },
+        { "from": "Tab", "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there" }
+      ],
+      "open_items": [{ "expense_id": "e3", "description": "THE BISTRO", "expense_status": "proposed", "my_share_status": "proposed" }],
+      "open_questions": [{ "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there", "who": "anyone" }],
+      "chat_expenses": [
+        {
+          "expense_id": "e3",
+          "description": "THE BISTRO",
+          "payer": "Priya",
+          "total_cents": 4707,
+          "split_mode": "even",
+          "people": 4,
+          "status": "proposed",
+          "closes_in_s": 10780,
+          "items": [
+            { "position": 1, "description": "BURGER DELUXE", "quantity": 1, "amount_cents": 1499 },
+            { "position": 2, "description": "CAESAR SALAD", "quantity": 1, "amount_cents": 999 },
+            { "position": 3, "description": "2 x SOFT DRINK @ $2.99", "quantity": 1, "amount_cents": 598 },
+            { "position": 4, "description": "CHEESECAKE", "quantity": 1, "amount_cents": 799 }
+          ],
+          "sender": { "role": "participant", "share_status": "proposed", "responded": false }
+        }
+      ],
+      "tab_last": { "purpose": "split_proposal", "about": "THE BISTRO", "seconds_ago": 40 },
+      "settle": { "mode": "ledger", "request_open": false, "sender_owes": false, "sender_approved": false },
+      "transcript": [
+        { "from": "Jake", "text": "omw home", "seconds_ago": 300 },
+        {
+          "from": "Priya",
+          "photo": { "kind": "receipt", "description": "A restaurant receipt from THE BISTRO totaling $47.07.", "transcription": "THE BISTRO ... TOTAL 47.07", "money_related": true },
+          "seconds_ago": 60
+        }
+      ],
+      "message": { "from": "Kian", "text": "just me and priya" },
+      "expect": { "one_of": ["split_adjustment", "answer"] }
+    },
+    {
+      "id": 302,
+      "note": "Harjyot's playground: items named on an even receipt, now that Jev sees the items (Jev said claim 0.50 without them)",
+      "context": [
+        {
+          "from": "Priya",
+          "photo": { "kind": "receipt", "description": "A restaurant receipt from THE BISTRO totaling $47.07.", "transcription": "THE BISTRO\nBURGER DELUXE 14.99\nCAESAR SALAD 9.99\n2 x SOFT DRINK @ $2.99 5.98\nCHEESECAKE 7.99\nTOTAL 47.07", "money_related": true }
+        },
+        { "from": "Tab", "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there" }
+      ],
+      "open_items": [{ "expense_id": "e3", "description": "THE BISTRO", "expense_status": "proposed" }],
+      "open_questions": [{ "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there", "who": "anyone" }],
+      "chat_expenses": [
+        {
+          "expense_id": "e3",
+          "description": "THE BISTRO",
+          "payer": "Priya",
+          "total_cents": 4707,
+          "split_mode": "even",
+          "people": 4,
+          "status": "proposed",
+          "closes_in_s": 10700,
+          "items": [
+            { "position": 1, "description": "BURGER DELUXE", "quantity": 1, "amount_cents": 1499 },
+            { "position": 2, "description": "CAESAR SALAD", "quantity": 1, "amount_cents": 999 },
+            { "position": 3, "description": "2 x SOFT DRINK @ $2.99", "quantity": 1, "amount_cents": 598 },
+            { "position": 4, "description": "CHEESECAKE", "quantity": 1, "amount_cents": 799 }
+          ],
+          "sender": { "role": "payer", "share_status": "proposed", "responded": true }
+        }
+      ],
+      "tab_last": { "purpose": "split_proposal", "about": "THE BISTRO", "seconds_ago": 95 },
+      "settle": { "mode": "ledger", "request_open": false, "sender_owes": false, "sender_approved": false },
+      "message": { "from": "Priya", "text": "i got both drinks and john got the cheesecake" },
+      "expect": { "one_of": ["claim", "split_adjustment", "answer"] }
+    },
+    {
+      "id": 303,
+      "note": "Harjyot's playground: \"update it\" after the message it refers to was cleared; only the Jev-only transcript still has it",
+      "context": [
+        { "from": "Joe", "text": "got pizza, $40" },
+        { "from": "Tab", "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped" }
+      ],
+      "open_items": [{ "expense_id": "e1", "description": "Pizza", "expense_status": "proposed", "my_share_status": "proposed" }],
+      "open_questions": [{ "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped", "who": "anyone" }],
+      "chat_expenses": [
+        {
+          "expense_id": "e1",
+          "description": "Pizza",
+          "payer": "Joe",
+          "total_cents": 4000,
+          "split_mode": "even",
+          "people": 4,
+          "status": "proposed",
+          "closes_in_s": 10500,
+          "sender": { "role": "participant", "share_status": "proposed", "responded": false }
+        }
+      ],
+      "tab_last": { "purpose": "split_proposal", "about": "Pizza", "seconds_ago": 120 },
+      "transcript": [
+        { "from": "Joe", "text": "got pizza, $40", "seconds_ago": 125 },
+        { "from": "Kian", "text": "john only had one slice tho, like 5 bucks", "seconds_ago": 30 }
+      ],
+      "message": { "from": "Kian", "text": "update it" },
+      "expect": { "one_of": ["split_adjustment", "answer"] }
+    },
+    {
+      "id": 304,
+      "note": "A meme with no caption is not a receipt",
+      "context": [],
+      "open_items": [],
+      "chat_expenses": [],
+      "message": {
+        "from": "Jake",
+        "photo": { "kind": "meme", "description": "A cartoon dog sitting in a burning room drinking coffee.", "transcription": "THIS IS FINE", "money_related": false }
+      },
+      "expect": { "intent": "ignore" }
+    },
+    {
+      "id": 305,
+      "note": "A Venmo screenshot is a payment made outside Tab",
+      "context": [],
+      "open_items": [],
+      "chat_expenses": [],
+      "message": {
+        "from": "Kian",
+        "photo": { "kind": "payment_screenshot", "description": "A Venmo screen showing Kian paid Joe $20.00 for pizza.", "transcription": "You paid Joe\n$20.00\npizza\nToday", "money_related": true }
+      },
+      "expect": { "intent": "payment_reported" }
+    },
+    {
+      "id": 306,
+      "note": "A receipt photo with no caption",
+      "context": [],
+      "open_items": [],
+      "chat_expenses": [],
+      "message": {
+        "from": "Joe",
+        "photo": { "kind": "receipt", "description": "A grocery receipt from Meijer totaling $17.00.", "transcription": "MEIJER\nMILK 4.50\nEGGS 3.80\nBREAD 3.20\nCHIPS 5.50\nTOTAL 17.00", "money_related": true }
+      },
+      "expect": { "intent": "receipt" }
+    },
+    {
+      "id": 307,
+      "note": "A captioned selfie is chatter",
+      "context": [],
+      "open_items": [],
+      "chat_expenses": [],
+      "message": {
+        "from": "Priya",
+        "text": "lmao look at us",
+        "photo": { "kind": "photo", "description": "Four friends smiling at a beach at sunset.", "transcription": "", "money_related": false }
+      },
+      "expect": { "intent": "ignore" }
+    },
+    {
+      "id": 308,
+      "note": "A captioned receipt saying who paid",
+      "context": [],
+      "open_items": [],
+      "chat_expenses": [],
+      "message": {
+        "from": "Joe",
+        "text": "dinner, i got it",
+        "photo": { "kind": "receipt", "description": "A restaurant receipt from Frita Batidos totaling $102.00.", "transcription": "FRITA BATIDOS\nCUBAN BURGER 15.00\nFRIES 8.00\nTOTAL 102.00", "money_related": true }
+      },
+      "expect": { "one_of": ["receipt", "expense"] }
+    },
+    {
+      "id": 309,
+      "note": "A reply to a member's expense saying the sender wasn't there",
+      "context": [
+        { "from": "Joe", "text": "got the uber, $30" },
+        { "from": "Tab", "text": "uber $30.00 split 5 ways, so $6.00 each\nlmk if it wasn't even or someone skipped" }
+      ],
+      "open_items": [{ "expense_id": "e5", "description": "Uber", "expense_status": "proposed", "my_share_status": "proposed" }],
+      "chat_expenses": [
+        {
+          "expense_id": "e5",
+          "description": "Uber",
+          "payer": "Joe",
+          "total_cents": 3000,
+          "split_mode": "even",
+          "people": 5,
+          "status": "proposed",
+          "closes_in_s": 9000,
+          "sender": { "role": "participant", "share_status": "proposed", "responded": false }
+        }
+      ],
+      "tab_last": { "purpose": "split_proposal", "about": "Uber", "seconds_ago": 600 },
+      "message": {
+        "from": "Kian",
+        "text": "i wasn't even in that one",
+        "reply_to": { "from": "Joe", "text": "got the uber, $30", "expense": { "description": "Uber", "status": "proposed" } }
+      },
+      "expect": { "intent": "split_adjustment" }
+    },
+    {
+      "id": 310,
+      "note": "\"yes\" to an open settle request the sender owes on",
+      "context": [{ "from": "Tab", "text": "cool, here's what's owed to Joe for pizza:\nKian $10.00\ntap 👍 on this to pay your part, or reply if something's off" }],
+      "open_items": [{ "expense_id": "e1", "description": "Pizza", "expense_status": "finalized", "my_share_status": "locked" }],
+      "chat_expenses": [
+        {
+          "expense_id": "e1",
+          "description": "Pizza",
+          "payer": "Joe",
+          "total_cents": 4000,
+          "split_mode": "even",
+          "people": 4,
+          "status": "finalized",
+          "settle_request_open": true,
+          "sender": { "role": "participant", "share_status": "locked", "responded": true }
+        }
+      ],
+      "tab_last": { "purpose": "settle_request", "seconds_ago": 20 },
+      "settle": { "mode": "ledger", "request_open": true, "sender_owes": true, "sender_approved": false },
+      "message": { "from": "Kian", "text": "yes" },
+      "expect": { "intent": "approval" }
+    },
+    {
+      "id": 311,
+      "note": "A named member's one-word reply is never a name, even after the name prompt",
+      "context": [{ "from": "Tab", "text": "hey i'm tab\ni keep track of who paid for what so nobody has to be the spreadsheet friend\nwhat should i call everyone? reply w your first name" }],
+      "open_items": [],
+      "chat_expenses": [],
+      "sender": { "named": true, "name_requested": false },
+      "tab_last": { "purpose": "name_prompt", "seconds_ago": 30 },
+      "message": { "from": "Jake", "text": "jordan" },
+      "expect": { "not_acted_as": "name_reply" }
+    }
+  ]
+}

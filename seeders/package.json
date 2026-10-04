@@ -12,6 +12,8 @@
     "grant:role": "tsx src/grant-role.ts",
     "set:ledger-secret": "tsx src/set-ledger-secret.ts",
     "nessie:mirror": "tsx src/nessie-worker.ts",
+    "nessie:mirror:forever": "tsx src/keep-running.ts src/nessie-worker.ts",
+    "verify:nessie-balances": "tsx src/verify-nessie-balances.ts",
     "verify:nessie": "tsx src/verify-nessie-settlement.ts",
     "verify:settlement": "tsx src/verify-settlement.ts",
     "verify:access": "tsx src/verify-ledger-access.ts",
