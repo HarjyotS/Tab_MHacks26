@@ -253,6 +253,7 @@ describe("settling, per-expense mode (SPEC 7.6)", () => {
 
 describe("settling, ledger mode (SPEC 7.6, default)", () => {
   it("asks nobody to pay until someone says let's settle up, then one 👍 pays everything they owe", async () => {
+    db.transferKey = "approval_expense"; // needs Kian's create_transfer change (#2)
     const groceries = await send(JOE, "got groceries, $63");
     const pizza = await send(PRIYA, "got pizza, $40");
     advance(31_000);

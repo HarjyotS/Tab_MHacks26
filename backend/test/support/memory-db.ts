@@ -33,6 +33,10 @@ export class MemoryDb implements Store {
   trs = new Map<string, Transfer>();
   items = new Map<string, LineItem>();
   clms = new Map<string, Claim>();
+  // How create_transfer deduplicates. The module keys by approval alone
+  // today; "approval_expense" is the change asked of Kian on #2, which lets
+  // one 👍 pay several shares.
+  transferKey: "approval" | "approval_expense" = "approval";
   constructor(private now: () => Date) {}
 
   // ── Store (backend_messages only shows new and processing rows) ────────
@@ -264,13 +268,11 @@ export class MemoryDb implements Store {
       }
     },
     createTransfer: async (a: Args<"createTransfer">) => {
-      // Keyed by approval AND expense: the change asked of Kian on #15, so one
-      // 👍 can approve several shares. The module today keys by approval only.
       if (
         [...this.trs.values()].some(
           (t) =>
             t.approved_by_message_id === a.approvedByMessageId &&
-            t.expense_id === a.expenseId,
+            (this.transferKey === "approval" || t.expense_id === a.expenseId),
         )
       )
         return;
