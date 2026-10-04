@@ -57,9 +57,40 @@ export function addThread(
   return thread;
 }
 
-// One per chat: the settle-mode question, and "settle the rest now?".
+// One per chat: the settle-mode question, "settle the rest now?", and the
+// newest settle request (it takes over the expenses of older ones).
 const singleton = (t: Pick<Thread, "data">) =>
-  t.data.kind === "settle_mode" || (t.data.kind === "confirm" && t.data.then === "finalize_and_settle");
+  t.data.kind === "settle_mode" ||
+  t.data.kind === "settle_open" ||
+  (t.data.kind === "confirm" && t.data.then === "finalize_and_settle");
+
+// A reply Tab invites from anyone (plan §2), sent with `say` as `id`.
+export function addInvite(
+  ctx: BrainCtx,
+  chat: Chat,
+  a: { id: string; text: string; kind: Invite["kind"]; expense_id?: string; expense_ids?: string[] },
+): Thread {
+  return addThread(ctx, chat, {
+    id: a.id,
+    text: a.text,
+    expense_id: a.expense_id,
+    expense_ids: a.expense_ids,
+    who: "anyone",
+    data: { kind: a.kind },
+  });
+}
+
+// Whether an open question keeps its proposed expense from locking in
+// (§7.5). Not the standing invites: the proposal's own "Anything uneven?"
+// is open for as long as it's proposed, and would hold it forever.
+export const holdsLockIn = (t: Thread) =>
+  t.data.kind !== "split_open" && t.data.kind !== "claims_open" && t.data.kind !== "settle_open";
+
+// Closes the given kinds of question about an expense, in every chat.
+export function closeExpenseThreads(ctx: BrainCtx, expense_id: string, kinds: Thread["data"]["kind"][]) {
+  for (const [key, list] of ctx.memory.threads)
+    ctx.memory.threads.set(key, list.filter((t) => t.expense_id !== expense_id || !kinds.includes(t.data.kind)));
+}
 
 export function closeThread(ctx: BrainCtx, chat: Chat, t: Thread) {
   const key = chatKey(chat);

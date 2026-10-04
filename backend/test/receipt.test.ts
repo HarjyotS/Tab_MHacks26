@@ -220,8 +220,32 @@ describe("settling while a receipt is open", () => {
     await w.photo("Joe", "frita");
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
     await w.say("Kian", "let's settle up");
-    expect(w.said("balance_reply")[0]).toMatch(/isn't locked in yet/);
+    expect(w.said("clarifying_question")).toEqual([
+      "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?",
+    ]);
+    expect(w.said("balance_reply")).toEqual([]);
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
+  });
+
+  it('takes "yeah lock it in" as yes: splits the unclaimed items evenly and asks to settle', async () => {
+    // Harjyot's playground: the old "isn't locked in yet" wasn't a question,
+    // so "yeah lock it in" went nowhere.
+    const w = world({ receipt: { frita: FRITA }, claim: claims });
+    await w.photo("Joe", "frita");
+    await w.say("Kian", "let's settle up");
+    await w.say("Priya", "yeah lock it in"); // anyone may answer: only a 👍 pays
+    expect(w.db.expenses()[0]!.status).toBe("finalized");
+    expect(w.said("settle_request")).toHaveLength(1);
+    expect(w.db.transfers()).toEqual([]);
+  });
+
+  it("leaves the receipt open on no", async () => {
+    const w = world({ receipt: { frita: FRITA }, claim: claims });
+    await w.photo("Joe", "frita");
+    await w.say("Kian", "let's settle up");
+    await w.say("Kian", "nah wait");
+    expect(w.db.expenses()[0]!.status).toBe("itemizing");
+    expect(w.said("settle_request")).toEqual([]);
   });
 });
 

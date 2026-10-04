@@ -120,12 +120,11 @@ export const tapToPay = () => "Tap 👍 on the settle request to pay your part."
 
 export const nothingToSettle = () => "Nothing to settle. Everyone's square.";
 
-// "let's settle up" while expenses are still open (Harjyot's playground test).
+// "let's settle up" while a receipt is still waiting on claims (Harjyot's
+// playground test): a real question, so "yeah lock it in" does something.
 export function notLockedYet(open: { description: string; total_cents: number }[]): string {
   const what = listJoin(open.map((e) => `${e.description} (${money(e.total_cents)})`));
-  return open.length === 1
-    ? `${what} isn't locked in yet. I'll include it once it is.`
-    : `${what} aren't locked in yet. I'll include them once they are.`;
+  return `Still waiting on claims for ${what}. Split what's unclaimed evenly and settle now?`;
 }
 
 // SPEC §12.3: the web ledger link, one per group when asked by DM.

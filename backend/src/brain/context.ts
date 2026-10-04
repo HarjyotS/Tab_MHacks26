@@ -87,10 +87,6 @@ export type Pending =
 export class Memory {
   // Open questions per chat (threads.ts), keyed by chatKey.
   threads = new Map<string, Thread[]>();
-  // Proposed expenses Tab asked about without a tracked question, and when
-  // (§7.5: no lock-in under a question). Cleared when an adjustment
-  // applies; expires with PENDING_QUESTION_TTL.
-  holds = new Map<string, Date>();
   lastHadWit = new Map<string, boolean>();
   // Groups whose ledger secret this process has set. The secret is derived,
   // so setting it again after a restart writes the same value.

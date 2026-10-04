@@ -30,7 +30,7 @@ import {
   handleNameReply,
   onboardNewGroups,
 } from "./talk.js";
-import { addThread, closeThread, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
+import { addInvite, addThread, closeThread, holdsLockIn, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
 
 // Intents whose messages are about money: the only ones kept as context and
@@ -379,8 +379,8 @@ async function applyAnswer(
       const e = threadExpense(ctx, t, "proposed");
       if (!e) return false;
       if (r.yes_no === "no") return splitLooksRight(ctx, m, t, e);
+      // The proposal stays open to everyone else's changes.
       await handleAdjustment(ctx, m, m.text ?? "", e, { confirmOnly });
-      closeThread(ctx, chatOf(m), t);
       return true;
     }
     case "dispute": {
@@ -639,7 +639,7 @@ export async function tick(ctx: BrainCtx): Promise<void> {
     const deadline = e.objection_deadline!;
     if (now >= deadline) {
       // §7.5: never lock in under one of Tab's own open questions about it.
-      if (askingAbout(ctx, e.expense_id)) return;
+      if (askingAbout(ctx, e)) return;
       await finalize(ctx, e);
       return;
     }
@@ -657,6 +657,8 @@ export async function tick(ctx: BrainCtx): Promise<void> {
         text: T.objectionReminder(),
         expense_id: e.expense_id,
       });
+      // "Anything else?" reopens the split for replies.
+      addInvite(ctx, { group_id: e.group_id }, { id, text: `${e.description}: ${T.objectionReminder()}`, kind: "split_open", expense_id: e.expense_id });
     }
   });
   await claimFollowups(ctx);
@@ -664,13 +666,9 @@ export async function tick(ctx: BrainCtx): Promise<void> {
   await announceSettlements(ctx);
 }
 
-// An unexpired question from Tab about this expense: an open thread about
-// it, or a question that set none (holdOpen).
-function askingAbout(ctx: BrainCtx, expense_id: string): boolean {
-  const held = ctx.memory.holds.get(expense_id);
-  if (held && ctx.now().getTime() - held.getTime() <= ctx.timing.durations.PENDING_QUESTION_TTL) return true;
-  const e = ctx.store.expense(expense_id);
-  return Boolean(e && openThreads(ctx, { group_id: e.group_id }).some((t) => t.expense_id === expense_id));
+// An unexpired question from Tab about this expense (threads.ts).
+function askingAbout(ctx: BrainCtx, e: Expense): boolean {
+  return openThreads(ctx, { group_id: e.group_id }).some((t) => t.expense_id === e.expense_id && holdsLockIn(t));
 }
 
 // A receipt answer: yes or no to the total Tab read, else cents.

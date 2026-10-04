@@ -18,7 +18,7 @@ import {
 } from "./context.js";
 import { extractInput } from "./inputs.js";
 import { startItemizing } from "./receipt.js";
-import { addThread } from "./threads.js";
+import { addInvite, addThread, closeExpenseThreads } from "./threads.js";
 
 export const expenseIdFor = (source_message_id: string) =>
   `exp_${source_message_id}`;
@@ -255,21 +255,25 @@ export async function postProposal(
   }));
   // Updated proposals get a fresh id per version so each one is sent.
   const version = updated ? `:${ctx.now().getTime()}` : "";
+  const id = `split_proposal:${expense_id}${version}`;
+  const text = T.splitProposal({
+    seed: expense_id,
+    description: e.description,
+    total_cents: e.total_cents,
+    shares,
+    updated,
+  });
   await say(ctx, {
     chat: { group_id: e.group_id },
     purpose: "split_proposal",
-    id: `split_proposal:${expense_id}${version}`,
-    text: T.splitProposal({
-      seed: expense_id,
-      description: e.description,
-      total_cents: e.total_cents,
-      shares,
-      updated,
-    }),
+    id,
+    text,
     expense_id,
     // The first proposal answers the expense message; updates aren't answers.
     reply_to: updated ? undefined : e.source_message_id,
   });
+  // "Anything uneven, or anyone not there?": open while it's proposed.
+  addInvite(ctx, { group_id: e.group_id }, { id, text, kind: "split_open", expense_id });
 }
 
 // SPEC §7.5: "not even, John only had a Diet Coke", "I wasn't there".
@@ -332,14 +336,16 @@ export async function handleAdjustment(
       return;
     }
     await holdOpen(ctx, expense);
+    const id = `clarify:${m.message_id}`;
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, reply_to: m.message_id,
+      id, reply_to: m.message_id,
       text: "What's uneven?",
       expense_id: expense.expense_id,
     });
+    addInvite(ctx, chatOf(m), { id, text: `What's uneven on ${expense.description}?`, kind: "adjust_open", expense_id: expense.expense_id });
     return;
   }
   // A pinned amount can't exceed what was spent (the split math would fail).
@@ -349,14 +355,17 @@ export async function handleAdjustment(
     const who = result.fixed.find((f) => f.amount_cents !== undefined)!;
     const name = activeMembers(ctx, expense.group_id).find((x) => x.phone === who.phone)?.name ?? "they";
     await holdOpen(ctx, expense);
+    const id = `clarify:${m.message_id}`;
+    const text = `That's more than the ${money(base)} total. What did ${name} actually have?`;
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, reply_to: m.message_id,
-      text: `That's more than the ${money(base)} total. What did ${name} actually have?`,
+      id, reply_to: m.message_id,
+      text,
       expense_id: expense.expense_id,
     });
+    addInvite(ctx, chatOf(m), { id, text, kind: "adjust_open", expense_id: expense.expense_id });
     return;
   }
   // Reopening a locked-in expense is always confirmed first.
@@ -385,10 +394,10 @@ export async function handleAdjustment(
 // §7.5: while Tab is asking about a proposed split, it must not lock in
 // under the question (Harjyot's playground: the bistro locked with Alex and
 // Sam still on it, 6 seconds after "How much was Priya's 2 soft drinks?").
+// Every caller then opens a thread about the expense, which tick sees
+// (holdsLockIn); this also pushes the deadline past the answer.
 async function holdOpen(ctx: BrainCtx, expense: Expense) {
   if (expense.status !== "proposed") return;
-  // Seen by tick, since some of these questions set no pending.
-  ctx.memory.holds.set(expense.expense_id, ctx.now());
   const until = ctx.now().getTime() + ctx.timing.durations.OBJECTION_EXTENSION;
   if ((expense.objection_deadline?.getTime() ?? 0) >= until) return;
   await ctx.db.upsert_expense({ ...expense, objection_deadline: new Date(until) });
@@ -476,7 +485,8 @@ export async function applyAdjustment(
   result: ExpenseExtraction,
 ) {
   const current = ctx.store.expense(snapshot.expense_id) ?? snapshot;
-  ctx.memory.holds.delete(current.expense_id);
+  // Whatever Tab was asking about this split is answered now.
+  closeExpenseThreads(ctx, current.expense_id, ["adjustment", "adjust_open"]);
   if (current.status === "finalized" && moneyMoving(ctx, current)) return;
   const expense = current.status === "finalized" ? await reopen(ctx, current) : current;
   const before = new Map(
