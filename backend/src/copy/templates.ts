@@ -128,6 +128,14 @@ export function notLockedYet(open: { description: string; total_cents: number }[
     : `${what} aren't locked in yet. I'll include them once they are.`;
 }
 
+// SPEC §12.3: the web ledger link, one per group when asked by DM.
+export function ledgerLink(links: { name?: string; url: string }[]): string {
+  if (links.length === 1) return `Here's the ledger: ${links[0]!.url}`;
+  return `Here are your ledgers:\n${links.map((l) => `${l.name ?? "Group"}: ${l.url}`).join("\n")}`;
+}
+
+export const noLedger = () => "The web ledger isn't set up yet.";
+
 // One line confirming the settle-mode answer (SPEC #15).
 export const settleModeSet = (mode: "ledger" | "per_expense") =>
   mode === "ledger"
