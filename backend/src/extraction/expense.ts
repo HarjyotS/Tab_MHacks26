@@ -170,9 +170,17 @@ function toContract(
           : { kind: "member", phone };
   }
 
+  // Who shared it comes from this message only: a name from earlier in the
+  // chat never narrows a new expense (live run: "Just paid 36 for an uber"
+  // became "Tanuj owes $36.00" after an earlier uber with Tanuj). A list of
+  // just the sender is no list either.
+  const namedHere = mode === "new"
+    ? r.participant_names.filter((n) => nameSaid(n, text) || (resolveName(n, members, message.sender_phone) === message.sender_phone && FIRST_PERSON.test(text)))
+    : r.participant_names;
+  const listed = r.participants === "list" && namedHere.length > 0 ? resolveAll(namedHere) : [];
   const participants: ExpenseExtraction["participants"] =
-    r.participants === "list" && r.participant_names.length > 0
-      ? { kind: "list", phones: resolveAll(r.participant_names) }
+    listed.length > 0 && !(mode === "new" && listed.every((p) => p === message.sender_phone))
+      ? { kind: "list", phones: listed }
       : { kind: "everyone" };
   // The sender may be written as their own name ("Priya" for "I").
   const inMessage = (name: string) =>
