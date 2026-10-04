@@ -16,4 +16,10 @@ export default __t.row({
   fromAccountId: __t.string().name("from_account_id"),
   toAccountId: __t.string().name("to_account_id"),
   completedAt: __t.option(__t.timestamp()).name("completed_at"),
+  fromMemberId: __t.string().name("from_member_id"),
+  toMemberId: __t.string().name("to_member_id"),
+  mirrorStatus: __t.option(__t.string()).name("mirror_status"),
+  withdrawnDollars: __t.i64().name("withdrawn_dollars"),
+  depositedDollars: __t.i64().name("deposited_dollars"),
+  attempts: __t.u32(),
 });

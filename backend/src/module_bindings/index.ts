@@ -43,6 +43,7 @@ import GrantServiceRoleReducer from "./grant_service_role_reducer";
 import IngestMessageReducer from "./ingest_message_reducer";
 import MarkOutboxReducer from "./mark_outbox_reducer";
 import RecomputeExpenseReducer from "./recompute_expense_reducer";
+import RecordNessieMirrorReducer from "./record_nessie_mirror_reducer";
 import RedeemLedgerAccessReducer from "./redeem_ledger_access_reducer";
 import RemoveClaimReducer from "./remove_claim_reducer";
 import ResolveDisputeReducer from "./resolve_dispute_reducer";
@@ -53,6 +54,7 @@ import SetLedgerSecretReducer from "./set_ledger_secret_reducer";
 import SetLineItemsReducer from "./set_line_items_reducer";
 import SetMemberNameReducer from "./set_member_name_reducer";
 import SetMessageResultReducer from "./set_message_result_reducer";
+import SetNessieBalanceReducer from "./set_nessie_balance_reducer";
 import SetNessieIdsReducer from "./set_nessie_ids_reducer";
 import SetSettleModeReducer from "./set_settle_mode_reducer";
 import SetShareReducer from "./set_share_reducer";
@@ -80,6 +82,7 @@ import LedgerItemsRow from "./ledger_items_table";
 import LedgerMembersRow from "./ledger_members_table";
 import LedgerSharesRow from "./ledger_shares_table";
 import LedgerTransfersRow from "./ledger_transfers_table";
+import NessieMirrorRow from "./nessie_mirror_table";
 import SeederMembersRow from "./seeder_members_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -219,6 +222,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, LedgerTransfersRow),
+  nessieMirror: __table({
+    name: 'nessie_mirror',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, NessieMirrorRow),
   seederMembers: __table({
     name: 'seeder_members',
     indexes: [
@@ -239,6 +249,7 @@ const reducersSchema = __reducers(
   __reducerSchema("ingest_message", IngestMessageReducer),
   __reducerSchema("mark_outbox", MarkOutboxReducer),
   __reducerSchema("recompute_expense", RecomputeExpenseReducer),
+  __reducerSchema("record_nessie_mirror", RecordNessieMirrorReducer),
   __reducerSchema("redeem_ledger_access", RedeemLedgerAccessReducer),
   __reducerSchema("remove_claim", RemoveClaimReducer),
   __reducerSchema("resolve_dispute", ResolveDisputeReducer),
@@ -249,6 +260,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_line_items", SetLineItemsReducer),
   __reducerSchema("set_member_name", SetMemberNameReducer),
   __reducerSchema("set_message_result", SetMessageResultReducer),
+  __reducerSchema("set_nessie_balance", SetNessieBalanceReducer),
   __reducerSchema("set_nessie_ids", SetNessieIdsReducer),
   __reducerSchema("set_settle_mode", SetSettleModeReducer),
   __reducerSchema("set_share", SetShareReducer),
@@ -299,6 +311,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "ledger_shares": Omit<typeof tablesSchema.schemaType.tables["ledgerShares"], "accessorName"> & { readonly accessorName: "ledger_shares" };
     /** @deprecated Use `ledgerTransfers` instead. This alias will be removed in the next major version. */
     readonly "ledger_transfers": Omit<typeof tablesSchema.schemaType.tables["ledgerTransfers"], "accessorName"> & { readonly accessorName: "ledger_transfers" };
+    /** @deprecated Use `nessieMirror` instead. This alias will be removed in the next major version. */
+    readonly "nessie_mirror": Omit<typeof tablesSchema.schemaType.tables["nessieMirror"], "accessorName"> & { readonly accessorName: "nessie_mirror" };
     /** @deprecated Use `seederMembers` instead. This alias will be removed in the next major version. */
     readonly "seeder_members": Omit<typeof tablesSchema.schemaType.tables["seederMembers"], "accessorName"> & { readonly accessorName: "seeder_members" };
   };
@@ -338,6 +352,7 @@ const tableAccessorAliases = {
   "ledger_members": "ledgerMembers",
   "ledger_shares": "ledgerShares",
   "ledger_transfers": "ledgerTransfers",
+  "nessie_mirror": "nessieMirror",
   "seeder_members": "seederMembers",
 } as const;
 
@@ -397,6 +412,8 @@ export type DbView = __DbViewBase & {
   readonly "ledger_shares": __DbViewBase["ledgerShares"];
   /** @deprecated Use `ledgerTransfers` instead. This alias will be removed in the next major version. */
   readonly "ledger_transfers": __DbViewBase["ledgerTransfers"];
+  /** @deprecated Use `nessieMirror` instead. This alias will be removed in the next major version. */
+  readonly "nessie_mirror": __DbViewBase["nessieMirror"];
   /** @deprecated Use `seederMembers` instead. This alias will be removed in the next major version. */
   readonly "seeder_members": __DbViewBase["seederMembers"];
 };
@@ -441,6 +458,8 @@ export type Tables = __TablesBase & {
   readonly "ledger_shares": __TablesBase["ledgerShares"];
   /** @deprecated Use `ledgerTransfers` instead. This alias will be removed in the next major version. */
   readonly "ledger_transfers": __TablesBase["ledgerTransfers"];
+  /** @deprecated Use `nessieMirror` instead. This alias will be removed in the next major version. */
+  readonly "nessie_mirror": __TablesBase["nessieMirror"];
   /** @deprecated Use `seederMembers` instead. This alias will be removed in the next major version. */
   readonly "seeder_members": __TablesBase["seederMembers"];
 };
