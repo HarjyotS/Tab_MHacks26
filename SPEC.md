@@ -677,6 +677,8 @@ Everyone else is square.
 
 Before sending, code checks the reply: every amount and number must appear in this conversation's tool results, every name must be a member of the chat, and the 9.3 rules hold (no banned or assistant phrases, no markdown, at most six lines). A failing reply gets one retry with the reason; after that, or on a timeout, the balance and breakdown templates answer, and any other question gets a fixed "couldn't pin that one down" (with the ledger link when there is one). Only messages the gate passed ever reach it (section 19).
 
+**Last resort.** A message that got no reply and changed nothing still goes to the money brain when it is plausibly about money: a money intent at confidence 0.3 or more (even below the clarify bar, or when its handler failed), or any non-ignore guess that is an inline reply to Tab, comes while Tab's question is open, or comes while the sender has a split, item list, or settle request open. Grok then answers from the lookups or asks one short, specific question built from what it found ("want me to put both drinks on Priya and the cheesecake on Jake, rest split?"), at most three lines. It only writes text: a reply that claims to have changed anything is rejected, and money still moves only through the validated handlers. If that reply fails its checks too, Tab stays quiet. An `ignore`, or a guess with nothing open, never reaches it.
+
 ---
 
 ## 8. Split math [CONTRACT]

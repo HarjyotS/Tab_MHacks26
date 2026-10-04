@@ -1,11 +1,11 @@
 // SPEC §11.1 processing loop and §11.2 scheduler.
-import type { ClassifyResult, Intent } from "@tab/gate";
+import type { ClassifyInput, ClassifyResult, Intent } from "@tab/gate";
 import { thresholds } from "../config.js";
 import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
+import { applyAdjustment, groupFor, handleAdjustment, handleExpense, latestOpen, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
@@ -71,7 +71,49 @@ export function normalizeText(text: string | undefined): string | undefined {
   return text?.replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"');
 }
 
-export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void> {
+// Counts what handlers write (outbox rows and money state), so the last
+// resort below knows when a message got neither a reply nor a change.
+function trackWrites(base: BrainCtx): { ctx: BrainCtx; wrote: () => boolean } {
+  let writes = 0;
+  const db = new Proxy(base.db, {
+    get(target, key, receiver) {
+      const v = Reflect.get(target, key, receiver) as unknown;
+      if (typeof v !== "function" || key === "set_message_result") return v;
+      return (...args: unknown[]) => {
+        writes++;
+        return (v as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+  return { ctx: { ...base, db }, wrote: () => writes > 0 };
+}
+
+// Intents that make an unanswered message worth a last-resort look by the
+// money brain. "answer" is the open-threads intent (#35).
+const FALLBACK_INTENTS = new Set<string>([...MONEY_INTENTS, "answer"]);
+const FALLBACK_MIN_CONFIDENCE = 0.3;
+
+// Why a message that got no reply and changed nothing should still get one
+// (Harjyot: "it just gives up"), or undefined to stay quiet (P1). Chatter
+// never qualifies: an ignore, or a non-money guess with nothing open.
+export function fallbackReason(
+  m: Message,
+  result: { intent: Intent; confidence: number; prefiltered?: boolean },
+  input: ClassifyInput,
+): string | undefined {
+  if (m.kind !== "text" || !m.text?.trim() || result.prefiltered || result.intent === "ignore") return undefined;
+  if (result.confidence < FALLBACK_MIN_CONFIDENCE) return undefined;
+  if (FALLBACK_INTENTS.has(result.intent)) return `unsure_${result.intent}`;
+  if (input.message.reply_to_tab) return "reply_to_tab";
+  if (input.tab_question_open) return "open_question";
+  const open = input.open_items.some(
+    (o) => o.expense_status === "proposed" || o.expense_status === "itemizing" || (o.expense_status === "finalized" && o.my_share_status === "locked"),
+  );
+  return open ? "open_split" : undefined;
+}
+
+export async function processMessage(base: BrainCtx, raw: Message): Promise<void> {
+  const { ctx, wrote } = trackWrites(base);
   const m: Message = { ...raw, text: normalizeText(raw.text) };
   await ctx.db.set_message_result({
     message_id: m.message_id,
@@ -120,14 +162,31 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       // Stored as an answer, so it stays in later context (§19 keeps it).
       if (answered) intent = "answer";
       if (!keep) intent = "ignore";
+      let failed: unknown;
       if (!answered && !why && !ledger) {
-        if (decision === "act") await act(ctx, m, result.intent);
-        else if (decision === "clarify") await clarify(ctx, m, result.intent);
+        try {
+          if (decision === "act") await act(ctx, m, result.intent);
+          else if (decision === "clarify") await clarify(ctx, m, result.intent);
+        } catch (err) {
+          failed = err; // still worth a last-resort answer below
+        }
       } else if (reply.rest) {
         // The same message also said something else ("yep, and I got gas $30").
         if (reply.rest.decision === "act") await act(ctx, m, reply.rest.intent);
         else await clarify(ctx, m, reply.rest.intent, `clarify:${m.message_id}:rest`);
       }
+      // Last resort: a money-ish message that got no reply and changed
+      // nothing goes to the money brain, which answers or asks one specific
+      // question. It only writes text. Anything that already replied
+      // (including another fallback) wins.
+      const reason = ctx.ask && !wrote() ? fallbackReason(m, result, input) : undefined;
+      if (reason) {
+        ctx.log("fallback_ask", { message_id: m.message_id, group_id: m.group_id, reason, intent: result.intent, confidence: result.confidence });
+        keep = true;
+        intent = result.intent;
+        await answerQuestion(ctx, m, "fallback", repliedExpense(ctx, m) ?? latestOpen(ctx, groupFor(ctx, m), ["proposed", "itemizing"]));
+      }
+      if (failed) throw failed;
     }
     await ctx.db.set_message_result({
       message_id: m.message_id,

@@ -16,7 +16,9 @@ import { activeMembers, type BrainCtx, chatOf, recentContext, say, styleFor } fr
 import { createLookup, scopeOf, type ExpenseFilter, type Lookup } from "./lookup.js";
 import { groupsOf, handleBalanceQuery, handleBreakdown } from "./talk.js";
 
-export type AskKind = "money_question" | "balance_query" | "breakdown_request" | "why";
+// "fallback": the last resort for a money-ish message nothing else answered
+// (process.ts): answer it, or ask one specific question. Text only.
+export type AskKind = "money_question" | "balance_query" | "breakdown_request" | "why" | "fallback";
 
 export const ASK_BUDGET_MS = 25_000;
 export const MAX_LINES = 6;
@@ -119,9 +121,16 @@ export type Facts = {
   members: string[]; // names in scope
   outsiders: string[]; // member names Tab knows from chats out of scope
   style: GroupStyle;
+  // Last-resort mode: at most 3 lines, and never claims to have changed anything.
+  fallback?: boolean;
 };
 
 export type Rejection = { code: string; detail: string };
+
+// Tab saying it changed something. The agent can't: only the validated
+// handlers write money state.
+const CLAIMS_ACTION =
+  /\b(done|updated|fixed|changed it|i('ve| have)? (put|moved|changed|added|removed|updated|split|logged|locked|marked)|i (put|moved|changed|added|removed|updated|logged|marked)|it'?s (been )?(updated|changed|fixed))\b/i;
 
 const MONEY_IN_TEXT = /-?\$\s?\d[\d,]*(?:\.\d{1,2})?/g;
 const MONEY_EXACT = /-?\$[\d,]+\.\d{2}/g;
@@ -149,7 +158,10 @@ const toCents = (s: string) => {
 export function checkReply(text: string, f: Facts): Rejection | null {
   const all = f.outputs.join("\n");
   if (!text.trim()) return { code: "empty", detail: "The reply was empty." };
-  if (text.split("\n").length > MAX_LINES) return { code: "lines", detail: `Too long: at most ${MAX_LINES} lines.` };
+  const maxLines = f.fallback ? 3 : MAX_LINES;
+  if (text.split("\n").length > maxLines) return { code: "lines", detail: `Too long: at most ${maxLines} lines.` };
+  if (f.fallback && CLAIMS_ACTION.test(text))
+    return { code: "claims_action", detail: "You can't change anything; don't say you did. Answer, or ask one question about what they want." };
   if (text.length > MAX_CHARS) return { code: "length", detail: `Too long: keep it under ${MAX_CHARS} characters.` };
   const banned = bannedPhraseIn(text) ?? ASSISTANT_PHRASES.find((p) => text.toLowerCase().includes(p));
   if (banned) return { code: "banned_phrase", detail: `Don't say "${banned}". Text like a friend, not an assistant.` };
@@ -223,6 +235,8 @@ const TASK: Record<AskKind, string> = {
   balance_query: "They want to know who owes what (balances), or what they owe or are owed.",
   breakdown_request: "They want to know which expenses make up a balance and why each amount is what it is (why_owe, expense_detail).",
   why: "This follows Tab's last answer in recent_messages. If they're asking why, explain where those amounts come from (why_owe, expense_detail).",
+  fallback:
+    "Tab wasn't sure what this message wants, and nothing else answered it. It's probably about an open split, receipt, or Tab's last question: look up what it refers to (find_expenses, expense_detail, settle_status). Then either answer it, or ask ONE short, specific question that shows what you think they mean, using what you found (like \"want me to put both drinks on Priya and the cheesecake on Jake, rest split?\"). At most 2 lines. You can't change anything yourself, so never say you did.",
 };
 
 function userPrompt(ctx: BrainCtx, m: Message, kind: AskKind, names: Map<string, string>, preload?: string): string {
@@ -251,7 +265,7 @@ export const askFallback = (ledger_url?: string) =>
   ledger_url ? `couldn't pin that one down. it's all on the ledger: ${ledger_url}` : "couldn't pin that one down";
 
 const purposeOf = (kind: AskKind): OutboxPurpose =>
-  kind === "breakdown_request" || kind === "why" ? "breakdown_reply" : "balance_reply";
+  kind === "breakdown_request" || kind === "why" ? "breakdown_reply" : kind === "fallback" ? "clarifying_question" : "balance_reply";
 
 // Answers a question with the agent, or the template when there is no agent
 // or its answer can't be trusted. `about` is the expense an inline reply
@@ -268,6 +282,9 @@ export async function answerQuestion(ctx: BrainCtx, m: Message, kind: AskKind, a
 async function fallback(ctx: BrainCtx, m: Message, kind: AskKind) {
   if (kind === "balance_query") return handleBalanceQuery(ctx, m);
   if (kind === "breakdown_request" || kind === "why") return handleBreakdown(ctx, m);
+  // The last resort has no template behind it; a canned "huh?" is worse
+  // than the silence it replaces.
+  if (kind === "fallback") return;
   const lookup = createLookup(ctx, scopeOf(ctx, m));
   const link = await lookup.ledgerLink();
   const links = ("links" in link && link.links) || [];
@@ -293,7 +310,7 @@ export async function agentAnswer(ctx: BrainCtx, agent: NonNullable<BrainCtx["as
   const deadline = clock() + (agent.budgetMs ?? ASK_BUDGET_MS);
   const tools = lookupTools(lookup);
   const outputs = preload ? [preload] : [];
-  const facts = (): Facts => ({ outputs, question: m.text ?? "", members: [...names.values()], outsiders, style });
+  const facts = (): Facts => ({ outputs, question: m.text ?? "", members: [...names.values()], outsiders, style, fallback: kind === "fallback" });
   const log = (r: LoopResult, attempt: number, outcome: string, rejected?: string) =>
     ctx.log("ask", {
       message_id: m.message_id, group_id: m.group_id, kind, attempt, outcome, rejected,

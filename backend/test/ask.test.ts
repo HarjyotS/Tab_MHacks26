@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Intent } from "@tab/gate";
 import { askFallback, checkReply, type Facts } from "../src/brain/ask.js";
 import { bannedPhraseIn, MARKDOWN } from "../src/copy/voice.js";
 import { createLookup } from "../src/brain/lookup.js";
@@ -221,5 +222,86 @@ describe("the money brain answers from the database", () => {
     const t = agent([{ call: [{ name: "balances" }, { name: "settle_status" }, { name: "find_expenses" }, { name: "payments" }] }, { reply: "Everyone's on it." }]);
     await w.say("Joe", "what's left to settle?");
     expect(JSON.stringify(t.requests)).not.toMatch(/555555\d{4}/);
+  });
+});
+
+// Harjyot: "it just gives up". A money-ish message that got no reply and
+// changed nothing goes to the money brain, which answers or asks once.
+describe("last resort: never silent on a money-ish message", () => {
+  function unsure(intent: Intent, confidence: number) {
+    const s = setup();
+    const fallbacks: Record<string, unknown>[] = [];
+    const log = s.w.ctx.log;
+    s.w.ctx.log = (event, fields) => {
+      if (event === "fallback_ask") fallbacks.push(fields);
+      log(event, fields);
+    };
+    s.w.ctx.classify = async () => ({ intent, confidence });
+    return { ...s, fallbacks };
+  }
+
+  it("a half-sure claim gets one specific question built from the receipt", async () => {
+    const { w, agent, fallbacks } = unsure("claim", 0.5);
+    const question = "want me to put both soft drinks on you and the Cheesecake on Jake, rest split?";
+    const t = agent([{ call: [{ name: "expense_detail", args: { ref: "e1" } }] }, { reply: question }]);
+    await w.say("Priya", "i got both drinks and jake got the cheesecake");
+    expect(w.said("clarifying_question")).toEqual([question.toLowerCase()]);
+    expect(fallbacks).toEqual([expect.objectContaining({ reason: "unsure_claim" })]);
+    expect(String(t.requests[0]!.messages[1]!.content)).toMatch(/Tab wasn't sure what this message wants/);
+  });
+
+  it("a half-sure adjustment below the clarify bar still gets a reply", async () => {
+    const { w, agent, fallbacks } = unsure("split_adjustment", 0.46);
+    agent([{ reply: "update the Groceries how? who's in or out?" }]);
+    await w.say("Kian", "update it");
+    expect(w.said("clarifying_question")).toEqual(["update the groceries how? who's in or out?"]);
+    expect(fallbacks).toEqual([expect.objectContaining({ reason: "unsure_split_adjustment" })]);
+  });
+
+  it("a stray guess while a split is open gets a reply, with the open split handed over", async () => {
+    const { w, agent, fallbacks } = unsure("name_reply", 0.41);
+    const t = agent([{ reply: "just you and Priya on the Groceries, so Joe and Jake are out?" }]);
+    await w.say("Kian", "just me and priya");
+    expect(w.said("clarifying_question")).toEqual(["just you and priya on the groceries, so joe and jake are out?"]);
+    expect(fallbacks).toEqual([expect.objectContaining({ reason: "open_split" })]);
+    expect(String(t.requests[0]!.messages[1]!.content)).toMatch(/<expense_they_replied_to>[\s\S]*"description":"Groceries"/);
+  });
+
+  it("a handler that throws still gets a reply", async () => {
+    const { w, agent } = unsure("split_adjustment", 0.95);
+    agent([{ reply: "which split, the Groceries?" }]);
+    const m = await w.say("Kian", "update it"); // no scripted extraction: the handler throws
+    expect(w.said("clarifying_question")).toEqual(["which split, the groceries?"]);
+    expect(m.status).toBe("error");
+  });
+
+  it("stays quiet for chatter, and for a non-money guess with nothing open", async () => {
+    const chatter = unsure("ignore", 0.9);
+    const t1 = chatter.agent([]);
+    await chatter.w.say("Kian", "lol");
+    expect(t1.create).not.toHaveBeenCalled();
+
+    const w = world({});
+    const t2 = toolClient([]);
+    w.ctx.ask = { client: t2.client, model: "m" };
+    w.ctx.classify = async () => ({ intent: "name_reply", confidence: 0.41 });
+    await w.say("Kian", "just me and priya");
+    expect(t2.create).not.toHaveBeenCalled();
+  });
+
+  it("doesn't double-reply when something else already answered", async () => {
+    const { w, agent } = unsure("expense", 0.6);
+    const t = agent([]);
+    await w.say("Kian", "dinner 40"); // the clarify band asks "Want me to split that?"
+    expect(w.said("clarifying_question")).toEqual(["Want me to split that?"]);
+    expect(t.create).not.toHaveBeenCalled();
+  });
+
+  it("never claims to have changed anything; after a retry it stays quiet rather than guess", async () => {
+    const { w, agent, logs } = unsure("claim", 0.5);
+    agent([{ reply: "done, updated the split" }, { reply: "ok I put the drinks on you" }]);
+    await w.say("Priya", "i got both drinks");
+    expect(w.said("clarifying_question")).toEqual([]);
+    expect(logs.map((l) => l.rejected)).toEqual(["claims_action", "claims_action"]);
   });
 });
