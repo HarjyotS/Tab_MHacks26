@@ -453,6 +453,15 @@ function words(text: string): string[] {
 // "2 soft drinks" against "2 x SOFT DRINK @ $2.99" ($5.98): the whole line.
 // "a soft drink" against the same line: one of two, $2.99.
 export function receiptPrice(item: string, items: LineItem[]): number | undefined {
+  const match = receiptLine(item, items);
+  if (!match) return undefined;
+  const { line, qty, lineQty } = match;
+  if (qty >= lineQty) return line.amount_cents;
+  return Math.round((line.amount_cents * qty) / lineQty);
+}
+
+// The one receipt line an item names, and how many of it they said.
+function receiptLine(item: string, items: LineItem[]): { line: LineItem; qty: number; lineQty: number } | undefined {
   const want = words(item);
   if (want.length === 0) return undefined;
   // Every word they said must be on the line, inside compounds too, so
@@ -468,8 +477,24 @@ export function receiptPrice(item: string, items: LineItem[]): number | undefine
   // "all the drinks" (no count after the filler) is the whole line.
   const asked = item.trim().toLowerCase().replace(LEADING, "").match(/^(\d+|a|an|one|two|three|four|five|six|both)\b/)?.[1];
   const qty = asked === undefined ? lineQty : Number(asked) || NUMBER_WORDS[asked]!;
-  if (qty >= lineQty) return line.amount_cents;
-  return Math.round((line.amount_cents * qty) / lineQty);
+  return { line, qty, lineQty };
+}
+
+// §7.5 item ownership: "Alex had both drinks" on a receipt means the drinks
+// are Alex's and the rest is shared by everyone there, not that Alex had
+// only the drinks (Harjyot's playground: Alex $7.23, Sam $39.84). The line
+// items each "had" names, when every named item is a whole line on the
+// receipt and nobody "only had" something; otherwise undefined, and the
+// fixed amounts apply as a custom split.
+function ownedLines(result: ExpenseExtraction, items: LineItem[]): { phone: string; item_id: string }[] | undefined {
+  if (items.length === 0 || result.fixed.length === 0 || !result.fixed.every((f) => f.had && f.item)) return undefined;
+  const owned: { phone: string; item_id: string }[] = [];
+  for (const f of result.fixed) {
+    const match = receiptLine(f.item!, items);
+    if (!match || match.qty < match.lineQty) return undefined; // "a drink" of two: a pin
+    owned.push({ phone: f.phone, item_id: match.line.item_id });
+  }
+  return owned;
 }
 
 // Approved or paid shares mean a transfer exists; those can't be undone.
@@ -501,6 +526,48 @@ export async function applyAdjustment(
     liveShares(ctx, expense.expense_id).map((s) => [s.phone, s.amount_cents]),
   );
   const shares = ctx.store.shares(expense.expense_id);
+  const owned = ownedLines(result, ctx.store.lineItems(expense.expense_id));
+  if (owned) {
+    await applyOwnership(ctx, expense, result, owned);
+  } else {
+    await applyFixed(ctx, expense, result, shares);
+  }
+  // §7.5: post an updated proposal only if someone else's amount changed.
+  const after = liveShares(ctx, expense.expense_id);
+  const changed =
+    after.some((s) => before.get(s.phone) !== s.amount_cents) ||
+    after.length !== before.size;
+  if (changed) await postProposal(ctx, expense.expense_id, true);
+}
+
+const extendedDeadline = (ctx: BrainCtx, e: Expense) =>
+  new Date(Math.max(e.objection_deadline?.getTime() ?? 0, ctx.now().getTime()) + ctx.timing.durations.OBJECTION_EXTENSION);
+
+// Opt-outs first, so nobody owns an item from outside the split.
+async function optOut(ctx: BrainCtx, shares: Share[], exclusions: string[]) {
+  for (const s of shares.filter((x) => exclusions.includes(x.phone) && x.status !== "opted_out"))
+    await ctx.db.set_share({ ...s, status: "opted_out" });
+}
+
+// The items become claims on an itemized split (§8): unclaimed items split
+// evenly among everyone still in, tax and tip in proportion. It stays
+// proposed, so the group can still change it before it locks in.
+async function applyOwnership(
+  ctx: BrainCtx,
+  expense: Expense,
+  result: ExpenseExtraction,
+  owned: { phone: string; item_id: string }[],
+) {
+  await optOut(ctx, ctx.store.shares(expense.expense_id), result.exclusions);
+  await ctx.db.upsert_expense({ ...expense, split_mode: "itemized", objection_deadline: extendedDeadline(ctx, expense) });
+  const live = new Set(liveShares(ctx, expense.expense_id).map((s) => s.phone));
+  for (const o of owned.filter((x) => live.has(x.phone)))
+    await ctx.db.add_claim({ item_id: o.item_id, phone: o.phone, source_message_id: expense.source_message_id });
+}
+
+// "Jake only had a $3 Diet Coke": a fixed amount, the rest split evenly
+// (custom split).
+async function applyFixed(ctx: BrainCtx, expense: Expense, result: ExpenseExtraction, shares: Share[]) {
   const fixedPhones = new Set(result.fixed.map((f) => f.phone));
   for (const s of shares) {
     const fixed = result.fixed.find((f) => f.phone === s.phone);
@@ -517,24 +584,14 @@ export async function applyAdjustment(
       last_followup_at: s.last_followup_at,
     });
   }
-  const extended = new Date(
-    Math.max(expense.objection_deadline?.getTime() ?? 0, ctx.now().getTime()) +
-      ctx.timing.durations.OBJECTION_EXTENSION,
-  );
   await ctx.db.upsert_expense({
     ...expense,
     split_mode:
       fixedPhones.size > 0 || expense.split_mode === "custom"
         ? "custom"
         : expense.split_mode,
-    objection_deadline: extended,
+    objection_deadline: extendedDeadline(ctx, expense),
   });
-  // §7.5: post an updated proposal only if someone else's amount changed.
-  const after = liveShares(ctx, expense.expense_id);
-  const changed =
-    after.some((s) => before.get(s.phone) !== s.amount_cents) ||
-    after.length !== before.size;
-  if (changed) await postProposal(ctx, expense.expense_id, true);
 }
 
 export function latestOpen(

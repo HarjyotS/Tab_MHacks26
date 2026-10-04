@@ -561,6 +561,8 @@ The payer defaults to whoever posted the photo, unless the caption or a followin
 
 **Custom split.** When a `split_adjustment` names a person and an amount or item ("John only had a $3 Diet Coke"), set `fixed_cents` on that person's share and switch `split_mode` to `custom`. If an item is named without a price and a receipt exists, match it to a line item. If no price is known, ask "How much was John's Diet Coke?" and hold the expense in `needs_info`. The remainder is split evenly among everyone else, tax and tip are allocated proportionally (section 8), Tab posts an updated proposal, and the objection deadline extends by OBJECTION_EXTENSION.
 
+**Item ownership.** On a receipt with line items, "Alex had both drinks" (had or got, without "only" or "just") means those items are Alex's and Alex still shares the rest. Each named item that is a whole line on the receipt becomes a claim by that person, `split_mode` switches to `itemized`, and the expense stays `proposed`. Unclaimed items split evenly among everyone not opted out, and tax and tip are allocated proportionally (section 8). Extraction marks the difference (`only` per fixed entry); code checks every item against the receipt. If any item isn't a whole line ("a drink" from a 2x line), or someone "only had" something, the custom split above applies instead. On a text expense with no items, "Alex had a $5 drink" stays a custom split.
+
 **Opt-out.** "I wasn't there" sets that person's share to `opted_out` and recomputes, and Tab likes the message. Tab posts an updated proposal only if other people's amounts changed.
 
 **Uneven without specifics.** For a receipt, switch to itemizing. For a text expense, ask "What's uneven?" and stay in `proposed`.

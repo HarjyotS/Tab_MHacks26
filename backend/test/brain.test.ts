@@ -323,6 +323,18 @@ describe("adjustments (SPEC 7.5)", () => {
       "Updated: Groceries, $63.00. Joe $20.00, Kian $20.00, Priya $20.00, Jake $3.00.",
     );
   });
+
+  it('keeps "jake had a $3 diet coke" (no "only") a pin on a text expense: there are no items to own', async () => {
+    GROK["adjustment|not even, jake had a $3 diet coke"] = {
+      ...base,
+      payer: "unknown",
+      fixed: [{ name: "jake", amount_cents: 300, item: "diet coke", only: false }],
+    };
+    const m = await send(JOE, "got groceries, $63");
+    await send(KIAN, "not even, jake had a $3 diet coke");
+    expect(db.expense(expenseId(m))!.split_mode).toBe("custom");
+    expect(db.shares(expenseId(m)).find((s) => s.phone === JAKE)!.amount_cents).toBe(300);
+  });
 });
 
 describe("Tab's questions (SPEC 7.3 step 2)", () => {
