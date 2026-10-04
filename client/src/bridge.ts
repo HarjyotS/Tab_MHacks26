@@ -5,6 +5,7 @@ import type { Hub } from "./hub.ts";
 import { SentMatcher } from "./matcher.ts";
 import type { Outgoing, Sender, Target } from "./sender.ts";
 import type { State } from "./state.ts";
+import { NotSentError } from "./messages-ui.ts";
 import type { Replier } from "./reply.ts";
 import type { Tapbacker } from "./tapback.ts";
 import type { InboundMessage, OutboxRow } from "./types.ts";
@@ -278,14 +279,26 @@ export class Bridge {
     if (!replier || !row.target_message_id) return false;
     const target = this.db.messageByGuid(row.target_message_id);
     if (!target?.chat_guid || this.db.latestInChat(target.chat_guid)?.guid !== target.guid) return false;
+    // Only thread into the chat this row is meant for; a target elsewhere gets a normal send.
+    const sameChat = target.chat_style === GROUP_STYLE
+      ? target.chat_guid === key
+      : !!target.handle && normalizeHandle(target.handle) === key;
+    if (!sameChat) return false;
+    const chatTitle = this.db.chatName(target.chat_guid);
+    if (!chatTitle) return false;
 
     const expectation = this.matcher.expect(key, text, this.opts.sendMatchTimeoutMs);
     try {
-      await replier.reply(row.target_message_id, text);
+      await replier.reply(row.target_message_id, text, chatTitle);
     } catch (err) {
-      expectation.cancel();
-      this.opts.log(`[bridge] ${row.action_id} couldn't reply in thread (${err}); sending normally`);
-      return false;
+      if (err instanceof NotSentError) {
+        expectation.cancel();
+        this.opts.log(`[bridge] ${row.action_id} couldn't reply in thread (${err.message}); sending normally`);
+        return false;
+      }
+      // Unsure whether Return was pressed: only fall back if the reply never shows up.
+      this.opts.log(`[bridge] ${row.action_id} reply script failed after starting (${err}); checking chat.db before resending`);
+      if (!(await expectation.landed)) return false;
     }
     const guid = await expectation.landed;
     if (guid && this.db.messageByGuid(guid)?.thread_originator_guid !== row.target_message_id) {
@@ -322,9 +335,12 @@ export class Bridge {
       return fail(`skipped: ${row.target_message_id} is no longer the newest message in its chat`);
     }
 
+    // Messages acts on whatever chat it shows, so only act once its window title proves it's this chat.
+    const chatTitle = this.db.chatName(target.chat_guid);
+    if (!chatTitle) return fail(`skipped: ${target.chat_guid} has no name, so there's no way to confirm Messages opened it`);
     const expectation = this.matcher.expect(tapbackKey(row.target_message_id), row.reaction, this.opts.tapbackVerifyMs);
     try {
-      await this.tapbacker.react(row.target_message_id, row.reaction);
+      await this.tapbacker.react(row.target_message_id, row.reaction, chatTitle);
     } catch (err) {
       expectation.cancel();
       return fail(String(err));

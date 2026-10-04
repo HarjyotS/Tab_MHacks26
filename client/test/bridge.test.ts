@@ -313,6 +313,40 @@ test("falls back to a normal message when Messages can't open the reply", async 
   expect(logs.some((l) => l.includes("couldn't reply in thread"))).toBe(true);
 });
 
+test("never tapbacks in a chat whose name can't be checked against Messages' window title", async () => {
+  const { fx, hub, tapbacker, bridge, turnOn } = setup();
+  await turnOn();
+  const dmMessage = fx.message({ chat: fx.dm(A), handle: A, text: "@tab what do I owe" });
+  await bridge.poll();
+  const row = hub.enqueue({ kind: "reaction", to_phone: A, target_message_id: dmMessage, reaction: "like" });
+  await bridge.drainOutbox();
+  expect(tapbacker.calls).toHaveLength(0);
+  expect(hub.row(row.action_id)?.error).toContain("no name");
+});
+
+test("sends a normal message when the reply target is in a different chat", async () => {
+  const { fx, hub, sender, replier, deliverNext, turnOn } = setup();
+  await turnOn();
+  const elsewhere = fx.message({ chat: PERSONAL, handle: A, text: "dinner sunday?" });
+  const row = hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "Joe did", target_message_id: elsewhere });
+  await deliverNext();
+  expect(replier.calls).toHaveLength(0);
+  expect(sender.calls).toEqual([{ target: { kind: "group", chatGuid: HOUSE }, content: { text: "Joe did" } }]);
+  expect(hub.row(row.action_id)).toMatchObject({ status: "sent" });
+});
+
+test("doesn't send twice when the reply script fails after pressing Return", async () => {
+  const { fx, hub, sender, replier, logs, replyNext, turnOn } = setup();
+  await turnOn();
+  const question = fx.message({ chat: HOUSE, handle: A, text: "who paid?" });
+  replier.failAfterSending = true;
+  const row = hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "Joe did", target_message_id: question });
+  await replyNext();
+  expect(sender.calls).toHaveLength(0);
+  expect(hub.row(row.action_id)).toMatchObject({ status: "sent" });
+  expect(logs.some((l) => l.includes("checking chat.db before resending"))).toBe(true);
+});
+
 test("READ_DMS=off ignores every DM, even ones addressed to Tab", async () => {
   const fx = new FakeMessages();
   fx.group(HOUSE, [A, B], "the house");

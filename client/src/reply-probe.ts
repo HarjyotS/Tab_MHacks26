@@ -22,7 +22,9 @@ if (db.latestInChat(target.chat_guid!)?.guid !== target.guid) {
 }
 const before = db.maxRowId();
 try {
-  await uiReplier().reply(target.guid, text);
+  const title = db.chatName(target.chat_guid!);
+  if (!title) throw new Error("that chat has no name, so the probe can't confirm Messages opened it");
+  await uiReplier().reply(target.guid, text, title);
 } catch (err) {
   console.error(`The UI script failed: ${err}`);
   process.exit(1);
