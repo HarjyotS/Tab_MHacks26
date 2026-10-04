@@ -1016,3 +1016,28 @@ export const client_outbox = spacetime.view(
       }));
   }
 );
+
+const nessieMirrorRow = t.row('NessieMirrorItem', {
+  transfer_id: t.string().primaryKey(), amount_cents: t.i64(), from_account_id: t.string(), to_account_id: t.string(),
+  completed_at: t.option(t.timestamp()),
+});
+
+/**
+ * Completed settlements to copy into Nessie as a record (SPEC 12.2). Read-only:
+ * settlement itself is simulated here and never waits on Nessie. Only transfers
+ * where both people have Nessie accounts; seeder role and owner only.
+ */
+export const nessie_mirror = spacetime.view(
+  { name: 'nessie_mirror', public: true }, t.array(nessieMirrorRow), ctx => {
+    if (!isOwner(ctx) && ctx.db.service_roles.identity.find(ctx.sender)?.role !== 'seeder') return [];
+    return [...ctx.db.transfers.by_status.filter('done')].flatMap(transfer => {
+      const from = ctx.db.members.member_id.find(`${transfer.group_id}:${transfer.from_phone}`)?.nessie_account_id;
+      const to = ctx.db.members.member_id.find(`${transfer.group_id}:${transfer.to_phone}`)?.nessie_account_id;
+      if (!from || !to) return [];
+      return [{
+        transfer_id: transfer.transfer_id, amount_cents: transfer.amount_cents, from_account_id: from, to_account_id: to,
+        completed_at: transfer.completed_at,
+      }];
+    });
+  }
+);
