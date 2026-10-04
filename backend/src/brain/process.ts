@@ -51,10 +51,10 @@ const NO = /^(no|nope|nah|wrong|not right)\b/i;
 // Never silence on money talk (Harjyot's playground on #35): every money
 // intent Tab can act on has a question here or its own handler in clarify().
 const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
-  expense: "Want me to split that?",
-  correction: "Want me to change that expense?",
-  dispute: "Is something off with what you owe?",
-  settle_up: "Want me to settle everyone up now?",
+  expense: T.confirmExpense(),
+  correction: T.confirmCorrection(),
+  dispute: T.confirmDispute(),
+  settle_up: T.confirmSettleUp(),
 };
 
 // Intents that only read data or point to the 👍: answered even when unsure.
@@ -870,7 +870,7 @@ export async function tick(ctx: BrainCtx): Promise<void> {
         text: T.objectionReminder(),
         expense_id: e.expense_id,
       });
-      // "Anything else?" reopens the split for replies.
+      // "anything else?" reopens the split for replies.
       addInvite(ctx, { group_id: e.group_id }, { id, text: `${e.description}: ${T.objectionReminder()}`, kind: "split_open", expense_id: e.expense_id });
     }
   });
@@ -919,7 +919,7 @@ async function answerReceipt(
       return;
     }
     const id = `clarify:${m.message_id}`;
-    const question = "What was the total?";
+    const question = T.whatWasTotal();
     await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question });
     askReceipt(ctx, p.source, { id, text: question, read: p.read, stage: "total" });
     return;
