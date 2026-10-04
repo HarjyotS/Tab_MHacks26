@@ -46,11 +46,18 @@ export interface ClassifyInput {
     expense_status: ExpenseStatus;
     my_share_status?: ShareStatus;
   }[];
+  /**
+   * Tab asked a question in this chat and is still waiting on the answer. Set
+   * by the backend for the pre-filter only; Jev never sees it.
+   */
+  tab_question_open?: boolean;
 }
 
 export interface ClassifyResult {
   intent: Intent;
   confidence: number;
+  /** Set when the pre-filter answered `ignore` without calling the classifier. */
+  prefiltered?: boolean;
 }
 
 export type Classify = (input: ClassifyInput) => Promise<ClassifyResult>;
