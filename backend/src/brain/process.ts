@@ -5,10 +5,11 @@ import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
+import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, PRESENCE, priceFromReceipt, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
+  acceptSplit,
   announceSettlements,
   approvalFollowups,
   dispute,
@@ -67,11 +68,6 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
 // Intents that only read data or point to the 👍: answered even when unsure.
 // Not `receipt`: an unsure photo stays with Tab, never Grok's vision (§19).
 const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval"]);
-
-// "just me and priya", "only sam and alex went", "priya and I went, no one
-// else", "jordan didn't come": who was there, said to an open split.
-const PRESENCE =
-  /\b(just|only)\s+\w+\s+(and|&)\s+\w+|\b(no ?one|nobody) else\b|\b(didn'?t|did not|wasn'?t|weren'?t)\s+(go|come|there|in)\b|\bskipped\b/i;
 
 // iPhones type curly quotes ("I’m", "didn’t"); every parser expects ASCII.
 export function normalizeText(text: string | undefined): string | undefined {
@@ -514,7 +510,10 @@ async function applyAnswer(
     case "split_open": {
       const e = threadExpense(ctx, t, "proposed");
       if (!e) return false;
-      if (r.yes_no === "no") return splitLooksRight(ctx, m, t, e);
+      // Agreement is never an objection: "yeah", "nope, looks right" and
+      // "split 4 ways" change nothing, whatever yes_no Grok read (Harjyot's
+      // playground: "yeah" got "ok what was uneven?"). Only a change goes on.
+      if (agreesWithSplit(ctx, m.text ?? "", e)) return splitLooksRight(ctx, m, t, e);
       // The proposal stays open to everyone else's changes.
       await handleAdjustment(ctx, m, m.text ?? "", e, { confirmOnly });
       return true;
@@ -538,6 +537,12 @@ async function applyAnswer(
     case "adjust_open": {
       const e = threadExpense(ctx, t, "proposed", "finalized");
       if (!e) return false;
+      // "split 4 ways", "nvm it's even": even after all, so the split stands
+      // and the question is answered (playground: Tab asked it again).
+      if (agreesWithSplit(ctx, m.text ?? "", e)) {
+        await keepSplit(ctx, m, e, true);
+        return true;
+      }
       // "oh just $10" after "What did Jake actually have?" needs the name.
       await handleAdjustment(ctx, m, r.restated ?? m.text ?? "", e, { confirmOnly });
       closeThread(ctx, chatOf(m), t);
@@ -569,17 +574,15 @@ function threadExpense(ctx: BrainCtx, t: Thread, ...statuses: Expense["status"][
   return open.length === 1 ? open[0] : undefined;
 }
 
-// "nope, looks right" to "Anything uneven?": the same as a 👍 on the
-// proposal from them (§6.2), which locks it in once everyone has.
+// "nope, looks right" to "Anything uneven?": that person is fine with it,
+// as with their 👍 on the proposal (§6.2), and it locks in once everyone
+// is. Unlike the payer's 👍, the payer's typed "yeah" doesn't lock it in.
 async function splitLooksRight(ctx: BrainCtx, m: Message, t: Thread, e: Expense): Promise<boolean> {
   const share = ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
   if (!share || share.status === "opted_out") return false;
   await tapback(ctx, m, "like", e.expense_id);
-  if (!share.responded) await ctx.db.set_share({ ...share, responded: true });
-  if (liveShares(ctx, e.expense_id).every((s) => s.responded)) {
-    closeThread(ctx, chatOf(m), t);
-    await finalize(ctx, ctx.store.expense(e.expense_id)!);
-  }
+  await acceptSplit(ctx, e, m.sender_phone);
+  if (ctx.store.expense(e.expense_id)?.status !== "proposed") closeThread(ctx, chatOf(m), t);
   return true;
 }
 

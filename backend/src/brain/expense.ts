@@ -18,7 +18,8 @@ import {
 } from "./context.js";
 import { extractInput } from "./inputs.js";
 import { startItemizing } from "./receipt.js";
-import { addInvite, addThread, closeExpenseThreads } from "./threads.js";
+import { acceptSplit } from "./settle.js";
+import { addInvite, addThread, closeExpenseThreads, openThreads } from "./threads.js";
 
 export const expenseIdFor = (source_message_id: string) =>
   `exp_${source_message_id}`;
@@ -360,6 +361,9 @@ export async function handleAdjustment(
     return;
   }
   if (result.exclusions.length === 0 && result.fixed.length === 0) {
+    // "yeah", "split 4 ways", "it's even": agreement is never an objection
+    // (Harjyot's playground: "yeah" got "ok what was uneven?").
+    if (agreesWithSplit(ctx, m.text ?? "", expense)) return keepSplit(ctx, m, expense, true);
     // "not even" with no specifics (§7.5): a receipt switches to itemizing;
     // a text expense asks what's uneven and stays proposed.
     if (ctx.store.lineItems(expense.expense_id).length > 0) {
@@ -367,6 +371,9 @@ export async function handleAdjustment(
       await startItemizing(ctx, expense);
       return;
     }
+    // Asked already and still nothing specific: the split stands. Tab never
+    // asks the same thing twice in a row (playground: it looped).
+    if (askingWhatsUneven(ctx, m, expense)) return keepSplit(ctx, m, expense, false);
     await holdOpen(ctx, expense);
     const id = `clarify:${m.message_id}`;
     await tapback(ctx, m, "question", expense.expense_id);
@@ -433,6 +440,83 @@ async function holdOpen(ctx: BrainCtx, expense: Expense) {
   const until = ctx.now().getTime() + ctx.timing.durations.OBJECTION_EXTENSION;
   if ((expense.objection_deadline?.getTime() ?? 0) >= until) return;
   await ctx.db.upsert_expense({ ...expense, objection_deadline: new Date(until) });
+}
+
+// "What's uneven?" (or "what's off?") about this expense, still open here.
+function askingWhatsUneven(ctx: BrainCtx, m: Message, e: Expense): boolean {
+  return openThreads(ctx, chatOf(m)).some((t) => t.data.kind === "adjust_open" && t.expense_id === e.expense_id);
+}
+
+// The split stands as proposed (§7.5): Tab likes the message and stops
+// asking what's uneven. Someone who agreed has responded, the same as a 👍
+// on the proposal from them (§6.2); "it just wasn't" changes nothing.
+export async function keepSplit(ctx: BrainCtx, m: Message, e: Expense, agreed: boolean): Promise<void> {
+  closeExpenseThreads(ctx, e.expense_id, ["adjust_open"]);
+  await tapback(ctx, m, "like", e.expense_id);
+  if (agreed && ctx.store.expense(e.expense_id)?.status === "proposed") await acceptSplit(ctx, e, m.sender_phone);
+}
+
+// "just me and priya", "only sam and alex went", "priya and I went, no one
+// else", "jordan didn't come": who was there, said to an open split.
+export const PRESENCE =
+  /\b(just|only)\s+\w+\s+(and|&)\s+\w+|\b(no ?one|nobody) else\b|\b(didn'?t|did not|wasn'?t|weren'?t)\s+(go|come|there|in)\b|\bskipped\b/i;
+
+// Words that say what to change (§7.5): who had what, who wasn't there,
+// who owes more. "got it" is just agreement.
+const CHANGE_WORDS =
+  /\b(had|has|have|only|just|but|except|without|minus|instead|between|didn'?t|did not|wasn'?t|was not|weren'?t|isn'?t|not|uneven|wrong|off|skip(ped)?|left|out|mine|owes?|owed|paid|pay(ing)?|cover(ed|ing)?|more|less|extra|separate(ly)?|bucks?|dollars?)\b|\bgot\b(?!\s+(it|you|u)\b)|👎/i;
+// A question or a pause is neither agreement nor a change.
+const HESITANT = /\?|❓|^(what|why|how|who|wait|hold on|hang on|hm+|huh|idk|um+|uh+)\b|\b(wait|not sure|idk)\b/i;
+const WAYS = /\b(?:split\s+)?(?:it\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+ways\b/gi;
+const COUNT: Record<string, number> = { two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10 };
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Whether a message to an open split says something to change: a name, who
+// was there, an amount or a fraction, or what someone had. "split 4 ways"
+// says what it already is; "split 3 ways" doesn't.
+export function changesSplit(ctx: BrainCtx, text: string, e: Expense): boolean {
+  const live = liveShares(ctx, e.expense_id).length;
+  const rest = text.replace(WAYS, (all, n: string) => ((Number(n) || COUNT[n.toLowerCase()]) === live ? " " : all));
+  if (new RegExp(WAYS.source, "i").test(rest)) return true;
+  if (/\d|\$/.test(rest) || PRESENCE.test(rest) || CHANGE_WORDS.test(rest) || fractionIn(rest)) return true;
+  // "priyas" names Priya too.
+  return activeMembers(ctx, e.group_id).some((x) => x.name && new RegExp(`\\b${escapeRe(x.name)}('?s)?\\b`, "i").test(rest));
+}
+
+// Agreement with an open split: anything with nothing to change that isn't
+// a question ("yeah", "ok", "looks right", "even split", "nvm it's fine",
+// "split 4 ways" when it is, 👍). Decided in code, whatever Grok read.
+export function agreesWithSplit(ctx: BrainCtx, text: string, e: Expense): boolean {
+  const t = text.trim();
+  return t.length > 0 && !HESITANT.test(t) && !changesSplit(ctx, t, e);
+}
+
+// §7.5 fractional shares, read in code (P6): "half", "a third", "two
+// thirds", "75%", "1/3". "the rest" and "the other half" are what's left
+// after the fixed shares, for the people who said it.
+type Fraction = { num: number; den: number } | "rest";
+const DENOMINATOR: Record<string, number> = {
+  half: 2, halves: 2, third: 3, thirds: 3, quarter: 4, quarters: 4, fourth: 4, fourths: 4, fifth: 5, fifths: 5,
+};
+const NUMERATOR: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4 };
+const REST = /\b(the\s+)?(rest|remainder|remaining|other\s+half|leftovers?)\b/i;
+const PERCENT = /(?<![\d.])(\d{1,3}(?:\.\d+)?)\s*(?:%|percent\b)/i;
+const SLASH = /(?<![\d/])(\d{1,2})\s*\/\s*(\d{1,2})(?![\d/])/;
+const PART = /\b(?:(a|an|one|two|three|four|\d)[\s-]+)?(half|halves|thirds?|quarters?|fourths?|fifths?)\b/i;
+
+export function fractionIn(text: string): Fraction | undefined {
+  if (REST.test(text)) return "rest";
+  const pct = text.match(PERCENT);
+  const slash = text.match(SLASH);
+  const part = text.match(PART);
+  const f = pct
+    ? { num: Number(pct[1]), den: 100 }
+    : slash
+      ? { num: Number(slash[1]), den: Number(slash[2]) }
+      : part
+        ? { num: part[1] ? (NUMERATOR[part[1].toLowerCase()] ?? Number(part[1])) : 1, den: DENOMINATOR[part[2]!.toLowerCase()]! }
+        : undefined;
+  return f && f.num > 0 && f.den > 0 && f.num <= f.den ? f : undefined;
 }
 
 // §7.5: "If an item is named without a price and a receipt exists, match it
