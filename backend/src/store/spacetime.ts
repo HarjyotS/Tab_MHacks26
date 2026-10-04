@@ -11,6 +11,7 @@ type Row<K extends keyof Db> = Db[K] extends { iter(): Iterable<infer R> }
 export const BACKEND_VIEWS = [
   tables.backendMessages,
   tables.backendGroups,
+  tables.backendGroupSettings,
   tables.backendMembers,
   tables.backendOutbox,
   tables.backendExpenses,
@@ -156,6 +157,12 @@ export function spacetimeStore(db: Db): Store {
     group: (id) =>
       [...db.backendGroups.iter()].map(group).find((g) => g.group_id === id),
     groups: () => [...db.backendGroups.iter()].map(group),
+    // The module only stores "ledger" or "per_expense"; no row means ledger.
+    settleMode: (id) =>
+      [...db.backendGroupSettings.iter()].find((r) => r.groupId === id)
+        ?.settleMode === "per_expense"
+        ? "per_expense"
+        : "ledger",
     members: (id) =>
       [...db.backendMembers.iter()]
         .map(member)

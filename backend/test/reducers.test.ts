@@ -22,6 +22,8 @@ function fakeClient() {
     enqueueOutbox: ok(),
     cancelOutbox: ok(),
     createTransfer: ok(),
+    setSettleMode: ok(),
+    resolveDispute: ok(),
     setLedgerSecret: ok(),
   };
   return { r, db: createReducers(r as unknown as ReducerClient) };
@@ -149,5 +151,27 @@ describe("createReducers", () => {
       fromPhone: "+15555550102",
       approvedByMessageId: "m7",
     });
+  });
+
+  it("stores the group's settle mode", async () => {
+    const { r, db } = fakeClient();
+    await db.set_settle_mode({ group_id: "g1", settle_mode: "per_expense" });
+    expect(r.setSettleMode).toHaveBeenCalledWith({
+      groupId: "g1",
+      settleMode: "per_expense",
+    });
+  });
+
+  it("resolves a dispute with the amount as i64 cents, and rejects bad cents", async () => {
+    const { r, db } = fakeClient();
+    await db.resolve_dispute({ expense_id: "e1", phone: "+15555550102", amount_cents: 1500 });
+    expect(r.resolveDispute).toHaveBeenCalledWith({
+      expenseId: "e1",
+      phone: "+15555550102",
+      amountCents: 1500n,
+    });
+    expect(() =>
+      db.resolve_dispute({ expense_id: "e1", phone: "+15555550102", amount_cents: 1.5 }),
+    ).toThrow(InvalidCentsError);
   });
 });
