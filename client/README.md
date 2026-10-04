@@ -32,6 +32,7 @@ chat.db holds every conversation on the account, so the bridge only looks at:
 
 - **Group chats switched on with `/tab on`**, texted into the group from Tab's own phone (or listed in `TAB_GROUP_IDS`). `/tab off` switches it back off.
 - **DMs from members of those groups**, and only if Tab DMed that person within `DM_REPLY_WINDOW_HOURS` (default 72) or the message starts with "tab" or "@tab".
+- `READ_DMS=off` turns DM reading off entirely, so Tab sees only enabled groups. It can still send DMs, such as payment confirmations.
 
 The bridge also refuses to post anywhere else: outbox rows aimed at other groups or non-members are marked `failed`. Message text is never written to disk.
 

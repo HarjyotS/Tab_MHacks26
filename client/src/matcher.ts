@@ -46,6 +46,11 @@ export class SentMatcher {
     return { landed, cancel: () => (remove(), entry.resolve(null)) };
   }
 
+  /** Whether any send to this chat (group guid or DM handle) is waiting to be matched. */
+  expecting(key: string): boolean {
+    return this.expected.some((e) => e.key === key);
+  }
+
   /** Offer a from-me row. Returns true if it was one of our sends. */
   match(key: string, text: string, hasAttachment: boolean, guid: string): boolean {
     const body = cleanText(text);

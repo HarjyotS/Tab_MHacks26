@@ -226,10 +226,9 @@
         "text": "yes"
       },
       "expect": {
-        "intent": "approval",
-        "min_confidence": 0.9
+        "intent": "approval"
       },
-      "note": "Text approvals move money: needs 0.90 or higher"
+      "note": "Typed approvals never move money (P7); Tab points to the 👍"
     },
     {
       "id": 11,

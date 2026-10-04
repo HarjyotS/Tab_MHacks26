@@ -30,7 +30,7 @@ try {
 }
 
 const state = new State(config.statePath);
-const gate = new Gate(state, config.dmReplyWindowMs);
+const gate = new Gate(state, config.dmReplyWindowMs, config.readDms);
 for (const id of config.groupIds) gate.enable(id);
 
 let devHub: DevHub | null = null;

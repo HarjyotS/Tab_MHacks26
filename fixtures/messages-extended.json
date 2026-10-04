@@ -479,8 +479,7 @@
         "text": "yep"
       },
       "expect": {
-        "intent": "approval",
-        "min_confidence": 0.9
+        "intent": "approval"
       }
     },
     {
@@ -504,8 +503,7 @@
         "text": "all good, pay it"
       },
       "expect": {
-        "intent": "approval",
-        "min_confidence": 0.9
+        "intent": "approval"
       }
     },
     {
@@ -529,8 +527,7 @@
         "text": "we're chill"
       },
       "expect": {
-        "intent": "approval",
-        "min_confidence": 0.9
+        "intent": "approval"
       }
     },
     {
@@ -554,8 +551,7 @@
         "text": "sounds right 👍"
       },
       "expect": {
-        "intent": "approval",
-        "min_confidence": 0.9
+        "intent": "approval"
       }
     },
     {
@@ -579,8 +575,7 @@
         "text": "send it"
       },
       "expect": {
-        "intent": "approval",
-        "min_confidence": 0.9
+        "intent": "approval"
       }
     },
     {
@@ -1110,8 +1105,7 @@
         "reply": true
       },
       "expect": {
-        "intent": "approval",
-        "min_confidence": 0.9
+        "intent": "approval"
       }
     },
     {
@@ -1387,6 +1381,58 @@
       "expect": {
         "not_acted_as": "settle_up"
       }
+    },
+    {
+      "id": 175,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "Dhanusb owes me 10,000 thousand"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "From the live test"
+    },
+    {
+      "id": 176,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "He owes me edviro"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "From the live test"
+    },
+    {
+      "id": 177,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "Ok so I owe tanuj 10 bucks"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "From the live test"
+    },
+    {
+      "id": 178,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "Priya owes me 40 for the uber"
+      },
+      "expect": {
+        "intent": "expense"
+      },
+      "note": "From the live test"
     }
   ]
 }
