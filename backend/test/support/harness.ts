@@ -49,7 +49,7 @@ export type AgentStep = ({ call: { name: string; args?: object }[] } | { reply: 
 export function toolClient(steps: AgentStep[], clock?: { now: number }) {
   const requests: { tools: string[]; tool_choice: unknown; messages: { role: string; content?: unknown }[] }[] = [];
   let id = 0;
-  const create = vi.fn(async (params: { tools: { function: { name: string } }[]; tool_choice: unknown; messages: { role: string; content?: unknown }[] }) => {
+  const create = vi.fn(async (params: { tools: { function: { name: string } }[]; tool_choice: unknown; messages: { role: string; content?: unknown }[] }, _options?: unknown) => {
     requests.push({ tools: params.tools.map((t) => t.function.name), tool_choice: params.tool_choice, messages: structuredClone(params.messages) });
     const step = steps.shift();
     if (!step) throw new Error("no scripted agent step");

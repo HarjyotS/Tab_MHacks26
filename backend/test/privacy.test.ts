@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { stubClassifier, withPrefilter, type ClassifyInput } from "@tab/gate";
 import { addThread } from "../src/brain/threads.js";
-import { GROUP, world } from "./support/harness.js";
+import { GROUP, toolClient, world } from "./support/harness.js";
 
 const raw = { is_expense: true, amount_cents: 6300, amount_is_per_person: false, description: "Groceries", payer: "sender", payer_name: null, participants: "everyone", participant_names: [], exclusion_names: [], fixed: [] };
 
@@ -55,6 +55,21 @@ describe("privacy", () => {
     await w.say("Priya", "the second one");
     expect(seen.at(-1)).toMatchObject({ tab_question_open: true, message: { text: "the second one" } });
     expect(logged.at(-1)).toMatchObject({ prefiltered: false });
+  });
+
+  it("never runs the money brain for a message the gate ignored, and its context holds no chatter", async () => {
+    const w = world({});
+    const t = toolClient([{ reply: "Everyone's square." }]);
+    w.ctx.ask = { client: t.client, model: "m" };
+    w.ctx.classify = withPrefilter(stubClassifier);
+    const chatter = ["lol", "who's driving", "what time is the movie", "how was the party", "who has my charger"];
+    for (const text of chatter) await w.say("Kian", text);
+    expect(t.create).not.toHaveBeenCalled();
+
+    await w.say("Priya", "who paid for the uber?");
+    expect(t.create).toHaveBeenCalledTimes(1);
+    const prompt = JSON.stringify(t.requests[0]!.messages);
+    for (const text of chatter) expect(prompt).not.toContain(text);
   });
 });
 

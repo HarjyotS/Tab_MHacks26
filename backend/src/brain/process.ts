@@ -23,13 +23,8 @@ import {
 } from "./settle.js";
 import { handleCorrection } from "./correction.js";
 import { handleLedger } from "./ledger.js";
-import {
-  handleBalanceQuery,
-  handleBreakdown,
-  handleHelp,
-  handleNameReply,
-  onboardNewGroups,
-} from "./talk.js";
+import { handleHelp, handleNameReply, onboardNewGroups } from "./talk.js";
+import { answerQuestion } from "./ask.js";
 import { addInvite, addThread, closeThread, holdsLockIn, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
 
@@ -39,7 +34,7 @@ import * as T from "../copy/templates.js";
 const MONEY_INTENTS = new Set<Intent>([
   "expense", "receipt", "split_adjustment", "claim", "correction",
   "approval", "dispute", "payment_reported", "balance_query", "breakdown_request",
-  "answer",
+  "answer", "money_question",
 ]);
 
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
@@ -111,9 +106,13 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
 
       const reply = await answerThreads(ctx, m, result, decision);
       const answered = reply.answered;
-      // "why?" right after Tab's balance reply: the short explanation.
-      const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
-      if (why) await handleBreakdown(ctx, m);
+      // "why?" right after Tab's balance reply: the explanation. A full
+      // question the gate passed ("how much did we spend on food?") is
+      // answered as itself.
+      const why =
+        !answered && !(decision !== "ignore" && intent === "money_question") &&
+        WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
+      if (why) await answerQuestion(ctx, m, "why", repliedExpense(ctx, m));
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
       const ledger = !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);
@@ -154,7 +153,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
 
 const LEDGER_ASK = /\bledger\b/i;
 const TO_TAB = /^@?tab\b/i;
-const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
 
 function wantsLedger(m: Message, intent: Intent, decision: string): boolean {
   const text = (m.text ?? "").trim();
@@ -192,10 +191,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       const e = boundIf("finalized");
       return dispute(ctx, m, e ? [e] : disputeTargets(ctx, m));
     }
+    // Questions go to the money brain, which falls back to the templates
+    // (§7.8 Questions). An inline reply to an expense is handed to it.
     case "balance_query":
-      return handleBalanceQuery(ctx, m);
     case "breakdown_request":
-      return handleBreakdown(ctx, m);
+    case "money_question":
+      return answerQuestion(ctx, m, intent, bound);
     case "help":
       return handleHelp(ctx, m);
     case "receipt":

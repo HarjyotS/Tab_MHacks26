@@ -25,6 +25,8 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
     'The expense is already final and a settle request is open for the sender, and they refuse to pay or say their amount is wrong ("no", "I didn\'t get fries").',
   balance_query: 'The sender asks who owes what, or how much they owe or are owed.',
   breakdown_request: 'The sender asks which expenses make up a balance, or where an amount came from.',
+  money_question:
+    'The sender asks a question about the group\'s money that is not just who owes what: what something cost, what was on a receipt, who paid for something, how a split was worked out, how much was spent in total or on something, what is left to settle or who has not paid yet, or whether a payment went through ("what was on the bistro receipt?", "how much did we spend on food?", "who paid for the uber?"). It asks; it does not report a new purchase.',
   payment_reported:
     'The sender says they already sent money to someone outside Tab, including payment-app verbs ("sent you 20 on venmo", "venmo\'d you", "zelled you for the uber", "paid Priya back on cashapp"). Asking to be paid is not this.',
   settle_up:
