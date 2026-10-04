@@ -5,6 +5,8 @@ export type Decision = "act" | "clarify" | "ignore";
 
 type Thresholds = { act: number; clarify: number };
 
+const addressed: Thresholds = { act: 0.6, clarify: 0.3 };
+
 function hasSettleRequestFor(input: ClassifyInput): boolean {
   return input.open_items.some(
     (o) => o.expense_status === "finalized" && o.my_share_status === "locked",
@@ -21,7 +23,10 @@ export function decide(
   // A typed approval never moves money (P7, SPEC #15); it only earns a pointer
   // to the 👍, and only when something is waiting to be paid.
   if (result.intent === "approval" && !hasSettleRequestFor(input)) return "ignore";
-  if (result.confidence >= t.act) return "act";
-  if (result.confidence >= t.clarify) return "clarify";
+  // An inline reply to Tab is talking to Tab (Harjyot: replies carry more
+  // weight), so a less certain read still gets an answer or a question.
+  const bar = input.message.reply_to_tab ? addressed : t;
+  if (result.confidence >= bar.act) return "act";
+  if (result.confidence >= bar.clarify) return "clarify";
   return "ignore";
 }
