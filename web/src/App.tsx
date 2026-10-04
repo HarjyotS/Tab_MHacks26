@@ -4,6 +4,8 @@ import {
   Controls,
   MarkerType,
   ReactFlow,
+  useNodesInitialized,
+  useReactFlow,
   type Edge,
   type Node,
 } from '@xyflow/react';
@@ -85,10 +87,27 @@ export function App({ secret }: AppProps) {
     () => new Map(members.map(member => [member.ledgerMemberId, member.name ?? 'Unnamed member'])),
     [members]
   );
+  const [graphBox, setGraphBox] = useState<Size>({ width: 0, height: 0 });
+  const [graphElement, setGraphElement] = useState<HTMLDivElement | null>(null);
   const graph = useMemo(
-    () => buildGraph(members, balances, pulse, names),
-    [members, balances, pulse, names]
+    () => buildGraph(members, balances, pulse, names, graphBox),
+    [members, balances, pulse, names, graphBox]
   );
+
+  // Lay the graph out for the box it actually has, and refit when that box changes.
+  useEffect(() => {
+    const element = graphElement;
+    if (!element) return;
+    const measure = () => {
+      const { width, height } = element.getBoundingClientRect();
+      setGraphBox(current => current.width === Math.round(width) && current.height === Math.round(height)
+        ? current : { width: Math.round(width), height: Math.round(height) });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [graphElement]);
 
   if (!secret) return <StatusPage title="Ledger link required" detail="Open the private link posted by Tab in your group chat." />;
   if (connectionError) return <StatusPage title="Ledger unavailable" detail={connectionError.message} />;
@@ -137,11 +156,15 @@ export function App({ secret }: AppProps) {
       <section className="dashboard-grid">
         <article className="panel graph-panel">
           <div className="panel-heading"><div><p className="eyebrow">Money flow</p><h2>Who owes whom</h2></div><span className="hint">Live</span></div>
-          <div className="graph-wrap">
+          <div className="graph-wrap" ref={setGraphElement}>
             {balances.length === 0 && !pulse ? (
               <div className="empty-state"><span>✓</span><strong>Everyone is square</strong><small>No outstanding balances</small></div>
             ) : (
-              <ReactFlow nodes={graph.nodes} edges={graph.edges} fitView minZoom={0.65} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}>
+              <ReactFlow
+                nodes={graph.nodes} edges={graph.edges} fitView fitViewOptions={FIT_VIEW}
+                minZoom={0.2} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}
+              >
+                <FitOnResize box={graphBox} nodeCount={graph.nodes.length} />
                 <Background color="#d7dfda" gap={22} size={1} />
                 <Controls showInteractive={false} />
               </ReactFlow>
@@ -232,22 +255,53 @@ function ExpenseDetail({ expense, shares, items, claims, transfers, names }: {
   );
 }
 
+type Size = { width: number; height: number };
+
+const FIT_VIEW = { padding: 0.08, maxZoom: 1.2 };
+const NARROW_GRAPH = 520;
+
+/** Fits the whole graph whenever its box or node count changes, not only on first render. */
+function FitOnResize({ box, nodeCount }: { box: Size; nodeCount: number }) {
+  const { fitView } = useReactFlow();
+  const initialized = useNodesInitialized();
+  useEffect(() => {
+    if (!initialized || !box.width) return;
+    const frame = requestAnimationFrame(() => { void fitView(FIT_VIEW); });
+    return () => cancelAnimationFrame(frame);
+  }, [initialized, box.width, box.height, nodeCount, fitView]);
+  return null;
+}
+
 function buildGraph(
-  members: readonly LedgerMember[], balances: readonly LedgerBalance[], pulse: Pulse | undefined, names: Map<string, string>
+  members: readonly LedgerMember[], balances: readonly LedgerBalance[], pulse: Pulse | undefined,
+  names: Map<string, string>, box: Size
 ): { nodes: Node[]; edges: Edge[] } {
-  const radius = 165;
+  // A circle sized to the container, so fitView barely has to zoom on narrow screens.
+  const width = box.width || 440;
+  const height = box.height || 400;
+  const narrow = width < NARROW_GRAPH;
+  const nodeSize = { width: 96, height: 80 };
+  const radiusX = Math.max(60, width / 2 - nodeSize.width / 2 - 12);
+  const radiusY = Math.max(60, height / 2 - nodeSize.height / 2 - 12);
+  // Two people read best side by side; more go round from the top.
+  const start = members.length === 2 ? Math.PI : -Math.PI / 2;
   const nodes: Node[] = members.map((member, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(members.length, 1) - Math.PI / 2;
+    const angle = start + (Math.PI * 2 * index) / Math.max(members.length, 1);
     return {
       id: member.ledgerMemberId,
-      position: { x: 210 + Math.cos(angle) * radius, y: 180 + Math.sin(angle) * radius },
+      position: {
+        x: width / 2 + Math.cos(angle) * radiusX - nodeSize.width / 2,
+        y: height / 2 + Math.sin(angle) * radiusY - nodeSize.height / 2,
+      },
+      style: { width: nodeSize.width },
       data: { label: <div className="person-node"><span>{(member.name ?? '?').slice(0, 1).toUpperCase()}</span><strong>{member.name ?? 'Unnamed'}</strong></div> },
       className: pulse && (pulse.from === member.ledgerMemberId || pulse.to === member.ledgerMemberId) ? 'graph-node pulse' : 'graph-node',
     };
   });
   const edges: Edge[] = balances.map(balance => ({
     id: balance.edgeId, source: balance.fromLedgerMemberId, target: balance.toLedgerMemberId,
-    label: `${names.get(balance.fromLedgerMemberId)} owes ${formatMoney(balance.amountCents)}`,
+    // The arrow already says who owes whom; on narrow screens the full sentence covers the nodes.
+    label: narrow ? formatMoney(balance.amountCents) : `${names.get(balance.fromLedgerMemberId)} owes ${formatMoney(balance.amountCents)}`,
     markerEnd: { type: MarkerType.ArrowClosed, color: '#ee5d3f' },
     style: { stroke: '#ee5d3f', strokeWidth: 2.5 }, labelStyle: { fill: '#28322d', fontWeight: 700, fontSize: 12 },
   }));
