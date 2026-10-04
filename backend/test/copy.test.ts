@@ -625,3 +625,11 @@ describe("group balance with splits that aren't locked in", () => {
     expect(T.balanceReply({ debts: [] })).toBe("everyone's square rn");
   });
 });
+
+describe("a split with one person owing", () => {
+  it("names who owes instead of 'split 1 ways'", () => {
+    const text = T.splitProposal({ seed: "m1", description: "palm reading", total_cents: 2000, shares: [{ person: { phone: "+15550002230", name: "Dhanush" }, amount_cents: 2000 }] });
+    expect(text.split("\n")[0]).toBe("palm reading $20.00: Dhanush owes $20.00");
+    expect(text).not.toMatch(/split 1 ways/);
+  });
+});
