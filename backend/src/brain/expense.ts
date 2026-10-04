@@ -368,6 +368,8 @@ export async function handleAdjustment(
 // Sam still on it, 6 seconds after "How much was Priya's 2 soft drinks?").
 async function holdOpen(ctx: BrainCtx, expense: Expense) {
   if (expense.status !== "proposed") return;
+  // Seen by tick, since some of these questions set no pending.
+  ctx.memory.holds.set(expense.expense_id, ctx.now());
   const until = ctx.now().getTime() + ctx.timing.durations.OBJECTION_EXTENSION;
   if ((expense.objection_deadline?.getTime() ?? 0) >= until) return;
   await ctx.db.upsert_expense({ ...expense, objection_deadline: new Date(until) });
@@ -418,15 +420,15 @@ function words(text: string): string[] {
 export function receiptPrice(item: string, items: LineItem[]): number | undefined {
   const want = words(item);
   if (want.length === 0) return undefined;
-  const scored = items
-    .map((line) => {
-      const have = new Set(words(line.description));
-      return { line, hits: want.filter((w) => have.has(w)).length };
-    })
-    .filter((s) => s.hits > 0)
-    .sort((a, b) => b.hits - a.hits);
-  if (scored.length === 0 || (scored[1] && scored[1].hits === scored[0]!.hits)) return undefined;
-  const { line } = scored[0]!;
+  // Every word they said must be on the line, inside compounds too, so
+  // "burger" matches both VEGGIE BURGER and CHEESEBURGER and gets asked
+  // (Joe's review on #30).
+  const matches = items.filter((line) => {
+    const have = words(line.description);
+    return want.every((w) => have.some((h) => h.includes(w)));
+  });
+  if (matches.length !== 1) return undefined;
+  const line = matches[0]!;
   const lineQty = Math.max(line.quantity, Number(line.description.match(/^\s*(\d+)\s*x\b/i)?.[1] ?? 1));
   const asked = item.trim().toLowerCase().match(/^(\d+|a|an|one|two|three|four|five|six)\b/)?.[1];
   const qty = asked === undefined ? lineQty : Number(asked) || NUMBER_WORDS[asked]!;
@@ -455,6 +457,7 @@ export async function applyAdjustment(
   result: ExpenseExtraction,
 ) {
   const current = ctx.store.expense(snapshot.expense_id) ?? snapshot;
+  ctx.memory.holds.delete(current.expense_id);
   if (current.status === "finalized" && moneyMoving(ctx, current)) return;
   const expense = current.status === "finalized" ? await reopen(ctx, current) : current;
   const before = new Map(

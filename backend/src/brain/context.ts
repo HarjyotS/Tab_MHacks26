@@ -85,6 +85,10 @@ export class Memory {
     { sender_phone: string; text: string; at: Date }[]
   >();
   pending = new Map<string, Pending>();
+  // Proposed expenses Tab asked about, and when (§7.5: no lock-in under a
+  // question). Cleared when an adjustment applies; expires with
+  // PENDING_QUESTION_TTL.
+  holds = new Map<string, Date>();
   lastHadWit = new Map<string, boolean>();
   // Style flags from every text message (no text), for matching the group.
   private style = new Map<string, StyleFlags[]>();

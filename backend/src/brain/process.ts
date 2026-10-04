@@ -391,6 +391,8 @@ export async function tick(ctx: BrainCtx): Promise<void> {
 // or confirming a change to it).
 function askingAbout(ctx: BrainCtx, expense_id: string): boolean {
   const ttl = ctx.timing.durations.PENDING_QUESTION_TTL;
+  const held = ctx.memory.holds.get(expense_id);
+  if (held && ctx.now().getTime() - held.getTime() <= ttl) return true;
   return [...ctx.memory.pending.values()].some(
     (p) => "expense_id" in p && p.expense_id === expense_id && ctx.now().getTime() - p.asked_at.getTime() <= ttl,
   );

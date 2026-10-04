@@ -129,6 +129,17 @@ describe("balance questions by DM", () => {
   });
 });
 
+describe("no lock-in under Tab's question (Joe's review on #30)", () => {
+  it('holds a split while "What\'s uneven?" is unanswered', async () => {
+    const w = world({ expense: { ...script.expense, "adjustment|not even": raw(null, null, "unknown") } });
+    await w.say("Joe", "got pizza, $40");
+    await w.say("Kian", "not even");
+    expect(w.said("clarifying_question")).toEqual(["What's uneven?"]);
+    await w.wait(31_000);
+    expect(w.db.expenses()[0]!.status).toBe("proposed");
+  });
+});
+
 describe("let's settle up with something still open", () => {
   it("locks in a split still open for changes and asks to settle it", async () => {
     // "settle it now lol" used to get "isn't locked in yet", and "yeah

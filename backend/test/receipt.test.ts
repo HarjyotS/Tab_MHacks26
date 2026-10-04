@@ -283,6 +283,8 @@ describe("an item named without a price (SPEC 7.5)", () => {
   it("asks rather than guess on no match or a tie", () => {
     expect(receiptPrice("key lime pie", bistro)).toBeUndefined();
     expect(receiptPrice("burger", items([["CHEESE BURGER", 1, 1200], ["VEGGIE BURGER", 1, 1100]]))).toBeUndefined();
+    expect(receiptPrice("burger", items([["VEGGIE BURGER", 1, 1100], ["CHEESEBURGER", 1, 1200]]))).toBeUndefined();
+    expect(receiptPrice("cheeseburger", items([["VEGGIE BURGER", 1, 1100], ["CHEESEBURGER", 1, 1200]]))).toBe(1200);
   });
 });
 
