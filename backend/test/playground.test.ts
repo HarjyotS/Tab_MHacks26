@@ -130,13 +130,16 @@ describe("balance questions by DM", () => {
 });
 
 describe("let's settle up with something still open", () => {
-  it("names what isn't locked in yet instead of saying everyone's square", async () => {
+  it("locks in a split still open for changes and asks to settle it", async () => {
+    // "settle it now lol" used to get "isn't locked in yet", and "yeah
+    // lock it in" after that went nowhere.
     const w = world(script);
+    w.db.transferKey = "approval_expense";
     await w.say("Joe", "got pizza, $40");
     await w.say("Kian", "let's settle up");
-    expect(w.said("balance_reply")).toEqual([
-      "Pizza ($40.00) isn't locked in yet. I'll include it once it is.",
-    ]);
+    expect(w.said("balance_reply")).toEqual([]);
+    expect(w.db.expenses()[0]!.status).toBe("finalized");
+    expect(w.said("settle_request")).toHaveLength(1);
   });
 });
 

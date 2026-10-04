@@ -31,7 +31,8 @@ const owing = (ctx: BrainCtx, e: Expense): Share[] =>
 // Lock every share, then the expense. Order matters: the module recomputes
 // on set_share and refuses to once the expense is finalized. In per-expense
 // mode the settle request goes out now; in ledger mode it waits for settle_up.
-export async function finalize(ctx: BrainCtx, snapshot: Expense) {
+// settle_up passes request: false, since it posts one request for everything.
+export async function finalize(ctx: BrainCtx, snapshot: Expense, opts: { request?: boolean } = {}) {
   // Read it again: the caller's copy may predate another finalize.
   const expense = ctx.store.expense(snapshot.expense_id);
   if (
@@ -58,7 +59,7 @@ export async function finalize(ctx: BrainCtx, snapshot: Expense) {
     status: "finalized",
     finalized_at: ctx.now(),
   });
-  if (settleModeFor(ctx, expense.group_id) === "per_expense") {
+  if (opts.request !== false && settleModeFor(ctx, expense.group_id) === "per_expense") {
     // A reopened expense (§7.7) gets a new request, so a new id.
     const first = `settle_request:${expense.expense_id}`;
     const id = ctx.store.outbox().some((o) => o.action_id === first) ? `${first}:${ctx.now().getTime()}` : first;
@@ -117,6 +118,13 @@ async function postSettleRequest(
 // "let's settle up" (SPEC #15): one request for everything outstanding.
 export async function settleUp(ctx: BrainCtx, m: Message) {
   if (!m.group_id) return;
+  // Asking to settle now ends the window for changes: lock in proposed
+  // splits and include them (Harjyot's playground: "settle it now lol" got
+  // "isn't locked in yet"). Safe, since only each payer's 👍 moves money.
+  // Receipts still waiting on item claims stay open.
+  for (const e of ctx.store.expenses())
+    if (e.group_id === m.group_id && e.status === "proposed" && e.payer_phone)
+      await finalize(ctx, e, { request: false });
   const outstanding = ctx.store
     .expenses()
     .filter(
