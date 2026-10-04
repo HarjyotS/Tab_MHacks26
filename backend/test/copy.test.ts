@@ -281,6 +281,8 @@ function renders(seed: string): {
       const text = T.rephraseQuestion(problem, { description: "Uber", people: [joe], example_cents: 1600 });
       return text ? [{ purpose: "clarifying_question" as const, group: true, text, amounts: [1600] }] : [];
     }),
+    { purpose: "other", group: false, text: T.payeeTapped([jake, priya]), amounts: [] },
+    { purpose: "other", group: false, text: T.payeeTapped([]), amounts: [] },
     { purpose: "balance_reply", group: true, text: T.nothingToSettle(), amounts: [] },
     { purpose: "balance_reply", group: true, text: T.notLockedYet([{ description: "Pizza", total_cents: 4800 }]), amounts: [4800] },
     { purpose: "balance_reply", group: true, text: T.balanceReply({ debts: [] }), amounts: [] },

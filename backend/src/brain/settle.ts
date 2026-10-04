@@ -390,6 +390,7 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
   if (!target) return;
 
   if (target.purpose === "settle_request") {
+    if (m.reaction === "like" && (await payeeTapped(ctx, m, target.action_id))) return;
     const request_id = liveRequest(ctx, m, target.action_id);
     if (!request_id) return;
     if (m.reaction === "like") await approveRequest(ctx, m, request_id);
@@ -421,6 +422,27 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
     });
     addInvite(ctx, chatOf(m), { id, text: `${expense.description}: ${T.whatsOff(m.message_id)}`, kind: "adjust_open", expense_id: expense.expense_id });
   }
+}
+
+// The payee's own 👍 on a settle request pays nothing (P7), but Tab says
+// so once, by DM, with who it's still waiting on (Joe's review on #47:
+// Priya tapped five times). True when the tap was the payee's: they're
+// owed on this request and owe nothing on it.
+async function payeeTapped(ctx: BrainCtx, m: Message, request_id: string): Promise<boolean> {
+  const covered = requestExpenses(ctx, request_id);
+  const owed = covered.filter((e) => e.payer_phone === m.sender_phone);
+  if (owed.length === 0 || covered.some((e) => owing(ctx, e).some((s) => s.phone === m.sender_phone))) return false;
+  const id = `payee_tap:${request_id}:${m.sender_phone}`;
+  if (ctx.store.outbox().some((o) => o.action_id === id)) return true; // said once already
+  const group_id = owed[0]!.group_id;
+  const waiting = [...new Set(owed.flatMap((e) => owing(ctx, e).map((s) => s.phone)))];
+  await say(ctx, {
+    chat: { dm_phone: m.sender_phone },
+    purpose: "other",
+    id,
+    text: T.payeeTapped(waiting.map((phone) => person(ctx, group_id, phone))),
+  });
+  return true;
 }
 
 // After the scheduled reducer completes transfers (Kian's M0 note):

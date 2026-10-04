@@ -136,6 +136,13 @@ export function settleRequest(a: { seed: string; owed: Owed[]; description?: str
 // A typed "yes" never moves money (P7, SPEC #15).
 export const tapToPay = () => "just tap 👍 on the settle msg to pay your part";
 
+// The payee's own 👍 on a settle request pays nothing (P7): said once, so
+// they know Tab saw it (Joe's review on #47: Priya tapped five times).
+export const payeeTapped = (waitingOn: Person[]) =>
+  waitingOn.length > 0
+    ? `you're the one getting paid, just waiting on ${listJoin(waitingOn.map(displayName))}`
+    : "everyone's already paid you";
+
 export const nothingToSettle = () => "nothing to settle, everyone's even";
 
 // "let's settle up" while a receipt is still waiting on claims (Harjyot's
