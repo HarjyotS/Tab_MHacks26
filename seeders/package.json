@@ -10,6 +10,8 @@
     "seed:demo": "tsx src/demo.ts",
     "seed:nessie": "tsx src/nessie.ts",
     "grant:role": "tsx src/grant-role.ts",
+    "nessie:mirror": "tsx src/nessie-worker.ts",
+    "verify:nessie": "tsx src/verify-nessie-settlement.ts",
     "verify:settlement": "tsx src/verify-settlement.ts",
     "verify:access": "tsx src/verify-ledger-access.ts",
     "verify:backend-access": "tsx src/verify-backend-access.ts",

@@ -80,6 +80,7 @@ import LedgerItemsRow from "./ledger_items_table";
 import LedgerMembersRow from "./ledger_members_table";
 import LedgerSharesRow from "./ledger_shares_table";
 import LedgerTransfersRow from "./ledger_transfers_table";
+import NessieMirrorRow from "./nessie_mirror_table";
 import SeederMembersRow from "./seeder_members_table";
 
 /** Type-only namespace exports for generated type groups. */
@@ -219,6 +220,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, LedgerTransfersRow),
+  nessieMirror: __table({
+    name: 'nessie_mirror',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, NessieMirrorRow),
   seederMembers: __table({
     name: 'seeder_members',
     indexes: [
@@ -299,6 +307,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "ledger_shares": Omit<typeof tablesSchema.schemaType.tables["ledgerShares"], "accessorName"> & { readonly accessorName: "ledger_shares" };
     /** @deprecated Use `ledgerTransfers` instead. This alias will be removed in the next major version. */
     readonly "ledger_transfers": Omit<typeof tablesSchema.schemaType.tables["ledgerTransfers"], "accessorName"> & { readonly accessorName: "ledger_transfers" };
+    /** @deprecated Use `nessieMirror` instead. This alias will be removed in the next major version. */
+    readonly "nessie_mirror": Omit<typeof tablesSchema.schemaType.tables["nessieMirror"], "accessorName"> & { readonly accessorName: "nessie_mirror" };
     /** @deprecated Use `seederMembers` instead. This alias will be removed in the next major version. */
     readonly "seeder_members": Omit<typeof tablesSchema.schemaType.tables["seederMembers"], "accessorName"> & { readonly accessorName: "seeder_members" };
   };
@@ -338,6 +348,7 @@ const tableAccessorAliases = {
   "ledger_members": "ledgerMembers",
   "ledger_shares": "ledgerShares",
   "ledger_transfers": "ledgerTransfers",
+  "nessie_mirror": "nessieMirror",
   "seeder_members": "seederMembers",
 } as const;
 
@@ -397,6 +408,8 @@ export type DbView = __DbViewBase & {
   readonly "ledger_shares": __DbViewBase["ledgerShares"];
   /** @deprecated Use `ledgerTransfers` instead. This alias will be removed in the next major version. */
   readonly "ledger_transfers": __DbViewBase["ledgerTransfers"];
+  /** @deprecated Use `nessieMirror` instead. This alias will be removed in the next major version. */
+  readonly "nessie_mirror": __DbViewBase["nessieMirror"];
   /** @deprecated Use `seederMembers` instead. This alias will be removed in the next major version. */
   readonly "seeder_members": __DbViewBase["seederMembers"];
 };
@@ -441,6 +454,8 @@ export type Tables = __TablesBase & {
   readonly "ledger_shares": __TablesBase["ledgerShares"];
   /** @deprecated Use `ledgerTransfers` instead. This alias will be removed in the next major version. */
   readonly "ledger_transfers": __TablesBase["ledgerTransfers"];
+  /** @deprecated Use `nessieMirror` instead. This alias will be removed in the next major version. */
+  readonly "nessie_mirror": __TablesBase["nessieMirror"];
   /** @deprecated Use `seederMembers` instead. This alias will be removed in the next major version. */
   readonly "seeder_members": __TablesBase["seederMembers"];
 };
