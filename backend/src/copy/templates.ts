@@ -370,11 +370,24 @@ export const totalUnderPinned = (pinned_cents: number) =>
 
 export type Debt = { from: Person; to: Person; amount_cents: number };
 
+// `pending`: what open splits (proposed, or a receipt still being claimed)
+// would come to, so "who owes who" never says "square" over open money.
 export function balanceReply(a: {
   debts: Debt[];
   ledger_url?: string;
+  pending?: Debt[];
 }): string {
-  if (a.debts.length === 0) return "everyone's square rn";
+  const line = (d: Debt) => `${displayName(d.from)} owes ${displayName(d.to)} ${money(d.amount_cents)}`;
+  const pending = a.pending ?? [];
+  if (a.debts.length === 0) {
+    if (pending.length === 0) return "everyone's square rn";
+    return `nothing's locked in yet, but as it stands:\n${pending.slice(0, 6).map(line).join("\n")}\nsay "settle up" when you're ready`;
+  }
+  const open = pending.length ? `\nnot locked in yet: ${pending.slice(0, 6).map(line).join(", ")}` : "";
+  return lockedBalance(a) + open;
+}
+
+function lockedBalance(a: { debts: Debt[]; ledger_url?: string }): string {
   const lines = a.debts
     .slice(0, 6)
     .map(

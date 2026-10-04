@@ -189,7 +189,7 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       if (!breakdown && !answered && !why && !ledger) {
         try {
           if (decision === "act") await act(ctx, m, result.intent);
-          else if (decision === "clarify") await clarify(ctx, m, result.intent);
+          else if (decision === "clarify") await clarify(ctx, m, result.intent, undefined, result.confidence);
         } catch (err) {
           failed = err; // still worth a last-resort answer below
         }
@@ -330,7 +330,11 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
 
 // `id` differs when the same message also answered one of Tab's questions,
 // which may have asked something already.
-async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`) {
+// Fairly sure it's an expense, just short of the act bar: after "yes" the
+// sender is the payer, so Tab asks one question, not two.
+const FAIRLY_SURE = 0.75;
+
+async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`, confidence = 0) {
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
@@ -374,7 +378,7 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     who: "asker",
     asker: m.sender_phone,
     data: intent === "expense"
-      ? { kind: "confirm", then: "expense", source: m, asked_at: ctx.now() }
+      ? { kind: "confirm", then: "expense", source: m, sender_paid: confidence >= FAIRLY_SURE, asked_at: ctx.now() }
       : { kind: "confirm", then: "act", intent, source: m, asked_at: ctx.now() },
   });
 }
@@ -848,7 +852,7 @@ async function answerConfirm(
     await tapback(ctx, m, "like");
     return;
   }
-  if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source);
+  if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source, { senderPaid: p.sender_paid && m.sender_phone === p.source.sender_phone });
   else if (p.then === "adjustment" && p.extraction && p.expense_id) {
     const expense = ctx.store.expense(p.expense_id);
     if (expense?.status === "proposed" || expense?.status === "finalized") {

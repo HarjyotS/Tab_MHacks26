@@ -89,6 +89,7 @@ export async function handleExpense(
   m: Message,
   text = m.text ?? "",
   source: Message = m,
+  opts: { senderPaid?: boolean } = {},
 ): Promise<void> {
   const group_id = groupFor(ctx, source);
   if (!group_id) {
@@ -105,6 +106,13 @@ export async function handleExpense(
     "new",
   );
   if (!extracted.result.is_expense) return; // Not a purchase after all: stay silent (P1).
+  // "ice cream was 50" → "want me to split that?" → "yeah": whoever said it
+  // and wants it split is the one who paid. One question, not two
+  // (playground run); "no, alex paid" is still a correction away.
+  if (opts.senderPaid && extracted.result.payer.kind === "unknown") {
+    extracted.result = { ...extracted.result, payer: { kind: "sender" }, missing: extracted.result.missing.filter((x) => x !== "payer") };
+    extracted.problems = extracted.problems.filter((p) => p.kind !== "missing_payer");
+  }
   const { result, problems } = extracted;
   const expense_id = expenseIdFor(source.message_id);
 
