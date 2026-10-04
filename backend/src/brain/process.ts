@@ -113,7 +113,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       } else if (reply.rest) {
         // The same message also said something else ("yep, and I got gas $30").
         if (reply.rest.decision === "act") await act(ctx, m, reply.rest.intent);
-        else await clarify(ctx, m, reply.rest.intent);
+        else await clarify(ctx, m, reply.rest.intent, `clarify:${m.message_id}:rest`);
       }
     }
     await ctx.db.set_message_result({
@@ -198,7 +198,9 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
   }
 }
 
-async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
+// `id` differs when the same message also answered one of Tab's questions,
+// which may have asked something already.
+async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`) {
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
@@ -211,7 +213,6 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   }
   const question = CONFIRM_QUESTION[intent];
   if (!question) return; // e.g. a possible name: never guess (P3), stay quiet (P1)
-  const id = `clarify:${m.message_id}`;
   await tapback(ctx, m, "question");
   await say(ctx, {
     chat: chatOf(m),
@@ -251,13 +252,21 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   const replied = threadForReply(ctx, m, mine);
   const pool = replied ? [replied] : mine;
 
-  // 1. Today's parsers, for a plain answer to exactly one question: no Grok call.
+  // 1. Today's parsers, for a plain answer to exactly one question: no Grok
+  //    call. The settle-mode question takes a parser answer only when it's
+  //    the only question open, or replied to inline: a "nah" to anything else
+  //    must not switch the group's mode (Joe's review on #35). And a question
+  //    Tab asked the sender themselves comes first: their "no" to a large
+  //    amount, "no tip", or "no" to a receipt total answers it.
   const hits = pool.flatMap((t) => {
+    if (t.data.kind === "settle_mode" && t !== replied && mine.length > 1) return [];
     const apply = quickAnswer(ctx, m, t);
-    return apply ? [apply] : [];
+    return apply ? [{ t, apply }] : [];
   });
-  if (hits.length === 1) {
-    await hits[0]!();
+  const own = hits.filter((h) => h.t.who === "asker" && isAsker(h.t, m));
+  const hit = own.length === 1 ? own[0] : hits.length === 1 ? hits[0] : undefined;
+  if (hit) {
+    await hit.apply();
     return { answered: true };
   }
   // 2. A question about an expense, answered by the person Tab asked (or
@@ -268,9 +277,8 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   if (reask && (await answerExpense(ctx, m, reask, isAsker(reask, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m)))))
     return { answered: true };
 
-  // 3. Grok, for everything the parsers can't read. Only a message the gate
-  //    passed, or one from the person Tab asked a question only they can
-  //    answer, ever reaches it (§19, §16.3). For invites alone the gate's
+  // 3. Grok, for everything the parsers can't read. Only a money message or
+  //    an answer the gate acts on ever reaches it (§19, §16.3). For invites alone the gate's
   //    own intent already reaches the same handler ("2" to the item list is
   //    a claim), so it isn't asked then unless the gate called it an answer.
   //    A dispute takes only a clear amount, which the parsers read already.
@@ -278,12 +286,14 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   // The settle-mode question stays open for hours after onboarding; the
   // parsers read most answers to it, so it alone doesn't send every new
   // expense to Grok.
-  const asked = offered.filter((t) => !INVITES.has(t.data.kind) && t.data.kind !== "settle_mode");
-  const askerOnly = offered.some((t) => t.who === "asker" && isAsker(t, m) && t.data.kind !== "dispute");
-  const worth = passed && (result.intent === "answer" || asked.length > 0);
+  const asked = offered.filter((t) => !INVITES.has(t.data.kind) && t.data.kind !== "settle_mode" && t.data.kind !== "dispute");
+  // Only a message the gate is sure is about money, or an answer (Joe's
+  // review on #35: not the clarify band, not settle_up or name_reply).
+  const sure = decision === "act" && MONEY_INTENTS.has(result.intent);
   // A question of their own ("what do i owe", "how do we settle up?") is
   // answered as one, never read as an answer.
-  if (offered.length === 0 || ASKING.has(result.intent) || !(worth || askerOnly)) return no;
+  if (offered.length === 0 || !sure || ASKING.has(result.intent)) return no;
+  if (result.intent !== "answer" && asked.length === 0) return no;
   let r: AnswerResolution;
   try {
     r = await ctx.extract.answer(extractInput(ctx, m), offered.map((t) => threadView(ctx, m, t)));
@@ -379,10 +389,10 @@ async function applyAnswer(
       return true;
     case "expense":
     case "adjustment": {
-      // The asker's own words; anyone else's restated in the third person,
-      // so "I paid" from Joe reads as "Joe paid".
-      const answer = isAsker(t, m) ? m.text : r.restated;
-      return answer ? answerExpense(ctx, m, t, answer) : false;
+      // The asker's own words; anyone else's in the third person, rewritten
+      // in code so "I did" from Kian can only ever mean Kian (Joe's review
+      // on #35: never Grok's choice of name).
+      return m.text ? answerExpense(ctx, m, t, isAsker(t, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m))) : false;
     }
     case "split_open": {
       const e = threadExpense(ctx, t, "proposed");
@@ -419,15 +429,18 @@ async function applyAnswer(
     case "claims_open": {
       const e = threadExpense(ctx, t, "itemizing");
       const share = e && ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
-      if (!e || !share || share.status === "opted_out") return false;
+      // A claim locks their share: the normal act bar (§6.4), not the answer one.
+      if (!e || !share || share.status === "opted_out" || result.confidence < thresholds.act) return false;
       await handleClaim(ctx, m, e);
       return true;
     }
     case "settle_open": {
       const owed = disputeTargets(ctx, m);
       if (owed.length === 0) return false; // only someone who owes answers it
+      // Only a clear yes or no: "will send it tonight" is neither (Joe's review on #35).
       if (r.yes_no === "yes") await textApproval(ctx, m); // never pays (P7)
-      else await dispute(ctx, m, owed); // marks it disputed, then asks what's off
+      else if (r.yes_no === "no") await dispute(ctx, m, owed); // disputed, then asks what's off
+      else return false;
       return true;
     }
   }
@@ -479,7 +492,11 @@ function restOf(t: Thread, r: AnswerResolution, result: ClassifyResult, decision
       : undefined;
   const intent = gate ?? (r.also_new ? r.also_intent : undefined);
   if (!intent) return undefined;
-  return { intent, decision: decision === "act" ? "act" : "clarify" };
+  // Acting needs the gate's own read at the full bar; an `answer` at 0.6
+  // only asks first ("yeah, also I didn't have the wine" confirms, Joe's
+  // review on #35).
+  const sure = decision === "act" && result.intent !== "answer" && result.confidence >= thresholds.act;
+  return { intent, decision: sure ? "act" : "clarify" };
 }
 
 // Someone else's answer is read as the asker's message, so "I" and "me"

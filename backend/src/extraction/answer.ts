@@ -111,7 +111,17 @@ export async function resolveAnswer(
   const choice = r.choice !== null && thread.choices && r.choice >= 1 && r.choice <= thread.choices ? r.choice : undefined;
   const restated = r.restated?.trim().slice(0, 300);
   const numbers = [...(restated ?? "").matchAll(/\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?/g)];
-  const restatedOk = restated && numbers.every((n) => isGrounded(Math.round(Number(n[0].replace(/,/g, "")) * 100), text));
+  // Names too (P3): every member it names must be in the message, or be
+  // the sender, so "I did" from Kian can't come back as "Joe paid".
+  const sender = input.members.find((m) => m.phone === input.message.sender_phone)?.name?.toLowerCase();
+  const said = text.toLowerCase();
+  const named = input.members
+    .map((m) => m.name?.toLowerCase())
+    .filter((n): n is string => Boolean(n) && n !== "tab" && new RegExp(`\\b${n}\\b`, "i").test(restated ?? ""));
+  const restatedOk =
+    restated &&
+    numbers.every((n) => isGrounded(Math.round(Number(n[0].replace(/,/g, "")) * 100), text)) &&
+    named.every((n) => n === sender || new RegExp(`\\b${n}\\b`).test(said));
 
   return {
     thread_id: thread.id,

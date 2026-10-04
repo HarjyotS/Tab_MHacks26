@@ -88,13 +88,18 @@ export const holdsLockIn = (t: Thread) =>
 
 // Closes the given kinds of question about an expense, in every chat.
 export function closeExpenseThreads(ctx: BrainCtx, expense_id: string, kinds: Thread["data"]["kind"][]) {
-  for (const [key, list] of ctx.memory.threads)
-    ctx.memory.threads.set(key, list.filter((t) => t.expense_id !== expense_id || !kinds.includes(t.data.kind)));
+  for (const [key, list] of ctx.memory.threads) {
+    const rest = list.filter((t) => t.expense_id !== expense_id || !kinds.includes(t.data.kind));
+    if (rest.length > 0) ctx.memory.threads.set(key, rest);
+    else ctx.memory.threads.delete(key);
+  }
 }
 
 export function closeThread(ctx: BrainCtx, chat: Chat, t: Thread) {
   const key = chatKey(chat);
-  ctx.memory.threads.set(key, (ctx.memory.threads.get(key) ?? []).filter((x) => x.id !== t.id));
+  const rest = (ctx.memory.threads.get(key) ?? []).filter((x) => x.id !== t.id);
+  if (rest.length > 0) ctx.memory.threads.set(key, rest);
+  else ctx.memory.threads.delete(key);
 }
 
 // Open questions in a chat, newest first. A question past
@@ -106,7 +111,8 @@ export function openThreads(ctx: BrainCtx, chat: Chat): Thread[] {
   const open = (ctx.memory.threads.get(key) ?? []).filter(
     (t) => now - t.asked_at.getTime() <= ttl && stillOpen(ctx, t),
   );
-  ctx.memory.threads.set(key, open);
+  if (open.length > 0) ctx.memory.threads.set(key, open);
+  else ctx.memory.threads.delete(key);
   return [...open].reverse();
 }
 

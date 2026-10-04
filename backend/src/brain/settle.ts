@@ -160,12 +160,13 @@ export async function settleUp(ctx: BrainCtx, m: Message) {
   }
   const text = T.notLockedYet(open);
   await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text });
-  // Anyone may say yes: it only locks splits in, and only a 👍 pays (P7).
+  // Only whoever asked to settle answers it: a bystander's "ok" mustn't
+  // split unclaimed items onto people (Joe's review on #35).
   addThread(ctx, chatOf(m), {
     id,
     text,
     expense_ids: open.map((e) => e.expense_id),
-    who: "anyone",
+    who: "asker",
     asker: m.sender_phone,
     data: { kind: "confirm", then: "finalize_and_settle", source: m, asked_at: ctx.now() },
   });

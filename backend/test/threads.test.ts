@@ -59,6 +59,7 @@ async function onboarded(w: ReturnType<typeof world>) {
   expect(w.db.out.has("settle_mode:trip")).toBe(true);
 }
 
+const LEDGER = "nah we are just keeping a ledger for the long run and we will settle it every month";
 const settleModeReply = (w: ReturnType<typeof world>) => w.db.out.get("settle_mode_set:trip")?.text;
 
 const uber: Script["expense"] = {
@@ -70,16 +71,47 @@ const uber: Script["expense"] = {
 describe("several open questions at once", () => {
   it("keeps the settle question open while an expense question is asked, and takes a ledger answer to it", async () => {
     // Playground: "nah we are just keeping a ledger…" was missed once another
-    // question had replaced the settle-mode one.
-    const w = world({ expense: uber });
+    // question had replaced the settle-mode one. With two questions open the
+    // parsers don't decide it (Joe's review on #35); Jev calls it an answer
+    // (live: 1.00) and Grok reads the mode.
+    const w = world({
+      expense: uber,
+      answer: { [LEDGER]: answer({ thread_id: "q2", relevance: 0.9, settle_mode: "ledger" }) },
+    });
+    gateSays(w, { [LEDGER]: ["answer", 1] });
     await onboarded(w);
     const ride = await sayIn(w, "trip", PEOPLE.Joe, "venmo me for the uber");
     expect(w.db.outbox().map((o) => o.text)).toContain("how much was the uber?");
-    await sayIn(w, "trip", PEOPLE.Kian, "nah we are just keeping a ledger for the long run and we will settle it every month");
+    await sayIn(w, "trip", PEOPLE.Kian, LEDGER);
     expect(settleModeReply(w)).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
     expect(w.db.settleMode("trip")).toBe("ledger");
     await sayIn(w, "trip", PEOPLE.Joe, "22");
     expect(w.db.expense(`exp_${ride.message_id}`)).toMatchObject({ status: "proposed", total_cents: 2200 });
+  });
+
+  it("doesn't switch settle mode on a member's \"nah\" to another question (Joe's review on #35)", async () => {
+    const w = world({ expense: { ...uber, "new|venmo me for the uber\nnah": raw(null, "Uber") } });
+    await onboarded(w);
+    await sayIn(w, "trip", PEOPLE.Joe, "venmo me for the uber");
+    await sayIn(w, "trip", PEOPLE.Joe, "nah");
+    await sayIn(w, "trip", PEOPLE.Kian, "nah");
+    expect(settleModeReply(w)).toBeUndefined();
+    // Replied to inline, it still counts.
+    const question = w.db.out.get("settle_mode:trip")!;
+    await sayIn(w, "trip", PEOPLE.Kian, "each", { reply_to_id: question.sent_photon_id });
+    expect(w.db.settleMode("trip")).toBe("per_expense");
+  });
+
+  it("gives the asked person's own question priority: the payer's \"no\" to a large amount (Joe's review on #35)", async () => {
+    const w = world({ expense: { "new|paid 1200 for the airbnb": raw(120000, "Airbnb") } });
+    const calls = spyAnswers(w);
+    await onboarded(w);
+    const airbnb = await sayIn(w, "trip", PEOPLE.Joe, "paid 1200 for the airbnb");
+    await sayIn(w, "trip", PEOPLE.Joe, "no");
+    expect(calls).toEqual([]);
+    expect(settleModeReply(w)).toBeUndefined(); // not read as "no trip"
+    expect(openThreads(w.ctx, { group_id: "trip" }).map((t) => t.data.kind)).toEqual(["settle_mode"]);
+    expect(w.db.expense(`exp_${airbnb.message_id}`)!.status).toBe("needs_info");
   });
 
   it("answers two questions out of order", async () => {
@@ -187,9 +219,55 @@ describe("free-form answers (Grok resolves them)", () => {
     const pizza = await w.say("Priya", "pizza was $48 lol");
     expect(w.said("clarifying_question")).toEqual(["Want me to split that?"]);
     const both = await w.say("Priya", text);
-    expect(w.said("clarifying_question").at(-1)).toBe("Who paid for the Pizza?");
+    expect(w.said("clarifying_question").slice(1)).toEqual(["Who paid for the Pizza?", "Want me to split that?"]);
     expect(w.db.expense(`exp_${pizza.message_id}`)!.status).toBe("needs_info");
+    // The rest of an `answer` asks before acting (Joe's review on #35).
+    expect(w.db.expense(`exp_${both.message_id}`)).toBeUndefined();
+    await w.say("Priya", "yes");
     expect(w.db.expense(`exp_${both.message_id}`)).toMatchObject({ status: "proposed", total_cents: 3000, payer_phone: PEOPLE.Priya, description: "Gas" });
+  });
+
+  it("doesn't dispute on a reply to the settle request that isn't a no (Joe's review on #35)", async () => {
+    const text = "will send it tonight";
+    const w = world({
+      expense: { "new|got pizza, $40": raw(4000, "Pizza") },
+      answer: { [text]: answer({ thread_id: "q1", relevance: 0.8 }) },
+    });
+    gateSays(w, { [text]: ["answer", 0.7] });
+    await w.say("Joe", "got pizza, $40");
+    await w.wait(31_000);
+    await w.say("Kian", "let's settle up");
+    const reply = await w.say("Kian", text);
+    expect(w.db.shares(w.db.expenses()[0]!.expense_id).find((s) => s.phone === PEOPLE.Kian)!.status).toBe("locked");
+    expect(w.said("dispute_followup")).toEqual([]);
+    expect(reply.intent).not.toBe("dispute");
+  });
+
+  it("never sends a clarify-band answer, or a settle_up, to Grok (Joe's review on #35)", async () => {
+    const w = world({ expense: { "new|venmo me for the uber": raw(null, "Uber") } });
+    gateSays(w, { "hmm maybe": ["answer", 0.4], "settle us up": ["settle_up", 0.95] });
+    const calls = spyAnswers(w);
+    await w.say("Kian", "venmo me for the uber");
+    await w.say("Priya", "hmm maybe");
+    await w.say("Priya", "settle us up");
+    expect(calls).toEqual([]);
+  });
+
+  it("never takes a name from Grok: \"I did\" from Kian can't log Joe as the payer (Joe's review on #35)", async () => {
+    const text = "I did";
+    const w = world({
+      expense: {
+        "new|pizza was $48 lol": raw(4800, "Pizza", { payer: "unknown" }),
+        "new|pizza was $48 lol\nKian did": raw(4800, "Pizza", { payer: "named", payer_name: "kian" }),
+      },
+      // A wrong restatement naming Joe, who isn't in the message.
+      answer: { [text]: answer({ thread_id: "q1", relevance: 0.9, restated: "Joe paid for the Pizza." }) },
+    });
+    gateSays(w, { [text]: ["answer", 0.9] });
+    const pizza = await w.say("Priya", "pizza was $48 lol");
+    await w.say("Priya", "yes");
+    await w.say("Kian", text);
+    expect(w.db.expense(`exp_${pizza.message_id}`)).toMatchObject({ status: "proposed", payer_phone: PEOPLE.Kian });
   });
 
   it("logs a bystander's own expense as a new one, not as the answer", async () => {

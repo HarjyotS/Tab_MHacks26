@@ -251,6 +251,15 @@ describe("resolveAnswer validation", () => {
     expect(good).toMatchObject({ choice: 2, relevance: 1 });
   });
 
+  it("drops a restatement naming someone the message doesn't (Joe's review on #35)", async () => {
+    const wrong = await resolveAnswer(fake(resolution({ restated: "Joe paid for the pizza." })), "m", input("I did", PHONES.Kian), threads);
+    expect(wrong.restated).toBeUndefined();
+    const self = await resolveAnswer(fake(resolution({ restated: "Kian paid for the pizza." })), "m", input("I did", PHONES.Kian), threads);
+    expect(self.restated).toBe("Kian paid for the pizza.");
+    const named = await resolveAnswer(fake(resolution({ restated: "Priya had the salad." })), "m", input("priya had the salad", PHONES.Kian), threads);
+    expect(named.restated).toBe("Priya had the salad.");
+  });
+
   it("reports what else the message does only when it says something else", async () => {
     const out = await resolveAnswer(
       fake(resolution({ also_new: true, also_intent: "expense", amount_cents: 300 })),

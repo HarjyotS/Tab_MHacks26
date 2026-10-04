@@ -233,7 +233,11 @@ describe("settling while a receipt is open", () => {
     const w = world({ receipt: { frita: FRITA }, claim: claims });
     await w.photo("Joe", "frita");
     await w.say("Kian", "let's settle up");
-    await w.say("Priya", "yeah lock it in"); // anyone may answer: only a 👍 pays
+    // Only whoever asked to settle answers (Joe's review on #35): a
+    // bystander's "ok" doesn't split unclaimed items onto people.
+    await w.say("Priya", "ok");
+    expect(w.db.expenses()[0]!.status).toBe("itemizing");
+    await w.say("Kian", "yeah lock it in");
     expect(w.db.expenses()[0]!.status).toBe("finalized");
     expect(w.said("settle_request")).toHaveLength(1);
     expect(w.db.transfers()).toEqual([]);
