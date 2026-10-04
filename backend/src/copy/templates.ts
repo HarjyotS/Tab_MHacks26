@@ -182,7 +182,7 @@ export const settleModeQuestion = () =>
 // SPEC §7.6: it must say the settlement is simulated.
 export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: number }[]; label?: string; allSquare: boolean }): string {
   const what = listJoin(a.paid.map((p) => `${displayName(p.payee)} ${money(p.amount_cents)}`));
-  return `done, you paid ${what}${a.label ? ` for ${a.label}` : ""} (simulated, no real money moved)${a.allSquare ? "\nyou're all square" : ""}`;
+  return `done, you paid ${what}${a.label ? ` for ${a.label}` : ""} through capital one nessie (sandbox, no real money moved)${a.allSquare ? "\nyou're all square" : ""}`;
 }
 
 // §7.6: a friendly nudge in the group by name (P5). Money moves only on a

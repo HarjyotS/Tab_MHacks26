@@ -234,7 +234,7 @@ describe("settling, per-expense mode (SPEC 7.6)", () => {
     expect(db.outbox().find((o) => o.purpose === "payment_receipt")).toMatchObject({
       kind: "dm",
       to_phone: KIAN,
-      text: "done, you paid Joe $15.75 for groceries (simulated, no real money moved)\nyou're all square",
+      text: "done, you paid Joe $15.75 for groceries through capital one nessie (sandbox, no real money moved)\nyou're all square",
     });
   });
 
@@ -278,7 +278,7 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
     for (const who of [PRIYA, JAKE, JOE]) await react(who, request);
     db.completeTransfers();
     await tick(ctx);
-    expect(said("payment_receipt")).toContain("done, you paid Joe $15.75 and Priya $10.00 (simulated, no real money moved)\nyou're all square");
+    expect(said("payment_receipt")).toContain("done, you paid Joe $15.75 and Priya $10.00 for groceries and pizza through capital one nessie (sandbox, no real money moved)\nyou're all square");
     expect(said("all_square")).toHaveLength(1);
     expect(["and that's everyone square", "everyone's square, nice"]).toContain(said("all_square")[0]);
   });
