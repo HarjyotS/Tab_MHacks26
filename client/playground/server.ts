@@ -19,6 +19,8 @@ const rootEnv = Object.fromEntries(
     .map((l) => [l.slice(0, l.indexOf("=")), l.slice(l.indexOf("=") + 1)]),
 );
 const env = { ...rootEnv, ...process.env } as Record<string, string | undefined>;
+// The owner token must come from the repo-root .env: client/.env may hold someone else's token.
+env.SPACETIME_AUTH_TOKEN = process.env.PLAYGROUND_OWNER_TOKEN ?? rootEnv.SPACETIME_AUTH_TOKEN;
 const HOST = env.PLAYGROUND_SPACETIME_HOST ?? "http://127.0.0.1:3000";
 const DB = env.PLAYGROUND_SPACETIME_DB ?? "tab-local";
 const PORT = Number(env.PLAYGROUND_PORT ?? 4400);
