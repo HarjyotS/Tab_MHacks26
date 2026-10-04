@@ -23,10 +23,13 @@ export type StyleFlags = {
 
 const EMOJI = /\p{Extended_Pictographic}/u;
 const URL_RE = /https?:\/\/\S+/g;
-// Decorative emoji (with any modifiers or joins), and the space before them.
-// 👍 is an instruction ("tap 👍 to pay"), not decoration, so it always stays.
-const DECORATIVE_EMOJI =
-  /[ \t]*(?!\u{1F44D})\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier}|‍\p{Extended_Pictographic})*/gu;
+
+// Marks an emoji in Tab's own template words as decoration: shown only once
+// the group uses emoji. Emoji people typed (a "🍕 night" description) and 👍
+// in "tap 👍 to pay" aren't marked, so they always stay.
+export const DECO = "";
+export const deco = (emoji: string) => `${DECO}${emoji}`;
+const DECORATIVE = /[ \t]*\p{Extended_Pictographic}(?:️|\p{Emoji_Modifier}|‍\p{Extended_Pictographic})*/gu;
 
 export function styleFlags(text: string): StyleFlags {
   return { emoji: EMOJI.test(text.replace(URL_RE, "")) };
@@ -39,22 +42,36 @@ export function styleFromFlags(flags: StyleFlags[]): GroupStyle {
 export const detectStyle = (texts: string[]): GroupStyle =>
   styleFromFlags(texts.map(styleFlags));
 
-// Lowercases everything except URLs (ledger secrets are case-sensitive),
-// drops periods at the end of lines, and drops decorative emoji the group
-// hasn't earned. Amounts like $63.75 are untouched: only a period that ends
-// a line goes.
-export function applyStyle(text: string, style: GroupStyle): string {
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+// Lowercases a stretch of text, then puts member names back the way they
+// were saved ("DJ", "McKenzie"): Tab knows people by their names.
+function lower(text: string, names: string[]): string {
+  const out = text.toLowerCase();
+  const saved = new Map<string, string>();
+  for (const n of names) if (n && !saved.has(n.toLowerCase())) saved.set(n.toLowerCase(), n);
+  if (saved.size === 0) return out;
+  const words = [...saved.keys()].sort((a, b) => b.length - a.length).map(escape);
+  const re = new RegExp(`(?<![\\p{L}\\p{N}])(${words.join("|")})(?![\\p{L}\\p{N}])`, "gu");
+  return out.replace(re, (w) => saved.get(w) ?? w);
+}
+
+// Lowercases everything except URLs (ledger secrets are case-sensitive) and
+// member names, drops periods at the end of lines, and drops Tab's
+// decorative emoji until the group uses emoji. Amounts like $63.75 are
+// untouched: only a period that ends a line goes.
+export function applyStyle(text: string, style: GroupStyle, names: string[] = []): string {
   let out = text;
   if (style.lowercase) {
     let lowered = "";
     let last = 0;
     for (const m of out.matchAll(URL_RE)) {
-      lowered += out.slice(last, m.index).toLowerCase() + m[0];
+      lowered += lower(out.slice(last, m.index), names) + m[0];
       last = m.index + m[0].length;
     }
-    out = lowered + out.slice(last).toLowerCase();
+    out = lowered + lower(out.slice(last), names);
   }
-  if (!style.emoji) out = out.replace(DECORATIVE_EMOJI, "");
+  out = style.emoji ? out.replaceAll(DECO, "") : out.replace(DECORATIVE, "").replaceAll(DECO, "");
   if (!style.periods) out = out.replace(/(?<!\.)\.(?=\n|$)/g, "");
   return out;
 }

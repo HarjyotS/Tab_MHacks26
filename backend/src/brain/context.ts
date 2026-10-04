@@ -139,6 +139,18 @@ export function activeMembers(ctx: BrainCtx, group_id: string) {
   return ctx.store.members(group_id).filter((m) => !m.left_at);
 }
 
+// Names Tab keeps the way they were saved: the group's members, or in a DM,
+// everyone in the groups the person is in.
+export function namesFor(ctx: BrainCtx, chat: Chat): string[] {
+  const groups = chat.group_id
+    ? [chat.group_id]
+    : ctx.store
+        .groups()
+        .map((g) => g.group_id)
+        .filter((g) => activeMembers(ctx, g).some((x) => x.phone === chat.dm_phone));
+  return groups.flatMap((g) => activeMembers(ctx, g).map((x) => x.name)).filter((n): n is string => Boolean(n));
+}
+
 export function styleFor(ctx: BrainCtx, chat: Chat): GroupStyle {
   return styleFromFlags(ctx.memory.styleSamples(chat));
 }
@@ -206,6 +218,7 @@ export async function say(
     text: a.text,
     in_group: Boolean(a.chat.group_id),
     style: styleFor(ctx, a.chat),
+    names: namesFor(ctx, a.chat),
     wit: a.wit,
   });
   ctx.memory.lastHadWit.set(chatKey(a.chat), Boolean(a.wit));
