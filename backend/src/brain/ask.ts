@@ -9,7 +9,7 @@
 import type { Intent } from "@tab/gate";
 import type { ChatCompletionMessageParam } from "openai/resources/chat/completions";
 import { money } from "../copy/format.js";
-import { applyStyle, type GroupStyle } from "../copy/style.js";
+import type { GroupStyle } from "../copy/style.js";
 import { BANNED_PHRASES, bannedPhraseIn, MARKDOWN, PERSONA } from "../copy/voice.js";
 import type { OutboxPurpose } from "../db/types.js";
 import { UNTRUSTED_RULE } from "../extraction/prompt.js";
@@ -463,9 +463,10 @@ export async function agentAnswer(ctx: BrainCtx, agent: NonNullable<BrainCtx["as
     const why = checkReply(r.text, facts());
     if (!why) {
       log(r, attempt, "sent");
-      // Checked with Grok's capitals (names stand out); sent lowercase,
-      // like a friend texting. Links keep their case.
-      return applyStyle(r.text, { ...style, lowercase: true });
+      // Checked with Grok's capitals (names stand out); `say` then applies
+      // the group's style like any template: lowercase, member names and
+      // links keep their case.
+      return r.text;
     }
     log(r, attempt, "rejected", why.code);
     messages = withFeedback(r, `Not sent: ${why.detail} Fix it and call reply again.`);
