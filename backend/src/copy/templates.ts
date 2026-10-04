@@ -491,6 +491,80 @@ export const breakdownUnknown =(words: string[]) =>
 // Free-form "why?" or "what's the $X from?": point to the command.
 export const breakdownHint = () => `send "@tab breakdown" and i'll show where each amount comes from`;
 
+// ── History (§7.8) ───────────────────────────────────────────────────────
+// What someone paid or got back, what it was for, and when, for questions
+// with nothing open ("what was it for" right after the payment DM). Every
+// amount, name, and description comes from the database; `when` is "today",
+// "yesterday", "mon", or "sep 26" (history.ts).
+
+// One 👍's payments from the viewer's side: what they paid each person, or
+// what one person paid them.
+export type PaymentPart = { other: Person; amount_cents: number; what: string[] };
+export type PaymentEvent = { direction: "paid" | "received"; parts: PaymentPart[]; when: string; pending: boolean };
+
+const forWhat = (what: string[]) => (what.length ? ` for ${listJoin(what)}` : "");
+// Payees apart with a comma, since each may already say "tp and soap".
+const eachOf = (parts: string[]) => (parts.length > 1 ? `${parts.slice(0, -1).join(", ")}, and ${parts.at(-1)}` : (parts[0] ?? ""));
+
+function paymentPhrase(p: PaymentEvent, withWhat = true): string {
+  const each = (x: PaymentPart) => `${money(x.amount_cents)}${withWhat ? forWhat(x.what) : ""}`;
+  if (p.direction === "paid") {
+    const parts = eachOf(p.parts.map((x) => `${displayName(x.other)} ${each(x)}`));
+    return p.pending ? `you're paying ${parts}, still going through` : `you paid ${parts} ${p.when}`;
+  }
+  const parts = eachOf(p.parts.map((x) => `${displayName(x.other)}${p.pending ? "'s paying" : " paid"} you ${each(x)}`));
+  return p.pending ? `${parts}, still going through` : `${parts} ${p.when}`;
+}
+
+// "that was tp, you paid Priya $5.00 today" / "you're all square now".
+// `after` is where the viewer stands now, from the balances.
+export function paymentRecap(p: PaymentEvent, after?: string): string {
+  const one = p.parts.length === 1 && p.parts[0]!.what.length ? p.parts[0]! : undefined;
+  const head = one ? `that was ${listJoin(one.what)}, ${paymentPhrase(p, false)}` : paymentPhrase(p);
+  return after ? `${head}\n${after}` : head;
+}
+
+export const squareNow = () => "you're all square now";
+
+// The sender's own balance after a recap: square, or what's left.
+export const balanceAfter = (a: { owes: Debt[]; owed: Debt[] }) =>
+  a.owes.length || a.owed.length ? personalBalanceReply(a) : squareNow();
+
+// The newest payment, when a balance or "why?" has nothing open to show.
+export const lastActivity = (p: PaymentEvent) => `last one: ${paymentPhrase(p)}`;
+
+// "why?" with nothing open, but something in their history.
+export const nothingOpenSince = (p: PaymentEvent) => `${shortWhyReply([])}\n${lastActivity(p)}`;
+
+// What one expense was, from the viewer's side. `part` is their own share,
+// `note` where it stands (paid, going through, open for changes).
+export function expenseRecap(a: {
+  description: string;
+  payer?: Person;
+  payer_is_you: boolean;
+  total_cents: number;
+  when: string;
+  part?: { amount_cents: number; why: string };
+  note?: string;
+}): string {
+  const who = a.payer_is_you ? "you" : a.payer ? displayName(a.payer) : "someone";
+  const head = `that was ${a.description}, ${who} paid ${money(a.total_cents)} ${a.when}`;
+  const part = a.part ? `your part was ${money(a.part.amount_cents)} (${a.part.why})` : undefined;
+  const tail = [part, a.note].filter(Boolean).join(", ");
+  return tail ? `${head}\n${tail}` : head;
+}
+
+// The payer's view of an expense others haven't all paid back.
+export const owedToYou = (cents: number) => `${money(cents)} of it is still owed to you`;
+
+// A settle request covering several expenses: one line each.
+export function expensesRecap(items: { description: string; total_cents: number; payer?: Person; payer_is_you: boolean; when: string }[]): string {
+  const line = (e: (typeof items)[number]) =>
+    `${e.description} ${money(e.total_cents)}, ${e.payer_is_you ? "you" : e.payer ? displayName(e.payer) : "someone"} paid ${e.when}`;
+  const more = items.length > 4 ? `\nand ${items.length - 4} more` : "";
+  return `that covered:\n${items.slice(0, 4).map(line).join("\n")}${more}`;
+}
+
 export const helpReply = (seed: string) =>
   pick(seed, [
     `i keep the group's tab. just say what you paid ("got groceries 63") or drop the receipt and i'll split it\nask "what do i owe" whenever, or "settle up" when you're done\nwant me gone? just remove me from the group`,

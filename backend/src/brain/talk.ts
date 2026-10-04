@@ -193,23 +193,34 @@ export function groupsOf(ctx: BrainCtx, m: Message): string[] {
     .map((g) => g.group_id);
 }
 
-export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
-  const groups = groupsOf(ctx, m);
-  if (groups.length === 0) return;
-  // The same two people can owe each other in several groups: one line each.
+// Netted per group, then one line per pair: the same two people can owe
+// each other in several groups.
+export function pairDebts(ctx: BrainCtx, groups: string[]): Debt[] {
   const byPair = new Map<string, Debt>();
   for (const d of groups.flatMap((g) => debts(ctx, g))) {
     const key = `${d.from.phone}>${d.to.phone}`;
     const seen = byPair.get(key);
     byPair.set(key, seen ? { ...seen, amount_cents: seen.amount_cents + d.amount_cents } : d);
   }
-  const all = [...byPair.values()];
-  const text = PERSONAL.test(m.text ?? "")
-    ? T.personalBalanceReply({
-        owes: all.filter((d) => d.from.phone === m.sender_phone),
-        owed: all.filter((d) => d.to.phone === m.sender_phone),
-        pending: groups.flatMap((g) => pendingFor(ctx, g, m.sender_phone)),
-      })
+  return [...byPair.values()];
+}
+
+// What the sender owes and is owed, across the groups the message covers.
+export function myDebts(ctx: BrainCtx, m: Message): { owes: Debt[]; owed: Debt[] } {
+  const all = pairDebts(ctx, groupsOf(ctx, m));
+  return { owes: all.filter((d) => d.from.phone === m.sender_phone), owed: all.filter((d) => d.to.phone === m.sender_phone) };
+}
+
+// `more` adds lines under the sender's own balance (history.ts: what it was
+// for, or their last payment when they're square).
+export async function handleBalanceQuery(ctx: BrainCtx, m: Message, more?: (mine: { owes: Debt[]; owed: Debt[] }) => string[]) {
+  const groups = groupsOf(ctx, m);
+  if (groups.length === 0) return;
+  const all = pairDebts(ctx, groups);
+  // A DM only ever shows the sender's own money (§19).
+  const mine = { owes: all.filter((d) => d.from.phone === m.sender_phone), owed: all.filter((d) => d.to.phone === m.sender_phone) };
+  const text = !m.group_id || PERSONAL.test(m.text ?? "")
+    ? [T.personalBalanceReply({ ...mine, pending: groups.flatMap((g) => pendingFor(ctx, g, m.sender_phone)) }), ...(more?.(mine) ?? [])].join("\n")
     : T.balanceReply({
         debts: all,
         // Past six lines the rest is on the ledger (§7.8).
