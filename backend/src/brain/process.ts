@@ -25,12 +25,12 @@ import { handleCorrection } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
-  handleBalanceQuery,
   handleHelp,
   handleNameReply,
   onboardNewGroups,
 } from "./talk.js";
 import { answerQuestion } from "./ask.js";
+import { answerWhatItWas, handleBalance, handleBreakdownQuestion, historyFallback, referentExpense } from "./history.js";
 import { addInvite, addThread, closeThread, holdsLockIn, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
 
@@ -180,7 +180,8 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       const why =
         !breakdown && !answered && !(decision !== "ignore" && intent === "money_question") &&
         WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
-      if (why) await handleShortWhy(ctx, m);
+      // With nothing open, "why?" says what "it" was or their last payment (§7.8 History).
+      if (why) await handleShortWhy(ctx, m, () => historyFallback(ctx, m));
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
       const ledger = !breakdown && !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);
@@ -208,10 +209,16 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       // #35's own fallbacks (a clarify question, a follow-up) write, so
       // they win; a reply already queued for this message wins too.
       const replied = ctx.store.outbox().some((o) => o.target_message_id === m.message_id);
-      const reason = ctx.ask && !wrote() && !replied
+      const reason = !wrote() && !replied
         ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0)
         : undefined;
-      if (reason) {
+      // "what was it for" right after one of Tab's messages is answered from
+      // that message's records, no Grok needed (§7.8 History).
+      if (reason && (await answerWhatItWas(ctx, m))) {
+        ctx.log("fallback_history", { message_id: m.message_id, group_id: m.group_id, reason });
+        keep = true;
+        intent = result.intent;
+      } else if (reason && ctx.ask) {
         ctx.log("fallback_ask", { message_id: m.message_id, group_id: m.group_id, reason, intent: result.intent, confidence: result.confidence });
         const about = repliedExpense(ctx, m) ?? latestOpen(ctx, groupFor(ctx, m), ["proposed", "itemizing"]);
         // Kept (§19) only if Tab actually answered it.
@@ -278,15 +285,19 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return dispute(ctx, m, e ? [e] : disputeTargets(ctx, m));
     }
     // Balances and breakdowns are templates: deterministic, and instant
-    // (Joe's review on #38). Anything else about money goes to the money
-    // brain (§7.8 Questions), with the expense an inline reply points at.
+    // (Joe's review on #38), with the sender's history when nothing is open
+    // (§7.8 History). Anything else about money goes to the money brain
+    // (§7.8 Questions), with the expense an inline reply points at, or the
+    // one "that" points back to in Tab's recent messages.
     case "balance_query":
-      return handleBalanceQuery(ctx, m);
+      return handleBalance(ctx, m);
     case "breakdown_request":
-      // Free-form ("what's the $90.70 from?"): only the command answers.
-      return hintBreakdown(ctx, m);
+      // Free-form ("what's the $90.70 from?"): the command answers, unless
+      // it's "what was it for" or the sender has nothing open (history.ts).
+      return handleBreakdownQuestion(ctx, m);
     case "money_question":
-      return void (await answerQuestion(ctx, m, "money_question", bound));
+      if (await answerWhatItWas(ctx, m)) return;
+      return void (await answerQuestion(ctx, m, "money_question", bound ?? referentExpense(ctx, m)));
     case "help":
       return handleHelp(ctx, m);
     case "receipt":

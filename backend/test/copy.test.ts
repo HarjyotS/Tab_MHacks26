@@ -12,6 +12,13 @@ const joe = { phone: "+15555550101", name: "Joe" };
 const jake = { phone: "+15555550105", name: "Jake" };
 const priya = { phone: "+15555550104", name: "Priya" };
 const unnamed = { phone: "+15555550199" };
+const paidPriya: T.PaymentEvent = { direction: "paid", parts: [{ other: priya, amount_cents: 500, what: ["tp"] }], when: "today", pending: false };
+const paidTwo: T.PaymentEvent = {
+  direction: "paid",
+  parts: [{ other: priya, amount_cents: 500, what: ["tp", "soap"] }, { other: jake, amount_cents: 300, what: ["uber"] }],
+  when: "mon",
+  pending: false,
+};
 const items = [
   { position: 1, description: "Cuban burger", amount_cents: 1500 },
   { position: 2, description: "Fries", amount_cents: 800 },
@@ -295,6 +302,20 @@ function renders(seed: string): {
     { purpose: "balance_reply", group: true, text: T.personalBalanceReply({ owes: [], owed: [] }), amounts: [] },
     { purpose: "balance_reply", group: true, text: T.personalBalanceReply({ owes: [], owed: [{ from: jake, to: priya, amount_cents: 500 }] }), amounts: [500] },
     { purpose: "breakdown_reply", group: true, text: T.breakdownCommandReply({ subject: "Jake", pairs: [], max_pairs: 4, max_lines: 12 }).text, amounts: [] },
+    // History (§7.8): what someone paid, what it was for, and when.
+    { purpose: "breakdown_reply", group: false, text: T.paymentRecap(paidPriya, T.squareNow()), amounts: [500] },
+    { purpose: "breakdown_reply", group: false, text: T.paymentRecap(paidTwo, T.balanceAfter({ owes: [{ from: priya, to: joe, amount_cents: 1200 }], owed: [] })), amounts: [500, 300, 1200] },
+    { purpose: "breakdown_reply", group: true, text: T.paymentRecap({ direction: "received", parts: [{ other: jake, amount_cents: 807, what: ["The Bistro"] }], when: "yesterday", pending: true }), amounts: [807] },
+    { purpose: "balance_reply", group: false, text: `${T.personalBalanceReply({ owes: [], owed: [] })}\n${T.lastActivity(paidPriya)}`, amounts: [500] },
+    { purpose: "breakdown_reply", group: false, text: T.nothingOpenSince(paidPriya), amounts: [500] },
+    { purpose: "breakdown_reply", group: true, text: T.expenseRecap({ description: "Pizza", payer: joe, payer_is_you: false, total_cents: 4800, when: "mon", part: { amount_cents: 1200, why: "split 4 ways" }, note: "not settled yet" }), amounts: [4800, 1200] },
+    { purpose: "breakdown_reply", group: true, text: T.expenseRecap({ description: "Pizza", payer_is_you: true, total_cents: 4800, when: "today", note: T.owedToYou(3600) }), amounts: [4800, 3600] },
+    {
+      purpose: "breakdown_reply",
+      group: true,
+      text: T.expensesRecap(["Pizza", "Uber", "Groceries", "Tacos", "Gas"].map((description, i) => ({ description, total_cents: 1000 * (i + 1), payer: joe, payer_is_you: i === 0, when: "sep 26" }))),
+      amounts: [1000, 2000, 3000, 4000],
+    },
     { purpose: "other", group: false, text: T.ledgerLink([{ url: "https://tab.tech/g/AbC123" }]), amounts: [] },
     { purpose: "other", group: false, text: T.noLedger(), amounts: [] },
   ];
@@ -353,6 +374,12 @@ describe("templates", () => {
   it("lists people by name, or by last four digits until they're named", () => {
     const text = T.settleRequest({ seed: "x", description: "Pizza", owed: [{ payee: joe, shares: [{ person: unnamed, amount_cents: 960 }] }] });
     expect(text).toContain("…0199 $9.60");
+  });
+
+  it("answers \"what was it for\" the way the payment DM put it (§7.8 History)", () => {
+    expect(T.paymentRecap(paidPriya, T.squareNow())).toBe("that was tp, you paid Priya $5.00 today\nyou're all square now");
+    expect(T.paymentRecap(paidTwo)).toBe("you paid Priya $5.00 for tp and soap, and Jake $3.00 for uber mon");
+    expect(T.lastActivity({ ...paidPriya, pending: true })).toBe("last one: you're paying Priya $5.00 for tp, still going through");
   });
 
   it("says the settlement receipt is simulated, as SPEC 7.6 requires", () => {

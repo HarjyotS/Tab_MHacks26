@@ -116,14 +116,19 @@ function buildSections(ctx: BrainCtx, group_id: string, pairs: [string, string][
 // "why?" right after a balance reply (Joe's rule: "if he asks why, explain
 // very shortly"): one short line per balance the asker has, from the same
 // traced records. "@Tab breakdown" is there for the full trace.
-export async function handleShortWhy(ctx: BrainCtx, m: Message) {
-  const groups = groupsOf(ctx, m);
-  const lines = groups.flatMap((g) =>
+export function shortWhyFor(ctx: BrainCtx, m: Message): string[] {
+  return groupsOf(ctx, m).flatMap((g) =>
     T.shortWhyLines(buildSections(ctx, g, activeMembers(ctx, g).filter((x) => x.phone !== m.sender_phone).map((x) => [m.sender_phone, x.phone])), nameIn(ctx, g)(m.sender_phone)),
   );
+}
+
+// `nothingOpen` answers when the sender has no balance to explain (history.ts:
+// what "it" was, or their last payment), instead of a dead end.
+export async function handleShortWhy(ctx: BrainCtx, m: Message, nothingOpen?: () => string | undefined) {
+  const lines = shortWhyFor(ctx, m);
   await say(ctx, {
     chat: chatOf(m), purpose: "breakdown_reply", id: `breakdown_reply:${m.message_id}`, reply_to: m.message_id,
-    text: T.shortWhyReply(lines),
+    text: (lines.length === 0 && nothingOpen?.()) || T.shortWhyReply(lines),
   });
 }
 
@@ -147,10 +152,14 @@ export async function handleBreakdownCommand(ctx: BrainCtx, m: Message) {
   const { phones, unknown } = breakdownTargets(ctx, group_id, m);
   if (unknown.length > 0) return reply(T.breakdownUnknown(unknown));
 
-  // Who to pair: the sender with everyone, the sender with one person, or two people.
+  // Who to pair: the sender with everyone, the sender with one person, or two
+  // people. A DM only shows the sender's own balances (§19), so two other
+  // people pair each with the sender instead.
   const others = phones.filter((p) => p !== m.sender_phone);
   const pairs: [string, string][] =
-    phones.length >= 2 && others.length >= 2
+    !m.group_id && others.length >= 2
+      ? others.map((p) => [m.sender_phone, p])
+      : phones.length >= 2 && others.length >= 2
       ? [[phones[0]!, phones[1]!]]
       : others.length === 1
         ? [[m.sender_phone, others[0]!]]
