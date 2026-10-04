@@ -2,7 +2,7 @@
 // set_settle_mode, one 👍 paying every share it covers, and resolve_dispute.
 import { describe, expect, it, vi } from "vitest";
 import { Memory, type BrainCtx } from "../src/brain/context.js";
-import { processMessage, tick } from "../src/brain/process.js";
+import { disputeCents, processMessage, tick } from "../src/brain/process.js";
 import { GROUP, PEOPLE, world } from "./support/harness.js";
 
 const raw = (cents: number, description: string) => ({
@@ -157,7 +157,7 @@ describe("disputes are resolved with resolve_dispute (SPEC 7.6)", () => {
     expect(share(w, g, "Priya").amount_cents).toBe(2500);
     expect(share(w, p, "Kian").status).toBe("disputed"); // still open to an answer
 
-    await w.dm("Kian", "and 8 for pizza");
+    await w.dm("Kian", "and $8 for pizza");
     expect(resolve).toHaveBeenLastCalledWith({ expense_id: p, phone: PEOPLE.Kian, amount_cents: 800 });
   });
 
@@ -182,10 +182,47 @@ describe("disputes are resolved with resolve_dispute (SPEC 7.6)", () => {
     const p = await pizza(w); // ledger: no settle request yet
     await w.say("Kian", "no");
     expect(share(w, p, "Kian").status).toBe("disputed");
-    await w.say("Kian", "mine was 6");
+    await w.say("Kian", "mine was 6 bucks");
     expect(share(w, p, "Kian")).toMatchObject({ status: "locked", amount_cents: 600 });
     expect(w.said("settle_request")).toEqual([]);
     expect(w.said("dispute_followup").at(-1)).toBe("fixed: you're down for $6.00 for pizza");
+  });
+
+  // Joe's review on #29: a count is not a price.
+  it.each([["I had 2 beers"], ["only 1 slice"]])("writes nothing for a count: %s", async (text) => {
+    const w = world(script);
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
+    const p = await pizza(w);
+    await w.react("Kian", `settle_request:${p}`, "dislike");
+    const resolve = vi.spyOn(w.ctx.db, "resolve_dispute");
+    await w.dm("Kian", text); // falls through to normal handling
+    expect(resolve).not.toHaveBeenCalled();
+    expect(share(w, p, "Kian")).toMatchObject({ status: "disputed", amount_cents: 1000 });
+  });
+
+  it.each([
+    ["$4", 400],
+    ["4", 400],
+    ["it was 4.50", 450],
+    ["4 bucks", 400],
+  ])("resolves a clear amount of money (case %#)", async (text, cents) => {
+    const w = world(script);
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
+    const p = await pizza(w);
+    await w.react("Kian", `settle_request:${p}`, "dislike");
+    const resolve = vi.spyOn(w.ctx.db, "resolve_dispute");
+    await w.dm("Kian", text);
+    expect(resolve).toHaveBeenCalledWith({ expense_id: p, phone: PEOPLE.Kian, amount_cents: cents });
+    expect(share(w, p, "Kian")).toMatchObject({ status: "locked", amount_cents: cents });
+  });
+
+  it("reads only clear money as a dispute amount", () => {
+    const read = (t: string) => disputeCents(t);
+    expect([read("$4"), read("4"), read("$ 4.50"), read("4.50"), read("it was 4.50"), read("4 bucks"), read("12 dollars"), read("1,240"), read("4.5")]).toEqual([
+      400, 400, 450, 450, 450, 400, 1200, 124000, 450,
+    ]);
+    for (const t of ["I had 2 beers", "only 1 slice", "2 of the 3 pizzas", "i had 1.5 slices of 8", "table 12"])
+      expect(read(t)).toBeUndefined();
   });
 
   it("ignores someone else's amount", async () => {

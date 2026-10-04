@@ -450,7 +450,7 @@ async function answerDispute(ctx: BrainCtx, m: Message, p: Extract<Pending, { ki
     target = open.find((e) => e.expense_id === id);
     if (!target) return false;
   } else {
-    amount = answerCents(text);
+    amount = disputeCents(text);
     if (amount === undefined || amount <= 0) return false;
     if (open.length > 1) {
       ctx.memory.pending.set(key, { ...p, expense_ids: open.map((e) => e.expense_id), amount_cents: amount, asked_at: ctx.now() });
@@ -475,6 +475,27 @@ async function answerDispute(ctx: BrainCtx, m: Message, p: Extract<Pending, { ki
     ctx.memory.pending.set(key, { ...p, expense_ids: [target.expense_id], amount_cents: undefined, asked_at: ctx.now() });
   }
   return true;
+}
+
+// A reply to "What's off?" is usually a description, and "I had 2 beers" or
+// "only 1 slice" is a count, not $2 or $1 (Joe's review on #29). So only a
+// clear amount of money counts: "$4", "4.50", "4 bucks", "4 dollars", or a
+// message that is just a number ("4", "$4"). Anything else goes through
+// normal handling, which asks and confirms.
+const NUM = String.raw`(?:\d{1,3}(?:,\d{3})+|\d{1,6})`;
+const CLEAR_MONEY = [
+  new RegExp(String.raw`^\$?\s*(${NUM}(?:\.\d{1,2})?)$`), // the whole message
+  new RegExp(String.raw`\$\s*(${NUM}(?:\.\d{1,2})?)`), // $4, $ 4.50
+  new RegExp(String.raw`(?<![\d.])(${NUM}\.\d{2})(?![\d.])`), // 4.50 (cents, so "1.5 slices" isn't money)
+  new RegExp(String.raw`(?<![\d.])(${NUM}(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)\b`, "i"), // 4 bucks
+];
+export function disputeCents(text: string): number | undefined {
+  const t = text.trim();
+  for (const re of CLEAR_MONEY) {
+    const match = t.match(re);
+    if (match) return answerCents(match[1]!);
+  }
+  return undefined;
 }
 
 // "22", "$18.50", "it was 30", "1,240": the first amount typed.
