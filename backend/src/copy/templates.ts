@@ -129,17 +129,21 @@ export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: nu
   return `Simulated settlement complete: you paid ${what}${a.label ? ` for ${a.label}` : ""}.${a.allSquare ? " All square." : ""}`;
 }
 
+// §7.6: a friendly nudge in the group by name (P5). Money moves only on a
+// 👍, so every nudge ends by pointing to it (P7).
 export function approvalFollowup(a: {
   seed: string;
-  description: string;
-  payer: Person;
-  amount_cents: number;
+  person: Person;
+  owed: { payee: Person; amount_cents: number }[];
+  step: 1 | 2 | 3;
 }): string {
-  const owe = `${money(a.amount_cents)} to ${displayName(a.payer)} for ${a.description}`;
-  return pick(a.seed, [
-    `You owe ${owe}. Reply yes to pay, or tell me what's off.`,
-    `${a.description}: you're at ${money(a.amount_cents)} to ${displayName(a.payer)}. Reply yes to pay, or tell me what's off.`,
-  ]);
+  const name = displayName(a.person);
+  const owe = listJoin(a.owed.map((o) => `${displayName(o.payee)} ${money(o.amount_cents)}`));
+  const tap = "Tap 👍 on the settle request to pay.";
+  if (a.step === 3) return `${name}, last nudge from me: you owe ${owe}. ${tap}`;
+  return a.step === 1
+    ? pick(a.seed, [`${name}, you owe ${owe}. ${tap}`, `${name}, you're at ${owe}. ${tap}`])
+    : `${name}, still ${owe} from you. ${tap}`;
 }
 
 // SPEC §7.6 wording: the receipt must say the settlement is simulated.
@@ -152,9 +156,11 @@ export function allSquare(a: { seed: string; description: string }): string {
 
 export function disputeFollowup(a: {
   seed: string;
-  description: string;
+  description?: string; // absent when the request covered several expenses
   amount_cents: number;
 }): string {
+  if (!a.description)
+    return `What's off with your ${money(a.amount_cents)}? Tell me what you had and I'll fix it.`;
   return pick(a.seed, [
     `What's off with your ${money(a.amount_cents)} for ${a.description}? Tell me what you had and I'll fix it.`,
     `Got it. What did you actually have at ${a.description}? I'll redo your part.`,

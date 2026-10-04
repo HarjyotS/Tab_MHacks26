@@ -11,6 +11,7 @@ import {
   chatOf,
   inWords,
   outsideQuietHours,
+  perExpense,
   say,
   tapback,
   type BrainCtx,
@@ -302,6 +303,17 @@ async function applyClaim(
   const claim = (item_id: string, phone: string) =>
     ctx.db.add_claim({ item_id, phone, source_message_id: m.message_id });
 
+  // Their latest answer is their whole claim: "actually just 3" after
+  // "1 and 4" drops 1 and 4 (Harjyot's review on #14). Items everyone
+  // shares are added on top, never replacing anything.
+  if (r.kind !== "everyone_shares") {
+    const claims = ctx.store.claims(e.expense_id);
+    const people = ctx.store.shares(e.expense_id).filter((s) => s.status !== "opted_out").length;
+    const shared = (item_id: string) => claims.filter((c) => c.item_id === item_id).length >= people;
+    const keep = new Set(r.kind === "items" ? r.item_positions.map((p) => itemAt(p).item_id) : []);
+    for (const c of claims.filter((x) => x.phone === m.sender_phone && !keep.has(x.item_id) && !shared(x.item_id)))
+      await ctx.db.remove_claim({ item_id: c.item_id, phone: c.phone });
+  }
   if (r.kind === "items")
     for (const p of r.item_positions)
       await claim(itemAt(p).item_id, m.sender_phone);
@@ -331,11 +343,11 @@ async function applyClaim(
 export async function claimFollowups(ctx: BrainCtx) {
   const now = ctx.now();
   const d = ctx.timing.durations;
-  for (const e of ctx.store.expenses().filter((x) => x.status === "itemizing" && x.claim_deadline)) {
+  await perExpense(ctx, ctx.store.expenses().filter((x) => x.status === "itemizing" && x.claim_deadline), async (e) => {
     const end = e.claim_deadline!;
     if (now >= end) {
       await finalize(ctx, e); // unclaimed items split evenly by the module
-      continue;
+      return;
     }
     const start = end.getTime() - d.CLAIM_DEADLINE;
     const tz = ctx.store.group(e.group_id)?.timezone ?? "America/Detroit";
@@ -358,5 +370,5 @@ export async function claimFollowups(ctx: BrainCtx) {
       });
       await ctx.db.set_share({ ...s, followup_count: s.followup_count + 1, last_followup_at: now });
     }
-  }
+  });
 }

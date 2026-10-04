@@ -2,7 +2,8 @@
 // mode, one DM confirmation per person), and §6.2 reaction routing.
 import * as T from "../copy/templates.js";
 import type { Expense, Message, Share } from "../store/types.js";
-import {activeMembers, type BrainCtx, chatOf, say, styleFor} from "./context.js";
+import { MAX_DMS_PER_EXPENSE } from "../config.js";
+import { activeMembers, type BrainCtx, chatOf, outsideQuietHours, say, styleFor } from "./context.js";
 import { liveShares } from "./expense.js";
 
 export type SettleMode = "ledger" | "per_expense";
@@ -29,8 +30,11 @@ const owing = (ctx: BrainCtx, e: Expense): Share[] =>
 // Lock every share, then the expense. Order matters: the module recomputes
 // on set_share and refuses to once the expense is finalized. In per-expense
 // mode the settle request goes out now; in ledger mode it waits for settle_up.
-export async function finalize(ctx: BrainCtx, expense: Expense) {
+export async function finalize(ctx: BrainCtx, snapshot: Expense) {
+  // Read it again: the caller's copy may predate another finalize.
+  const expense = ctx.store.expense(snapshot.expense_id);
   if (
+    !expense ||
     (expense.status !== "proposed" && expense.status !== "itemizing") ||
     !expense.payer_phone
   )
@@ -198,21 +202,40 @@ export async function textApproval(ctx: BrainCtx, m: Message) {
   });
 }
 
-// Disputes (§7.6): the share becomes `disputed` (Kian's #16 allows it on a
-// finalized expense without touching the amount), then Tab asks what's off.
-export async function dispute(ctx: BrainCtx, m: Message, expense: Expense) {
-  const share = ctx.store.shares(expense.expense_id).find((s) => s.phone === m.sender_phone);
-  if (!share || share.role !== "participant") return;
-  if (share.status === "locked") await ctx.db.set_share({ ...share, status: "disputed" });
+// Disputes (§7.6): every share of theirs the request covers becomes
+// `disputed` (Kian's #16 allows it on a finalized expense without touching
+// the amount), then Tab asks what's off: in the group if they said it there,
+// by DM if they tapped 👎.
+export async function dispute(ctx: BrainCtx, m: Message, expenses: Expense[]) {
+  let total = 0;
+  const disputed: Expense[] = [];
+  for (const e of expenses) {
+    const share = ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
+    if (!share || share.role !== "participant") continue;
+    if (share.status === "locked") await ctx.db.set_share({ ...share, status: "disputed" });
+    total += share.amount_cents;
+    disputed.push(e);
+  }
+  if (disputed.length === 0) return;
+  const one = disputed.length === 1 ? disputed[0] : undefined;
   await say(ctx, {
-    chat: chatOf(m),
+    chat: m.kind === "reaction" ? { dm_phone: m.sender_phone } : chatOf(m),
     purpose: "dispute_followup",
     id: `dispute_followup:${m.message_id}`,
     // A tapback can trigger this; only a text message can be replied to.
     reply_to: m.kind === "reaction" ? undefined : m.message_id,
-    text: T.disputeFollowup({ seed: m.message_id, description: expense.description, amount_cents: share.amount_cents }),
-    expense_id: expense.expense_id,
+    text: T.disputeFollowup({ seed: m.message_id, description: one?.description, amount_cents: total }),
+    expense_id: one?.expense_id,
   });
+}
+
+// What a typed "no" disputes: the sender's shares in their open settle
+// request, else the latest finalized expense they owe on.
+export function disputeTargets(ctx: BrainCtx, m: Message): Expense[] {
+  const request_id = openRequestFor(ctx, m);
+  if (request_id) return requestExpenses(ctx, request_id).filter((e) => owing(ctx, e).some((s) => s.phone === m.sender_phone));
+  const e = settleTarget(ctx, m);
+  return e ? [e] : [];
 }
 
 // The most recent finalized expense where the sender still owes.
@@ -230,6 +253,16 @@ export function settleTarget(ctx: BrainCtx, m: Message): Expense | undefined {
     )[0];
 }
 
+// A newer settle request takes over the expenses of an older one (each
+// expense keeps one settle_message_id), so a tap on the older request goes
+// to the sender's current one (Harjyot's review on #14).
+function liveRequest(ctx: BrainCtx, m: Message, request_id: string): string | undefined {
+  const owesHere = requestExpenses(ctx, request_id).some((e) =>
+    owing(ctx, e).some((s) => s.phone === m.sender_phone),
+  );
+  return owesHere ? request_id : openRequestFor(ctx, m);
+}
+
 // SPEC §6.2: a reaction is routed by the Tab message it targets.
 export async function routeReaction(ctx: BrainCtx, m: Message) {
   if (!m.reply_to_id || !m.reaction) return;
@@ -239,13 +272,15 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
   if (!target) return;
 
   if (target.purpose === "settle_request") {
-    if (m.reaction === "like") await approveRequest(ctx, m, target.action_id);
-    else if (m.reaction === "dislike") {
-      const e = requestExpenses(ctx, target.action_id).find((x) =>
-        owing(ctx, x).some((s) => s.phone === m.sender_phone),
+    const request_id = liveRequest(ctx, m, target.action_id);
+    if (!request_id) return;
+    if (m.reaction === "like") await approveRequest(ctx, m, request_id);
+    else if (m.reaction === "dislike")
+      await dispute(
+        ctx,
+        m,
+        requestExpenses(ctx, request_id).filter((x) => owing(ctx, x).some((s) => s.phone === m.sender_phone)),
       );
-      if (e) await dispute(ctx, m, e);
-    }
     return;
   }
   if (target.purpose !== "split_proposal" || !target.expense_id) return;
@@ -284,9 +319,12 @@ export async function announceSettlements(ctx: BrainCtx) {
       t,
     ]);
 
+  // Seeded history (seed:demo) has no real 👍 behind it, and no request Tab
+  // posted: announce only what happened in the chat.
+  const reactions = new Set(ctx.store.messages().filter((m) => m.kind === "reaction").map((m) => m.message_id));
   for (const [approval, ts] of byApproval) {
     const id = `payment_receipt:${approval}`;
-    if (sent.has(id) || ts.some((t) => t.status !== "done")) continue;
+    if (!reactions.has(approval) || sent.has(id) || ts.some((t) => t.status !== "done")) continue;
     const e = ctx.store.expense(ts[0]!.expense_id);
     if (!e) continue;
     const paid = new Map<string, number>();
@@ -330,6 +368,7 @@ export async function announceSettlements(ctx: BrainCtx) {
     const covered = requestExpenses(ctx, request_id);
     if (
       sent.has(id) ||
+      !sent.has(request_id) ||
       covered.length === 0 ||
       covered.some((e) => e.status !== "settled")
     )
@@ -369,3 +408,39 @@ export async function announceSettlements(ctx: BrainCtx) {
   }
 }
 
+// §7.6: people who haven't tapped 👍 get a friendly nudge in the group by
+// name, on the claim-nudge schedule, counted from when the request went out.
+// After the last one the balance just stays outstanding (P7).
+export async function approvalFollowups(ctx: BrainCtx) {
+  const now = ctx.now();
+  const d = ctx.timing.durations;
+  const schedule = [d.FOLLOWUP_DM1_AFTER, d.FOLLOWUP_DM1_AFTER + d.FOLLOWUP_DM2_AFTER, d.FOLLOWUP_DM3_AFTER];
+  for (const request of ctx.store.outbox().filter((o) => o.purpose === "settle_request" && o.status !== "cancelled" && o.group_id)) {
+    const group_id = request.group_id!;
+    const expenses = requestExpenses(ctx, request.action_id).filter((e) => e.status === "finalized");
+    const byPerson = new Map<string, { e: Expense; s: Share }[]>();
+    for (const e of expenses)
+      for (const s of owing(ctx, e)) byPerson.set(s.phone, [...(byPerson.get(s.phone) ?? []), { e, s }]);
+    for (const [phone, owed] of byPerson) {
+      // Counted from the outbox: shares can't change once finalized.
+      const prefix = `approval_followup:${request.action_id}:${phone}:`;
+      const step = ctx.store.outbox().filter((o) => o.action_id.startsWith(prefix)).length;
+      const due = schedule[step];
+      if (due === undefined || step >= MAX_DMS_PER_EXPENSE || now.getTime() < request.created_at.getTime() + due) continue;
+      const toPayee = new Map<string, number>();
+      for (const { e, s } of owed) toPayee.set(e.payer_phone!, (toPayee.get(e.payer_phone!) ?? 0) + s.amount_cents);
+      await say(ctx, {
+        chat: { group_id },
+        purpose: "approval_followup",
+        id: `${prefix}${step + 1}`,
+        text: T.approvalFollowup({
+          seed: `${request.action_id}:${phone}`,
+          person: person(ctx, group_id, phone),
+          owed: [...toPayee].map(([payee, amount_cents]) => ({ payee: person(ctx, group_id, payee), amount_cents })),
+          step: (step + 1) as 1 | 2 | 3,
+        }),
+        send_after: outsideQuietHours(ctx, now, ctx.store.group(group_id)?.timezone ?? "America/Detroit"),
+      });
+    }
+  }
+}

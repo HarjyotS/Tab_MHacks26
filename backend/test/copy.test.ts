@@ -138,14 +138,14 @@ function renders(seed: string): {
     },
     {
       purpose: "approval_followup",
-      group: false,
+      group: true,
       text: T.approvalFollowup({
         seed,
-        description: "Frita Batidos",
-        payer: joe,
-        amount_cents: 3825,
+        person: jake,
+        owed: [{ payee: joe, amount_cents: 3825 }, { payee: priya, amount_cents: 1200 }],
+        step: 1,
       }),
-      amounts: [3825],
+      amounts: [3825, 1200],
     },
     {
       purpose: "payment_receipt",

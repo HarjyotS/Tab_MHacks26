@@ -16,7 +16,7 @@ import type {
 } from "../extraction/types.js";
 import type { ReceiptRead } from "../extraction/receipt.js";
 import type { ClaimResolution, LineItem as ClaimItem } from "../extraction/types.js";
-import type { Message, Store } from "../store/types.js";
+import type { Expense, Message, Store } from "../store/types.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
 
@@ -266,4 +266,20 @@ export function inWords(ms: number): string {
   if (m < 90) return m === 60 ? "in an hour" : `in ${m} minutes`;
   const h = Math.round(m / 60);
   return h === 1 ? "in an hour" : `in ${h} hours`;
+}
+
+// Runs scheduled work for each expense on its own, so one that throws is
+// logged and the rest of the tick still runs (Harjyot's review on #14).
+export async function perExpense(
+  ctx: BrainCtx,
+  expenses: Expense[],
+  work: (e: Expense) => Promise<void>,
+): Promise<void> {
+  for (const e of expenses) {
+    try {
+      await work(e);
+    } catch (err) {
+      ctx.log("expense_tick_failed", { expense_id: e.expense_id, group_id: e.group_id, error: String(err) });
+    }
+  }
 }

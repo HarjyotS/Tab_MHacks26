@@ -2,16 +2,17 @@
 import type { Intent } from "@tab/gate";
 import { decide } from "../gate/decide.js";
 import type { Expense, Message } from "../store/types.js";
-import { type BrainCtx, chatKey, chatOf, inWords, type Pending, say, tapback } from "./context.js";
+import { type BrainCtx, chatKey, chatOf, inWords, type Pending, perExpense, say, tapback } from "./context.js";
 import { applyAdjustment, groupFor, handleAdjustment, handleExpense, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   announceSettlements,
+  approvalFollowups,
   dispute,
+  disputeTargets,
   finalize,
   routeReaction,
-  settleTarget,
   settleUp,
   textApproval,
 } from "./settle.js";
@@ -54,6 +55,9 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
     message_id: m.message_id,
     status: "processing",
   });
+  // Whether the text may stay in the database (§19): only money-related
+  // messages, answers to Tab, and "why?" after a balance reply.
+  let keep = false;
   try {
     let intent: Intent | undefined;
     let confidence: number | undefined;
@@ -73,11 +77,12 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent);
       ctx.log("classified", { message_id: m.message_id, group_id: m.group_id, intent, confidence, decision });
 
-      const answered = (await mayAnswerPending(ctx, m, moneyRelated, result.intent)) && (await answerPending(ctx, m));
+      const answered = (await mayAnswerPending(ctx, m, decision !== "ignore")) && (await answerPending(ctx, m));
       // "why?" right after Tab's balance reply: the short explanation.
       const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleBreakdown(ctx, m);
-      if (!(answered || moneyRelated || why)) intent = "ignore";
+      keep = answered || moneyRelated || why;
+      if (!keep) intent = "ignore";
       if (!answered && !why) {
         if (decision === "act") await act(ctx, m, result.intent);
         else if (decision === "clarify") await clarify(ctx, m, result.intent);
@@ -97,6 +102,8 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
     });
     await ctx.db.set_message_result({
       message_id: m.message_id,
+      // A failure before the message proved money-related clears its text.
+      intent: keep || m.kind === "reaction" ? undefined : "ignore",
       status: "error",
       error: String(err).slice(0, 500),
     });
@@ -130,8 +137,8 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     case "settle_up":
       return settleUp(ctx, m);
     case "dispute": {
-      const e = boundIf("finalized") ?? settleTarget(ctx, m);
-      return e ? dispute(ctx, m, e) : undefined;
+      const e = boundIf("finalized");
+      return dispute(ctx, m, e ? [e] : disputeTargets(ctx, m));
     }
     case "balance_query":
       return handleBalanceQuery(ctx, m);
@@ -180,18 +187,37 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
 // If Tab asked something in this chat, try the message as the answer. An
 // answer is accepted only if it actually resolves something; otherwise the
 // message is classified normally.
-// An open question is answered by the person Tab asked, or by anyone whose
-// message the gate itself judged money-related.
-// Intents that could be someone else's answer to Tab's money question
-// ("who paid?" → "joe did"). A balance question or a claim never is.
-const ANSWER_INTENTS = new Set<Intent>(["expense", "correction", "split_adjustment"]);
-
-async function mayAnswerPending(ctx: BrainCtx, m: Message, moneyRelated: boolean, intent: Intent): Promise<boolean> {
+// Who may answer (Harjyot's review on #14): the person Tab asked, since
+// their reply answers Tab's own money question. Anyone else only by
+// replying inline to that question, and only if the gate passed it; a
+// bystander's "uber was $30, I paid" is their own expense, not an answer.
+async function mayAnswerPending(ctx: BrainCtx, m: Message, passed: boolean): Promise<boolean> {
   const p = ctx.memory.pending.get(chatKey(chatOf(m)));
   if (!p) return false;
   // The settle-mode question is answered by anyone, by regex only (no Grok).
   if (p.kind === "settle_mode" || m.sender_phone === p.source.sender_phone) return true;
-  return moneyRelated && ANSWER_INTENTS.has(intent);
+  return passed && (p.kind === "expense" || p.kind === "adjustment") && repliesToQuestion(ctx, m);
+}
+
+function repliesToQuestion(ctx: BrainCtx, m: Message): boolean {
+  if (!m.reply_to_id) return false;
+  const chat = chatOf(m);
+  const last = ctx.store
+    .outbox()
+    .filter((o) => o.purpose === "clarifying_question" && (chat.group_id ? o.group_id === chat.group_id : o.to_phone === chat.dm_phone))
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+  return last?.sent_photon_id === m.reply_to_id;
+}
+
+// Someone else's answer is read as the asker's message, so "I" and "me"
+// would mean the asker. Name the speaker instead: "me" from Joe is Joe.
+export function inThirdPerson(text: string, name: string): string {
+  return text
+    .replace(/\bI'm\b/gi, `${name} is`)
+    .replace(/\bI've\b/gi, `${name} has`)
+    .replace(/\bI'd\b/gi, `${name} would`)
+    .replace(/\bmy\b/gi, `${name}'s`)
+    .replace(/\b(I|me|myself)\b/gi, name);
 }
 
 async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
@@ -213,7 +239,7 @@ async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
   const answerer =
     m.sender_phone === p.source.sender_phone
       ? m.text
-      : `${nameOf(ctx, m)}: ${m.text}`;
+      : inThirdPerson(m.text, nameOf(ctx, m));
   const text = `${p.text}\n${answerer}`;
   const mode = p.kind === "expense" ? "new" : "adjustment";
   const retry = await ctx.extract.expense(
@@ -320,13 +346,11 @@ function nameOf(ctx: BrainCtx, m: Message): string {
 export async function tick(ctx: BrainCtx): Promise<void> {
   const now = ctx.now();
   await onboardNewGroups(ctx);
-  for (const e of ctx.store
-    .expenses()
-    .filter((x) => x.status === "proposed" && x.objection_deadline)) {
+  await perExpense(ctx, ctx.store.expenses().filter((x) => x.status === "proposed" && x.objection_deadline), async (e) => {
     const deadline = e.objection_deadline!;
     if (now >= deadline) {
       await finalize(ctx, e);
-      continue;
+      return;
     }
     const remindAt =
       deadline.getTime() - ctx.timing.durations.OBJECTION_REMINDER_BEFORE;
@@ -343,8 +367,9 @@ export async function tick(ctx: BrainCtx): Promise<void> {
         expense_id: e.expense_id,
       });
     }
-  }
+  });
   await claimFollowups(ctx);
+  await approvalFollowups(ctx);
   await announceSettlements(ctx);
 }
 
@@ -377,7 +402,9 @@ async function answerReceipt(ctx: BrainCtx, m: Message, p: Extract<Pending, { ki
     return true;
   }
   // stage "tip"
-  const tip = /^(none|no tip|nothing|zero|didn'?t|no)\b/i.test(text) ? 0 : answerCents(text);
+  const tip = /^(none|no tip|nothing|zero|didn'?t|no)\b/i.test(text)
+    ? 0
+    : answerPercent(text, receipt.subtotal_cents ?? receipt.total_cents ?? 0) ?? answerCents(text);
   if (tip === undefined) return false;
   ctx.memory.pending.delete(key);
   await tapback(ctx, m, "like");
@@ -397,10 +424,16 @@ async function answerWhich(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind
   return true;
 }
 
-// "22", "$18.50", "it was 30": the first amount typed.
-function answerCents(text: string): number | undefined {
-  const match = text.match(/\$?(\d{1,6}(?:\.\d{1,2})?)/);
-  return match ? Math.round(Number(match[1]) * 100) : undefined;
+// "22", "$18.50", "it was 30", "1,240": the first amount typed.
+export function answerCents(text: string): number | undefined {
+  const match = text.match(/\$?(\d{1,3}(?:,\d{3})+|\d{1,6})(\.\d{1,2})?/);
+  return match ? Math.round(Number(match[1]!.replace(/,/g, "") + (match[2] ?? "")) * 100) : undefined;
+}
+
+// "20%", "18 percent": a tip as a share of the subtotal, computed in code (P6).
+export function answerPercent(text: string, base_cents: number): number | undefined {
+  const match = text.match(/(\d{1,2}(?:\.\d+)?)\s*(%|percent)/i);
+  return match ? Math.round((base_cents * Number(match[1])) / 100) : undefined;
 }
 
 // SPEC #15: "each" switches the group to per-expense settling; anything else
