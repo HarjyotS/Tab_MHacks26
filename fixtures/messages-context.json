@@ -21,10 +21,10 @@
             "money_related": true
           }
         },
-        { "from": "Tab", "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it." }
+        { "from": "Tab", "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there" }
       ],
       "open_items": [{ "expense_id": "e3", "description": "THE BISTRO", "expense_status": "proposed", "my_share_status": "proposed" }],
-      "open_questions": [{ "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it.", "who": "anyone" }],
+      "open_questions": [{ "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there", "who": "anyone" }],
       "chat_expenses": [
         {
           "expense_id": "e3",
@@ -65,10 +65,10 @@
           "from": "Priya",
           "photo": { "kind": "receipt", "description": "A restaurant receipt from THE BISTRO totaling $47.07.", "transcription": "THE BISTRO\nBURGER DELUXE 14.99\nCAESAR SALAD 9.99\n2 x SOFT DRINK @ $2.99 5.98\nCHEESECAKE 7.99\nTOTAL 47.07", "money_related": true }
         },
-        { "from": "Tab", "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it." }
+        { "from": "Tab", "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there" }
       ],
       "open_items": [{ "expense_id": "e3", "description": "THE BISTRO", "expense_status": "proposed" }],
-      "open_questions": [{ "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it.", "who": "anyone" }],
+      "open_questions": [{ "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there", "who": "anyone" }],
       "chat_expenses": [
         {
           "expense_id": "e3",
@@ -98,10 +98,10 @@
       "note": "Harjyot's playground: \"update it\" after the message it refers to was cleared; only the Jev-only transcript still has it",
       "context": [
         { "from": "Joe", "text": "got pizza, $40" },
-        { "from": "Tab", "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?" }
+        { "from": "Tab", "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped" }
       ],
       "open_items": [{ "expense_id": "e1", "description": "Pizza", "expense_status": "proposed", "my_share_status": "proposed" }],
-      "open_questions": [{ "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?", "who": "anyone" }],
+      "open_questions": [{ "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped", "who": "anyone" }],
       "chat_expenses": [
         {
           "expense_id": "e1",
@@ -190,7 +190,7 @@
       "note": "A reply to a member's expense saying the sender wasn't there",
       "context": [
         { "from": "Joe", "text": "got the uber, $30" },
-        { "from": "Tab", "text": "Uber, $30.00. Split 5 ways, that's $6.00 each.\nAnything uneven, or anyone not there?" }
+        { "from": "Tab", "text": "uber $30.00 split 5 ways, so $6.00 each\nlmk if it wasn't even or someone skipped" }
       ],
       "open_items": [{ "expense_id": "e5", "description": "Uber", "expense_status": "proposed", "my_share_status": "proposed" }],
       "chat_expenses": [
@@ -217,7 +217,7 @@
     {
       "id": 310,
       "note": "\"yes\" to an open settle request the sender owes on",
-      "context": [{ "from": "Tab", "text": "Settling up: Kian owes Joe $10.00. Tap 👍 to pay your part, or reply if something's off." }],
+      "context": [{ "from": "Tab", "text": "cool, here's what's owed to Joe for pizza:\nKian $10.00\ntap 👍 on this to pay your part, or reply if something's off" }],
       "open_items": [{ "expense_id": "e1", "description": "Pizza", "expense_status": "finalized", "my_share_status": "locked" }],
       "chat_expenses": [
         {
@@ -240,7 +240,7 @@
     {
       "id": 311,
       "note": "A named member's one-word reply is never a name, even after the name prompt",
-      "context": [{ "from": "Tab", "text": "Hi, I'm Tab. I keep track of shared costs here so nobody has to.\nReply with your first name so I know who's who." }],
+      "context": [{ "from": "Tab", "text": "hey i'm tab\ni keep track of who paid for what so nobody has to be the spreadsheet friend\nwhat should i call everyone? reply w your first name" }],
       "open_items": [],
       "chat_expenses": [],
       "sender": { "named": true, "name_requested": false },

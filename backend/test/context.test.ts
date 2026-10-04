@@ -10,6 +10,7 @@ import type { ReceiptRead } from "../src/extraction/receipt.js";
 import type { ChatClient } from "../src/grok/structured.js";
 import { Transcript } from "../src/brain/transcript.js";
 import { PhotoNotes } from "../src/brain/photos.js";
+import * as T from "../src/copy/templates.js";
 import { PEOPLE, world, type Script } from "./support/harness.js";
 
 const raw = (cents: number | null, description: string | null, over: object = {}) => ({
@@ -186,7 +187,7 @@ describe("photos are described before the gate", () => {
     const w = world({ receipt: { blurry: BISTRO }, describe: { blurry: described("other", "A blurry piece of paper.", "", true) } });
     contextJev(w, { "": () => ({ intent: "receipt", confidence: 0.6 }) });
     await w.photo("Joe", "blurry");
-    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual(["want me to split this?"]);
+    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual([T.confirmReceipt()]);
     expect(w.db.expenses()).toEqual([]);
     await w.say("Joe", "yes");
     expect(w.db.expenses()[0]).toMatchObject({ description: "THE BISTRO", status: "proposed" });
@@ -253,7 +254,7 @@ describe("the playground misses, with context (Harjyot's session)", () => {
     expect(await w.say("Kian", cleared)).toMatchObject({ intent: "ignore", text: undefined });
     await w.say("Kian", "update it");
     expect(buildState(seen.at(-1)!)).toContain(`Recent chat, including off-topic messages`);
-    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual(["what's uneven?"]); // not silence
+    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual([T.whatsUneven()]); // not silence
     expect(prompts.some((p) => p.includes("update it"))).toBe(true);
     expect(prompts.some((p) => p.includes("one slice"))).toBe(false);
   });

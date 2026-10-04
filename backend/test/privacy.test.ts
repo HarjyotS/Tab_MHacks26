@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { stubClassifier, withPrefilter, type ClassifyInput } from "@tab/gate";
 import { addThread } from "../src/brain/threads.js";
+import * as T from "../src/copy/templates.js";
 import { GROUP, world } from "./support/harness.js";
 
 const raw = { is_expense: true, amount_cents: 6300, amount_is_per_person: false, description: "Groceries", payer: "sender", payer_name: null, participants: "everyone", participant_names: [], exclusion_names: [], fixed: [] };
@@ -90,6 +91,6 @@ describe("what never reaches Grok (Joe's review of #35)", () => {
     expect(m.status).toBe("done");
     expect(w.db.expenses()).toEqual([]);
     // Never quiet on money talk: one short question, the read only on yes.
-    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual(["want me to split this?"]);
+    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual([T.confirmReceipt()]);
   });
 });
