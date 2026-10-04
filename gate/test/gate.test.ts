@@ -29,6 +29,14 @@ describe('Jev gate', () => {
     expect(Object.keys(body.questions.intent.criteria).sort()).toEqual([...INTENTS].sort());
   });
 
+  it('adds up the question intents\' probabilities, since the backend answers them all the same way', async () => {
+    const probabilities = { balance_query: 0.5, money_question: 0.38, breakdown_request: 0.05, help: 0.07 };
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ answers: { intent: { choice: 'balance_query', probabilities } } })));
+    const result = await jevClassifier({ apiKey: 'key', fetch: fetch as unknown as typeof globalThis.fetch })(toInput(byId(5)));
+    expect(result.intent).toBe('balance_query');
+    expect(result.confidence).toBeCloseTo(0.93);
+  });
+
   it('labels message text as data and includes context, members, and open items', () => {
     const state = buildState(toInput(byId(6)));
     expect(state).toContain('NEW MESSAGE:\nPriya: same as Jake');
@@ -115,6 +123,16 @@ describe('stub classifier', () => {
     expect((await say('22', true)).intent).toBe('answer');
     expect((await say('yeah lock it in', false)).intent).toBe('ignore');
     expect((await say('who is driving tonight', true)).intent).toBe('ignore');
+  });
+
+  it('reads questions about the group\'s money as money_question, but not purchases or balances', async () => {
+    const plain = toInput(byId(3));
+    const intent = async (text: string) => (await stubClassifier({ ...plain, message: { ...plain.message, text } })).intent;
+    for (const text of ['what was on the bistro receipt?', 'how much did we spend on food?', 'who paid for the uber?', 'how was the pizza split', 'what\'s left to settle'])
+      expect(await intent(text), text).toBe('money_question');
+    expect(await intent('why do i owe jake 12')).toBe('breakdown_request');
+    expect(await intent('what do i owe')).toBe('balance_query');
+    expect(await intent('paid 48 for pizza for everyone')).toBe('expense');
   });
 
   it('passes the spec fixtures it is meant to cover', async () => {

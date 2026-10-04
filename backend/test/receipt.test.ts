@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   checkReceiptMath,
+  extractReceipt,
   type ReceiptRead,
 } from "../src/extraction/receipt.js";
+import type { ChatClient } from "../src/grok/structured.js";
 import { receiptPrice } from "../src/brain/expense.js";
 import type { LineItem } from "../src/store/types.js";
 import { tick } from "../src/brain/process.js";
@@ -436,5 +438,44 @@ describe("claims and finalizing (SPEC 7.5)", () => {
 
     await w.wait(41_000); // 48h → 480s: deadline
     expect(w.db.expenses()[0]!.status).toBe("finalized");
+  });
+});
+
+// Joe's real receipts (kept out of the repo: they show a name and card digits).
+describe("reading real receipts", () => {
+  const fake = (out: object): ChatClient =>
+    ({ chat: { completions: { create: vi.fn().mockResolvedValue({ choices: [{ message: { content: JSON.stringify(out) } }] }) } } }) as unknown as ChatClient;
+  const raw = {
+    is_receipt: true, merchant: "Ambar", tip_line_blank: false, tax_included: false, currency: "USD",
+    fees_cents: null, discount_cents: null, notes: null,
+    items: [
+      { description: "Dinner Ambar Experience", quantity: 4, amount_cents: 19996 },
+      { description: "Restaurant Surcharge 3.5%", quantity: 1, amount_cents: 700 },
+    ],
+    subtotal_cents: 20696, tax_cents: 2070,
+  };
+
+  it("counts a tip printed after the total, so the split covers what was paid", async () => {
+    const r = await extractReceipt(fake({ ...raw, tip_cents: 3999, total_cents: 22766 }), "m", "data:,");
+    expect(r.math_problem).toBeNull();
+    expect(r.receipt.total_cents).toBe(26765);
+  });
+
+  it("reads a card payment mistaken for a discount as the payment it is", async () => {
+    const r = await extractReceipt(fake({ ...raw, tip_cents: null, discount_cents: 22766, total_cents: 0 }), "m", "data:,");
+    expect(r.receipt).toMatchObject({ discount_cents: undefined, total_cents: 22766 });
+    expect(r.math_problem).toBeNull();
+  });
+
+  it("asks for the total instead of confirming $0", async () => {
+    const w = world({
+      receipt: { zero: { receipt: { ...FRITA.receipt, discount_cents: undefined, total_cents: 0 }, tip_line_blank: false, math_problem: "no total", currency: "USD" } },
+    });
+    await w.photo("Joe", "zero");
+    expect(w.said("clarifying_question")).toEqual(["ok what was the total?"]);
+  });
+
+  it("never accepts a $0 total (\"Amount Due $0.00\" read as the total)", () => {
+    expect(checkReceiptMath({ ...FRITA.receipt, discount_cents: 10200, total_cents: 0 })).toBe("no total");
   });
 });
