@@ -258,6 +258,20 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       group_id: m.group_id,
       error: String(err),
     });
+    // Live chats: a 👀 already went out, so never leave it hanging when
+    // Grok times out (live run: 3 × 15 s, then silence).
+    if (ctx.eyes && m.kind !== "reaction")
+      await ctx.db
+        .enqueue_outbox({
+          action_id: `oops:${m.message_id}`,
+          kind: m.group_id ? "group_message" : "dm",
+          group_id: m.group_id,
+          to_phone: m.group_id ? undefined : m.sender_phone,
+          text: "my brain lagged on that one, say it again?",
+          purpose: "other",
+          send_after: ctx.now(),
+        })
+        .catch(() => {});
     await ctx.db.set_message_result({
       message_id: m.message_id,
       // A failure before the message proved money-related clears its text.
