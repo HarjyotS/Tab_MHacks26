@@ -1,7 +1,7 @@
 // Everything a handler needs, injected so tests can run the whole brain
 // against an in-memory database and fake models.
 import type { Classify, GateMessage } from "@tab/gate";
-import { CONTEXT_MESSAGES, type Timing } from "../config.js";
+import { CONTEXT_MESSAGES, type LedgerConfig, type Timing } from "../config.js";
 import type { BackendReducers } from "../db/reducers.js";
 import type { OutboxPurpose, Reaction } from "../db/types.js";
 import { compose } from "../copy/compose.js";
@@ -90,6 +90,9 @@ export class Memory {
   // PENDING_QUESTION_TTL.
   holds = new Map<string, Date>();
   lastHadWit = new Map<string, boolean>();
+  // Groups whose ledger secret this process has set. The secret is derived,
+  // so setting it again after a restart writes the same value.
+  ledgerSecretSet = new Set<string>();
   // Style flags from every text message (no text), for matching the group.
   private style = new Map<string, StyleFlags[]>();
 
@@ -124,6 +127,7 @@ export type BrainCtx = {
   extract: Extractors;
   wit?: (ctx: WitContext) => Promise<string | null>;
   timing: Timing;
+  ledger?: LedgerConfig; // §12.3 links; absent means Tab posts none
   memory: Memory;
   log: (event: string, fields: Record<string, unknown>) => void;
 };

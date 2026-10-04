@@ -81,3 +81,21 @@ export function grokConfig() {
     model: process.env.GROK_MODEL || "grok-4.20-0309-non-reasoning",
   };
 }
+
+// SPEC §12.3 web ledger links: where the ledger is hosted, and the key that
+// derives each group's link secret. Both optional: without them Tab posts
+// no link. Validated here so a typo fails at startup, not mid-chat.
+export type LedgerConfig = { baseUrl: string; key: string };
+
+export function ledgerConfig(
+  env: { LEDGER_BASE_URL?: string; LEDGER_LINK_KEY?: string } = process.env,
+): LedgerConfig | undefined {
+  const baseUrl = env.LEDGER_BASE_URL?.trim();
+  const key = env.LEDGER_LINK_KEY?.trim();
+  if (!baseUrl && !key) return undefined;
+  if (!baseUrl || !URL.canParse(baseUrl))
+    throw new Error(`LEDGER_BASE_URL must be a URL when LEDGER_LINK_KEY is set, got ${JSON.stringify(baseUrl ?? "")}`);
+  if (!key || key.length < 32)
+    throw new Error("LEDGER_LINK_KEY must be at least 32 characters when LEDGER_BASE_URL is set");
+  return { baseUrl: baseUrl.replace(/\/+$/, ""), key };
+}

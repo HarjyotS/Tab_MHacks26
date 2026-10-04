@@ -3,6 +3,7 @@ import * as T from "../copy/templates.js";
 import type { Debt, OwedLine } from "../copy/templates.js";
 import { listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
+import { ledgerUrl } from "./ledger.js";
 import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, styleFor, tapback, chatKey } from "./context.js";
 
 // §7.2 step 2: intro, name prompt, and contact card for a new group.
@@ -171,7 +172,7 @@ function myLines(ctx: BrainCtx, group_id: string, phone: string): (OwedLine & { 
 
 // A DM is about every group the sender is in (Harjyot's playground test:
 // a member of two groups got no answer by DM).
-function groupsOf(ctx: BrainCtx, m: Message): string[] {
+export function groupsOf(ctx: BrainCtx, m: Message): string[] {
   if (m.group_id) return [m.group_id];
   return ctx.store
     .groups()
@@ -195,18 +196,27 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
         owes: all.filter((d) => d.from.phone === m.sender_phone),
         owed: all.filter((d) => d.to.phone === m.sender_phone),
       })
-    : T.balanceReply({ debts: all });
+    : T.balanceReply({
+        debts: all,
+        // Past six lines the rest is on the ledger (§7.8).
+        ledger_url: all.length > 6 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
+      });
   await say(ctx, { chat: chatOf(m), purpose: "balance_reply", id: `balance_reply:${m.message_id}`, reply_to: m.message_id, text });
 }
 
 export async function handleBreakdown(ctx: BrainCtx, m: Message) {
   const groups = groupsOf(ctx, m);
   if (groups.length === 0) return;
+  const lines = groups.flatMap((g) => myLines(ctx, g, m.sender_phone));
   await say(ctx, {
     chat: chatOf(m),
     purpose: "breakdown_reply",
     id: `breakdown_reply:${m.message_id}`, reply_to: m.message_id,
-    text: T.breakdownReply({ lines: groups.flatMap((g) => myLines(ctx, g, m.sender_phone)) }),
+    text: T.breakdownReply({
+      lines,
+      // Past five lines the rest is on the ledger (§7.8).
+      ledger_url: lines.length > 5 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
+    }),
   });
 }
 

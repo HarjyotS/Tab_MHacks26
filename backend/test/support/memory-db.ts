@@ -34,6 +34,8 @@ export class MemoryDb implements Store {
   trs = new Map<string, Transfer>();
   items = new Map<string, LineItem>();
   clms = new Map<string, Claim>();
+  // group_id → secret (the module's private ledger_secrets table).
+  ledgerSecrets = new Map<string, string>();
   // group_settings: groups that chose a settle mode (no row means ledger).
   settings = new Map<string, SettleMode>();
   constructor(private now: () => Date) {}
@@ -333,7 +335,11 @@ export class MemoryDb implements Store {
       const sum = this.shares(a.expenseId).reduce((t, s) => t + s.amount_cents, 0);
       if (sum !== e.total_cents) throw new Error("Shares do not match expense total");
     },
-    setLedgerSecret: async () => {},
+    setLedgerSecret: async (a: Args<"setLedgerSecret">) => {
+      if (!this.grps.has(a.groupId)) throw new Error("Unknown group");
+      if (a.secret.length < 24) throw new Error("Ledger secret must contain at least 24 characters");
+      this.ledgerSecrets.set(a.groupId, a.secret);
+    },
     setLineItems: async (a: Args<"setLineItems">) => {
       for (const [k, i] of this.items)
         if (i.expense_id === a.expenseId) this.items.delete(k);

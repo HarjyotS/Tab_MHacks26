@@ -19,6 +19,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
+import { handleLedger } from "./ledger.js";
 import {
   handleBalanceQuery,
   handleBreakdown,
@@ -89,9 +90,12 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       // "why?" right after Tab's balance reply: the short explanation.
       const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleBreakdown(ctx, m);
-      keep = answered || moneyRelated || why;
+      // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
+      const ledger = !answered && !why && wantsLedger(m, intent, decision);
+      if (ledger) await handleLedger(ctx, m);
+      keep = answered || moneyRelated || why || ledger;
       if (!keep) intent = "ignore";
-      if (!answered && !why) {
+      if (!answered && !why && !ledger) {
         if (decision === "act") await act(ctx, m, result.intent);
         else if (decision === "clarify") await clarify(ctx, m, result.intent);
       }
@@ -116,6 +120,16 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       error: String(err).slice(0, 500),
     });
   }
+}
+
+const LEDGER_ASK = /\bledger\b/i;
+const TO_TAB = /^@?tab\b/i;
+const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+
+function wantsLedger(m: Message, intent: Intent, decision: string): boolean {
+  const text = (m.text ?? "").trim();
+  if (!LEDGER_ASK.test(text)) return false;
+  return TO_TAB.test(text) || m.group_id === undefined || (decision !== "ignore" && READ_INTENTS.has(intent));
 }
 
 // An inline reply binds a message to one expense (Harjyot's review on #14,

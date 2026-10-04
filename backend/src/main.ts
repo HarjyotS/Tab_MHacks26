@@ -1,7 +1,7 @@
 // The backend service: SPEC §11.1 processing loop plus the §11.2 scheduler,
 // reading Kian's backend_* views and writing only through reducers.
 //   npm start -w backend
-import { grokConfig, timing } from "./config.js";
+import { grokConfig, ledgerConfig, timing } from "./config.js";
 import { connectBackend } from "./db/connection.js";
 import { createReducers } from "./db/reducers.js";
 import { createClassify } from "./gate/index.js";
@@ -68,6 +68,7 @@ const ctx: BrainCtx = {
   },
   wit: (w) => witLine(xai, grok.model, w),
   timing: t,
+  ledger: ledgerConfig(),
   memory: new Memory(),
   log,
 };
