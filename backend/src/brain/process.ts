@@ -344,8 +344,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       const receipt = claimTargets(ctx, m).length === 0 && !boundIf("itemizing") ? receiptToSplit(ctx, m) : undefined;
       return receipt ? handleAdjustment(ctx, m, m.text ?? "", receipt) : handleClaim(ctx, m, boundIf("itemizing"));
     }
-    case "correction":
-      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m));
+    case "correction": {
+      const target = bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m);
+      // Nothing it names is on the tab, and it states a purchase: a new expense.
+      if (!target && STATES_PURCHASE.test(m.text ?? "") && !clearlyCorrects(m.text ?? "")) return handleExpense(ctx, m);
+      return handleCorrection(ctx, m, target);
+    }
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
     // payment_reported is ignored in the MVP; ignore needs nothing.
@@ -360,7 +364,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
 // sender is the payer, so Tab asks one question, not two.
 const FAIRLY_SURE = 0.75;
 
-async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`, confidence = 0) {
+async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`, confidence = 0): Promise<unknown> {
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
@@ -379,6 +383,11 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   // "want me to split that?" about a duplicate.
   const correcting = intent === "expense" || intent === "correction" ? namedCorrectionTarget(ctx, m) : undefined;
   if (correcting) return confirmCorrectionOf(ctx, m, correcting, id);
+  // "just paid for 47 uber" with no uber on the tab (live run, right after a
+  // demo reset): there's nothing to change, so it's a new expense. Stated
+  // outright ("paid", an amount) it's logged; otherwise Tab asks to split it.
+  if (intent === "correction" && !repliedExpense(ctx, m))
+    return STATES_PURCHASE.test(m.text ?? "") ? act(ctx, m, "expense") : clarify(ctx, m, "expense", id, confidence);
   // "whats the $90.70 from?" asks about a balance; offering to split it as a
   // new expense would be wrong. Point to the command instead (live run).
   if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
@@ -1166,3 +1175,7 @@ function amountAfterPhoto(ctx: BrainCtx, m: Message): string | undefined {
   const what = note && "description" in note && typeof note.description === "string" && note.description ? `the photo (${note.description.slice(0, 80)})` : "the receipt in my photo";
   return `i paid $${amount} for ${what}, split it with everyone`;
 }
+
+// "just paid for 47 uber", "got dinner 60", "i covered the tickets, $40".
+const STATES_PURCHASE = /^(?=.*\d)(?=.*\b(paid|pay(?:ed)?|got|bought|covered|spent|grabbed|picked up)\b)/i;
+
