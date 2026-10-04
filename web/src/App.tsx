@@ -24,18 +24,30 @@ export function App({ secret }: AppProps) {
   const { isActive, connectionError } = useSpacetimeDB();
   const redeem = useReducer(reducers.redeemLedgerAccess);
   const [groups, groupsReady] = useTable(tables.ledgerGroups);
-  const [members] = useTable(tables.ledgerMembers);
-  const [expenses] = useTable(tables.ledgerExpenses);
-  const [shares] = useTable(tables.ledgerShares);
-  const [items] = useTable(tables.ledgerItems);
-  const [claims] = useTable(tables.ledgerClaims);
-  const [transfers] = useTable(tables.ledgerTransfers);
-  const [balances] = useTable(tables.ledgerBalances);
+  const [allMembers] = useTable(tables.ledgerMembers);
+  const [allExpenses] = useTable(tables.ledgerExpenses);
+  const [allShares] = useTable(tables.ledgerShares);
+  const [allItems] = useTable(tables.ledgerItems);
+  const [allClaims] = useTable(tables.ledgerClaims);
+  const [allTransfers] = useTable(tables.ledgerTransfers);
+  const [allBalances] = useTable(tables.ledgerBalances);
   const [accessState, setAccessState] = useState<'idle' | 'redeeming' | 'ready' | 'invalid'>('idle');
   const [selectedExpenseId, setSelectedExpenseId] = useState<string>();
   const [pulse, setPulse] = useState<Pulse>();
   const redeemedRef = useRef(false);
   const previousTransferStatus = useRef<Map<string, string> | undefined>(undefined);
+
+  // main.tsx gives each link its own identity, so the views should hold one group.
+  // Still pin everything to a single group so a stray grant can never mix ledgers.
+  const group = groups[0];
+  const scoped = useMemo(
+    () => scopeToGroup(group?.ledgerGroupId, {
+      members: allMembers, expenses: allExpenses, shares: allShares, items: allItems,
+      claims: allClaims, transfers: allTransfers, balances: allBalances,
+    }),
+    [group?.ledgerGroupId, allMembers, allExpenses, allShares, allItems, allClaims, allTransfers, allBalances]
+  );
+  const { members, expenses, shares, items, claims, transfers, balances } = scoped;
 
   useEffect(() => {
     if (!isActive || redeemedRef.current || !secret) return;
@@ -65,7 +77,8 @@ export function App({ secret }: AppProps) {
   }, [transfers]);
 
   useEffect(() => {
-    if (!selectedExpenseId && expenses.length) setSelectedExpenseId(expenses[0].expenseId);
+    if (expenses.some(expense => expense.expenseId === selectedExpenseId)) return;
+    setSelectedExpenseId(expenses[0]?.expenseId);
   }, [expenses, selectedExpenseId]);
 
   const names = useMemo(
@@ -83,9 +96,8 @@ export function App({ secret }: AppProps) {
     return <StatusPage title="Opening your ledger" detail="Connecting to the live SpacetimeDB view…" loading />;
   }
   if (accessState === 'invalid') return <StatusPage title="That link is invalid" detail="Ask Tab for a fresh private ledger link." />;
-  if (!groups.length) return <StatusPage title="Access granted" detail="Waiting for this group’s first ledger update…" loading />;
+  if (!group) return <StatusPage title="Access granted" detail="Waiting for this group’s first ledger update…" loading />;
 
-  const group = groups[0];
   const selectedExpense = expenses.find(expense => expense.expenseId === selectedExpenseId);
   const outstanding = balances.reduce((sum, balance) => sum + balance.amountCents, 0n);
   const paid = transfers.filter(transfer => transfer.status === 'done').reduce((sum, transfer) => sum + transfer.amountCents, 0n);
@@ -164,6 +176,30 @@ export function App({ secret }: AppProps) {
       <footer>Simulated settlement · Nessie supplies setup-time sandbox profiles · No real money moves</footer>
     </main>
   );
+}
+
+type LedgerRows = {
+  members: readonly LedgerMember[]; expenses: readonly LedgerExpense[]; shares: readonly LedgerShare[];
+  items: readonly LedgerItem[]; claims: readonly LedgerClaim[]; transfers: readonly LedgerTransfer[];
+  balances: readonly LedgerBalance[];
+};
+
+/** Keeps only the rows that belong to one group: by group id, then by its expenses and members. */
+function scopeToGroup(groupId: string | undefined, rows: LedgerRows): LedgerRows {
+  const members = rows.members.filter(member => member.ledgerGroupId === groupId);
+  const expenses = rows.expenses.filter(expense => expense.ledgerGroupId === groupId);
+  const memberIds = new Set(members.map(member => member.ledgerMemberId));
+  const expenseIds = new Set(expenses.map(expense => expense.expenseId));
+  return {
+    members,
+    expenses,
+    shares: rows.shares.filter(share => expenseIds.has(share.expenseId)),
+    items: rows.items.filter(item => expenseIds.has(item.expenseId)),
+    claims: rows.claims.filter(claim => expenseIds.has(claim.expenseId)),
+    transfers: rows.transfers.filter(transfer => expenseIds.has(transfer.expenseId)),
+    balances: rows.balances.filter(balance =>
+      memberIds.has(balance.fromLedgerMemberId) && memberIds.has(balance.toLedgerMemberId)),
+  };
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
