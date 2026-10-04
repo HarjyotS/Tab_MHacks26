@@ -63,6 +63,13 @@ export type Pending =
       asked_at: Date;
     }
   | {
+      kind: "dispute"; // "What's off with your $25.00?" (§7.6)
+      source: Message; // the 👎 or "no"
+      expense_ids: string[]; // the disputed expenses
+      amount_cents?: number; // set once they've said an amount but not which expense
+      asked_at: Date;
+    }
+  | {
       kind: "which"; // a DM claim with two open lists (§14)
       source: Message;
       expense_ids: string[];
@@ -79,8 +86,6 @@ export class Memory {
   >();
   pending = new Map<string, Pending>();
   lastHadWit = new Map<string, boolean>();
-  // Groups that answered "each" (SPEC #15) until Kian stores settle_mode.
-  settleMode = new Map<string, "ledger" | "per_expense">();
   // Style flags from every text message (no text), for matching the group.
   private style = new Map<string, StyleFlags[]>();
 

@@ -12,9 +12,12 @@ import {
   dispute,
   disputeTargets,
   finalize,
+  resolveDispute,
   routeReaction,
   settleUp,
+  stillDisputed,
   textApproval,
+  whichDisputed,
 } from "./settle.js";
 import {
   handleBalanceQuery,
@@ -236,6 +239,7 @@ async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
   if (p.kind === "receipt") return answerReceipt(ctx, m, p, key);
   if (p.kind === "which") return answerWhich(ctx, m, p, key);
   if (p.kind === "settle_mode") return answerSettleMode(ctx, m, key);
+  if (p.kind === "dispute") return answerDispute(ctx, m, p, key);
 
   const answerer =
     m.sender_phone === p.source.sender_phone
@@ -425,6 +429,54 @@ async function answerWhich(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind
   return true;
 }
 
+// §7.6: the disputer answers "What's off?" with what they had ("I only had
+// $10"). Several disputed expenses: ask which one, then take a number. Only
+// the disputer answers; anything without an amount goes through normal
+// handling (e.g. "I wasn't there" is an adjustment).
+async function answerDispute(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind: "dispute" }>, key: string): Promise<boolean> {
+  if (m.sender_phone !== p.source.sender_phone) return false;
+  const open = stillDisputed(ctx, m.sender_phone, p.expense_ids);
+  if (open.length === 0) {
+    ctx.memory.pending.delete(key);
+    return false;
+  }
+  const text = (m.text ?? "").trim();
+  let amount = p.amount_cents;
+  let target: Expense | undefined;
+  if (amount !== undefined) {
+    // Numbered from the "Which one?" list, which is p.expense_ids.
+    const n = Number(text.replace(/^#/, ""));
+    const id = Number.isInteger(n) ? p.expense_ids[n - 1] : undefined;
+    target = open.find((e) => e.expense_id === id);
+    if (!target) return false;
+  } else {
+    amount = answerCents(text);
+    if (amount === undefined || amount <= 0) return false;
+    if (open.length > 1) {
+      ctx.memory.pending.set(key, { ...p, expense_ids: open.map((e) => e.expense_id), amount_cents: amount, asked_at: ctx.now() });
+      await say(ctx, {
+        chat: chatOf(m),
+        purpose: "clarifying_question",
+        id: `clarify:${m.message_id}`,
+        reply_to: m.message_id,
+        text: whichDisputed(ctx, m.sender_phone, open),
+      });
+      return true;
+    }
+    target = open[0]!;
+  }
+  if (await resolveDispute(ctx, m, target, amount)) {
+    // Anything else they disputed is still open to an answer.
+    const rest = open.filter((e) => e.expense_id !== target.expense_id).map((e) => e.expense_id);
+    if (rest.length > 0) ctx.memory.pending.set(key, { ...p, expense_ids: rest, amount_cents: undefined, asked_at: ctx.now() });
+    else ctx.memory.pending.delete(key);
+  } else {
+    // Too much for the payer's share to absorb: Tab asked again.
+    ctx.memory.pending.set(key, { ...p, expense_ids: [target.expense_id], amount_cents: undefined, asked_at: ctx.now() });
+  }
+  return true;
+}
+
 // "22", "$18.50", "it was 30", "1,240": the first amount typed.
 export function answerCents(text: string): number | undefined {
   const match = text.match(/\$?(\d{1,3}(?:,\d{3})+|\d{1,6})(\.\d{1,2})?/);
@@ -449,7 +501,7 @@ async function answerSettleMode(ctx: BrainCtx, m: Message, key: string): Promise
   const mode = EACH.test(text) ? "per_expense" : LEDGER.test(text) ? "ledger" : undefined;
   if (!m.group_id || !mode) return false;
   ctx.memory.pending.delete(key);
-  ctx.memory.settleMode.set(m.group_id, mode);
+  await ctx.db.set_settle_mode({ group_id: m.group_id, settle_mode: mode });
   await say(ctx, {
     chat: chatOf(m),
     purpose: "other",

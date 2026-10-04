@@ -183,7 +183,7 @@ describe("receipts (SPEC 7.4)", () => {
 describe("claims and finalizing (SPEC 7.5)", () => {
   it("locks each claim, finalizes when everyone has answered, and splits by what people had", async () => {
     const w = world({ receipt: { frita: FRITA }, claim: claims });
-    w.ctx.memory.settleMode.set("house", "per_expense");
+    await w.ctx.db.set_settle_mode({ group_id: "house", settle_mode: "per_expense" });
     await w.photo("Joe", "frita");
     await w.say("Kian", "1");
     await w.say("Priya", "2");

@@ -4,6 +4,7 @@
 import { Timestamp } from "spacetimedb";
 import { computeSplit } from "../../../spacetime/src/split-math.js";
 import { createReducers, type ReducerClient } from "../../src/db/reducers.js";
+import type { SettleMode } from "../../src/db/types.js";
 import type {
   Claim,
   Expense,
@@ -33,10 +34,8 @@ export class MemoryDb implements Store {
   trs = new Map<string, Transfer>();
   items = new Map<string, LineItem>();
   clms = new Map<string, Claim>();
-  // How create_transfer deduplicates. The module keys by approval alone
-  // today; "approval_expense" is the change asked of Kian on #2, which lets
-  // one 👍 pay several shares.
-  transferKey: "approval" | "approval_expense" = "approval";
+  // group_settings: groups that chose a settle mode (no row means ledger).
+  settings = new Map<string, SettleMode>();
   constructor(private now: () => Date) {}
 
   // ── Store (backend_messages only shows new and processing rows) ────────
@@ -44,6 +43,7 @@ export class MemoryDb implements Store {
   messages = () => [...this.msgs.values()];
   group = (id: string) => this.grps.get(id);
   groups = () => [...this.grps.values()];
+  settleMode = (id: string): SettleMode => this.settings.get(id) ?? "ledger";
   members = (id: string) =>
     [...this.mems.values()].filter((m) => m.group_id === id);
   outbox = () => [...this.out.values()];
@@ -267,12 +267,14 @@ export class MemoryDb implements Store {
           o.status = "cancelled";
       }
     },
+    // Deduped on (approval, expense), like the module's by_approval_expense
+    // index: one 👍 pays several shares, and a repeat of it pays nothing.
     createTransfer: async (a: Args<"createTransfer">) => {
       if (
         [...this.trs.values()].some(
           (t) =>
             t.approved_by_message_id === a.approvedByMessageId &&
-            (this.transferKey === "approval" || t.expense_id === a.expenseId),
+            t.expense_id === a.expenseId,
         )
       )
         return;
@@ -300,6 +302,36 @@ export class MemoryDb implements Store {
         approved_by_message_id: a.approvedByMessageId,
         created_at: this.now(),
       });
+    },
+    setSettleMode: async (a: Args<"setSettleMode">) => {
+      if (a.settleMode !== "ledger" && a.settleMode !== "per_expense")
+        throw new Error(`Invalid settle mode: ${a.settleMode}`);
+      if (!this.grps.has(a.groupId)) throw new Error("Unknown group");
+      this.settings.set(a.groupId, a.settleMode);
+    },
+    // The module's checks, in its order: the payer's share absorbs the
+    // difference so the total (and everyone else) is unchanged.
+    resolveDispute: async (a: Args<"resolveDispute">) => {
+      if (a.amountCents < 0n) throw new Error("Amount must not be negative");
+      const e = this.exps.get(a.expenseId);
+      if (!e) throw new Error("Unknown expense");
+      if (e.status !== "finalized")
+        throw new Error("Only finalized expenses have disputes to resolve");
+      if (!e.payer_phone) throw new Error("Expense has no payer");
+      const share = this.shrs.get(`${a.expenseId}:${a.phone}`);
+      if (!share || share.role !== "participant" || share.status !== "disputed")
+        throw new Error("Share is not disputed");
+      const payer = this.shrs.get(`${a.expenseId}:${e.payer_phone}`);
+      if (!payer) throw new Error("Payer share is missing");
+      const amount = n(a.amountCents);
+      const payerAmount = payer.amount_cents - (amount - share.amount_cents);
+      if (payerAmount < 0)
+        throw new Error("Amount exceeds what the payer's share can absorb");
+      share.amount_cents = amount;
+      share.status = "locked";
+      payer.amount_cents = payerAmount;
+      const sum = this.shares(a.expenseId).reduce((t, s) => t + s.amount_cents, 0);
+      if (sum !== e.total_cents) throw new Error("Shares do not match expense total");
     },
     setLedgerSecret: async () => {},
     setLineItems: async (a: Args<"setLineItems">) => {
