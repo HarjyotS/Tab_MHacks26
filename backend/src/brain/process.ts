@@ -386,6 +386,9 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   // "just paid for 47 uber" with no uber on the tab (live run, right after a
   // demo reset): there's nothing to change, so it's a new expense. Stated
   // outright ("paid", an amount) it's logged; otherwise Tab asks to split it.
+  // An unsure "expense" that plainly states a purchase is logged too: the
+  // split message is the confirmation, and it invites objections.
+  if (ctx.eyes && intent === "expense" && STATES_PURCHASE.test(m.text ?? "") && !AMOUNT_QUESTION.test(m.text ?? "")) return act(ctx, m, "expense");
   if (intent === "correction" && !repliedExpense(ctx, m))
     return STATES_PURCHASE.test(m.text ?? "") ? act(ctx, m, "expense") : clarify(ctx, m, "expense", id, confidence);
   // "whats the $90.70 from?" asks about a balance; offering to split it as a
