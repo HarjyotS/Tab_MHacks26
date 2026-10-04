@@ -18,6 +18,7 @@ import type {
 import type { ReceiptRead } from "../extraction/receipt.js";
 import type { ClaimResolution, LineItem as ClaimItem } from "../extraction/types.js";
 import type { Expense, Message, Store } from "../store/types.js";
+import type { Thread } from "./threads.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
 
@@ -46,7 +47,9 @@ export type Pending =
   | {
       kind: "confirm"; // "yes" proceeds with `then`
       source: Message;
-      then: "expense" | "large_amount" | "adjustment";
+      // finalize_and_settle: "Still waiting on claims… settle now?"; the
+      // expenses are the thread's expense_ids.
+      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle";
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
       asked_at: Date;
@@ -77,18 +80,14 @@ export type Pending =
       asked_at: Date;
     };
 
-// Process-local memory. Kian's backend_messages view only returns new and
-// processing messages, so recent chat history for classifier context and
-// style matching lives here, and is lost on restart.
+// Process-local memory, lost on restart: Tab's open questions, and what
+// style matching needs.
 export class Memory {
-  private history = new Map<
-    string,
-    { sender_phone: string; text: string; at: Date }[]
-  >();
-  pending = new Map<string, Pending>();
-  // Proposed expenses Tab asked about, and when (§7.5: no lock-in under a
-  // question). Cleared when an adjustment applies; expires with
-  // PENDING_QUESTION_TTL.
+  // Open questions per chat (threads.ts), keyed by chatKey.
+  threads = new Map<string, Thread[]>();
+  // Proposed expenses Tab asked about without a tracked question, and when
+  // (§7.5: no lock-in under a question). Cleared when an adjustment
+  // applies; expires with PENDING_QUESTION_TTL.
   holds = new Map<string, Date>();
   lastHadWit = new Map<string, boolean>();
   // Groups whose ledger secret this process has set. The secret is derived,
@@ -106,8 +105,6 @@ export class Memory {
   styleSamples(chat: Chat): StyleFlags[] {
     return this.style.get(chatKey(chat)) ?? [];
   }
-
-
 }
 
 export type Extractors = {

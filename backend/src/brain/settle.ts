@@ -4,8 +4,9 @@ import * as T from "../copy/templates.js";
 import type { Expense, Message, Share } from "../store/types.js";
 import { MAX_DMS_PER_EXPENSE } from "../config.js";
 import type { SettleMode } from "../db/types.js";
-import { activeMembers, type BrainCtx, chatKey, chatOf, outsideQuietHours, type Pending, say, styleFor, tapback } from "./context.js";
+import { activeMembers, type BrainCtx, chatOf, outsideQuietHours, say, styleFor, tapback } from "./context.js";
 import { liveShares } from "./expense.js";
+import { addThread } from "./threads.js";
 
 export type { SettleMode };
 
@@ -233,22 +234,29 @@ export async function dispute(ctx: BrainCtx, m: Message, expenses: Expense[]) {
   if (disputed.length === 0) return;
   const one = disputed.length === 1 ? disputed[0] : undefined;
   const chat = m.kind === "reaction" ? { dm_phone: m.sender_phone } : chatOf(m);
+  const id = `dispute_followup:${m.message_id}`;
+  const text = T.disputeFollowup({ seed: m.message_id, description: one?.description, amount_cents: total });
   await say(ctx, {
     chat,
     purpose: "dispute_followup",
-    id: `dispute_followup:${m.message_id}`,
+    id,
     // A tapback can trigger this; only a text message can be replied to.
     reply_to: m.kind === "reaction" ? undefined : m.message_id,
-    text: T.disputeFollowup({ seed: m.message_id, description: one?.description, amount_cents: total }),
+    text,
     expense_id: one?.expense_id,
   });
-  // Their answer ("I only had $10") goes to resolveDispute.
-  ctx.memory.pending.set(chatKey(chat), {
-    kind: "dispute",
-    source: m,
-    expense_ids: disputed.map((e) => e.expense_id),
-    asked_at: ctx.now(),
-  } satisfies Pending);
+  // Their answer ("I only had $10") goes to resolveDispute. Only theirs:
+  // it's their share.
+  const expense_ids = disputed.map((e) => e.expense_id);
+  addThread(ctx, chat, {
+    id,
+    text,
+    expense_id: one?.expense_id,
+    expense_ids,
+    who: "asker",
+    asker: m.sender_phone,
+    data: { kind: "dispute", source: m, expense_ids, asked_at: ctx.now() },
+  });
 }
 
 // Expenses a pending dispute still covers: finalized, with the disputer's

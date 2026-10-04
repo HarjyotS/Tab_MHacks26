@@ -2,10 +2,10 @@
 import type { Intent } from "@tab/gate";
 import { decide } from "../gate/decide.js";
 import type { Expense, Message } from "../store/types.js";
-import { type BrainCtx, chatKey, chatOf, inWords, type Pending, perExpense, say, tapback } from "./context.js";
+import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
 import { applyAdjustment, groupFor, handleAdjustment, handleExpense, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
-import { claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
+import { askReceipt, claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   announceSettlements,
   approvalFollowups,
@@ -28,6 +28,7 @@ import {
   handleNameReply,
   onboardNewGroups,
 } from "./talk.js";
+import { addThread, closeThread, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
 
 // Intents whose messages are about money: the only ones kept as context and
@@ -51,7 +52,7 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
 
 // iPhones type curly quotes ("I’m", "didn’t"); every parser expects ASCII.
 export function normalizeText(text: string | undefined): string | undefined {
-  return text?.replace(/[\u2018\u2019\u02BC]/g, "'").replace(/[\u201C\u201D]/g, '"');
+  return text?.replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"');
 }
 
 export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void> {
@@ -76,7 +77,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       // the module clears its text and later context never includes it.
       // An open question tells the pre-filter to pass even "the 2nd one",
       // since a bystander's inline answer only counts if the gate passes it.
-      const input = { ...extractInput(ctx, m), tab_question_open: ctx.memory.pending.has(chatKey(chatOf(m))) };
+      const input = { ...extractInput(ctx, m), tab_question_open: openThreads(ctx, chatOf(m)).length > 0 };
       const result = await ctx.classify(input);
       intent = result.intent;
       confidence = result.confidence;
@@ -87,7 +88,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
         prefiltered: result.prefiltered === true,
       });
 
-      const answered = (await mayAnswerPending(ctx, m, decision !== "ignore")) && (await answerPending(ctx, m));
+      const answered = await answerThreads(ctx, m, decision !== "ignore");
       // "why?" right after Tab's balance reply: the short explanation.
       const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleBreakdown(ctx, m);
@@ -194,44 +195,52 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   }
   const question = CONFIRM_QUESTION[intent];
   if (!question) return; // e.g. a possible name: never guess (P3), stay quiet (P1)
+  const id = `clarify:${m.message_id}`;
   await tapback(ctx, m, "question");
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`, reply_to: m.message_id,
+    id, reply_to: m.message_id,
     text: question,
   });
-  ctx.memory.pending.set(chatKey(chatOf(m)), {
-    kind: "confirm",
-    then: "expense",
-    source: m,
-    asked_at: ctx.now(),
+  addThread(ctx, chatOf(m), {
+    id,
+    text: question,
+    who: "asker",
+    asker: m.sender_phone,
+    data: { kind: "confirm", then: "expense", source: m, asked_at: ctx.now() },
   });
 }
 
-// If Tab asked something in this chat, try the message as the answer. An
-// answer is accepted only if it actually resolves something; otherwise the
-// message is classified normally.
-// Who may answer (Harjyot's review on #14): the person Tab asked, since
-// their reply answers Tab's own money question. Anyone else only by
-// replying inline to that question, and only if the gate passed it; a
-// bystander's "uber was $30, I paid" is their own expense, not an answer.
-async function mayAnswerPending(ctx: BrainCtx, m: Message, passed: boolean): Promise<boolean> {
-  const p = ctx.memory.pending.get(chatKey(chatOf(m)));
-  if (!p) return false;
-  // The settle-mode question is answered by anyone, by regex only (no Grok).
-  if (p.kind === "settle_mode" || m.sender_phone === p.source.sender_phone) return true;
-  return passed && (p.kind === "expense" || p.kind === "adjustment") && repliesToQuestion(ctx, m);
-}
+// Tab's open questions in this chat (threads.ts), tried before normal
+// handling. An answer is accepted only if it actually resolves something;
+// otherwise the message is handled as if nothing were open.
+// Who may answer (Harjyot's review on #14): a question about the sender's
+// own money only the person Tab asked; a missing fact anyone, but someone
+// else only by replying inline to that question, and only if the gate passed
+// it; a bystander's "uber was $30, I paid" is their own expense, not an answer.
+async function answerThreads(ctx: BrainCtx, m: Message, passed: boolean): Promise<boolean> {
+  if (m.kind !== "text" || !m.text) return false;
+  const mine = openThreads(ctx, chatOf(m)).filter((t) => mayAnswer(t, m));
+  if (mine.length === 0) return false;
+  const replied = threadForReply(ctx, m, mine);
+  const pool = replied ? [replied] : mine;
 
-function repliesToQuestion(ctx: BrainCtx, m: Message): boolean {
-  if (!m.reply_to_id) return false;
-  const chat = chatOf(m);
-  const last = ctx.store
-    .outbox()
-    .filter((o) => o.purpose === "clarifying_question" && (chat.group_id ? o.group_id === chat.group_id : o.to_phone === chat.dm_phone))
-    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
-  return last?.sent_photon_id === m.reply_to_id;
+  // Today's parsers, for a plain answer to exactly one question: no Grok call.
+  const hits = pool.flatMap((t) => {
+    const apply = quickAnswer(ctx, m, t);
+    return apply ? [apply] : [];
+  });
+  if (hits.length === 1) {
+    await hits[0]!();
+    return true;
+  }
+  // A question about an expense: read it again with the answer appended.
+  const reask = pool.find(
+    (t) => (t.data.kind === "expense" || t.data.kind === "adjustment") && (isAsker(t, m) || (t === replied && passed)),
+  );
+  if (!reask) return false;
+  return answerExpense(ctx, m, reask, isAsker(reask, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m)));
 }
 
 // Someone else's answer is read as the asker's message, so "I" and "me"
@@ -245,54 +254,74 @@ export function inThirdPerson(text: string, name: string): string {
     .replace(/\b(I|me|myself)\b/gi, name);
 }
 
-async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
-  const key = chatKey(chatOf(m));
-  const p = ctx.memory.pending.get(key);
-  if (!p || m.kind !== "text" || !m.text) return false;
-  if (
-    ctx.now().getTime() - p.asked_at.getTime() >
-    ctx.timing.durations.PENDING_QUESTION_TTL
-  ) {
-    ctx.memory.pending.delete(key);
-    return false;
-  }
-  if (p.kind === "confirm") return answerConfirm(ctx, m, p, key);
-  if (p.kind === "receipt") return answerReceipt(ctx, m, p, key);
-  if (p.kind === "which") return answerWhich(ctx, m, p, key);
-  if (p.kind === "settle_mode") return answerSettleMode(ctx, m, key);
-  if (p.kind === "dispute") return answerDispute(ctx, m, p, key);
+// A bare yes or no ("yeah lock it in", "nope"). Anything longer, or with a
+// number in it, may say a second thing, so the regex doesn't decide it.
+function yesNo(text: string): boolean | undefined {
+  if (/\d/.test(text) || text.split(/\s+/).length > 6) return undefined;
+  return NO.test(text) ? false : YES.test(text) ? true : undefined;
+}
 
-  const answerer =
-    m.sender_phone === p.source.sender_phone
-      ? m.text
-      : inThirdPerson(m.text, nameOf(ctx, m));
-  const text = `${p.text}\n${answerer}`;
+// What the regex parsers make of the message as an answer to `t`, as a
+// thunk that applies it; undefined when they can't tell.
+function quickAnswer(ctx: BrainCtx, m: Message, t: Thread): (() => Promise<void>) | undefined {
+  const text = (m.text ?? "").trim();
+  const d = t.data;
+  switch (d.kind) {
+    case "confirm": {
+      const yes = yesNo(text);
+      return yes === undefined ? undefined : () => answerConfirm(ctx, m, t, d, yes);
+    }
+    case "receipt": {
+      const answer = receiptAnswer(text, d);
+      return answer === undefined ? undefined : () => answerReceipt(ctx, m, t, d, answer);
+    }
+    case "which": {
+      const n = Number(text.replace(/^#/, ""));
+      return Number.isInteger(n) && d.expense_ids[n - 1] ? () => answerWhich(ctx, m, t, d, n) : undefined;
+    }
+    case "settle_mode": {
+      const mode = EACH.test(text) ? "per_expense" : LEDGER.test(text) ? "ledger" : undefined;
+      return mode && m.group_id ? () => answerSettleMode(ctx, m, t, mode) : undefined;
+    }
+    case "dispute":
+      return disputeAnswer(ctx, m, t, d, text);
+    default:
+      return undefined;
+  }
+}
+
+async function answerExpense(ctx: BrainCtx, m: Message, t: Thread, answer: string): Promise<boolean> {
+  const p = t.data;
+  if (p.kind !== "expense" && p.kind !== "adjustment") return false;
+  const text = `${p.text}\n${answer}`;
   const mode = p.kind === "expense" ? "new" : "adjustment";
   const retry = await ctx.extract.expense(
     extractInput(ctx, { ...p.source, text }),
     mode,
   );
   if (retry.problems.length >= p.problems.length) return false; // didn't help
-  ctx.memory.pending.delete(key);
+  closeThread(ctx, chatOf(m), t);
   if (p.kind === "adjustment") {
     const expense = ctx.store.expense(p.expense_id);
     if (!expense) return true;
     if (retry.problems.length > 0) {
-      ctx.memory.pending.set(key, {
-        ...p,
-        text,
-        problems: retry.problems,
-        asked_at: ctx.now(),
+      const id = `clarify:${m.message_id}`;
+      const question = T.clarifyingQuestion(retry.problems[0]!, {
+        description: expense.description,
+        people: [],
       });
       await say(ctx, {
         chat: chatOf(m),
         purpose: "clarifying_question",
-        id: `clarify:${m.message_id}`, reply_to: m.message_id,
-        text: T.clarifyingQuestion(retry.problems[0]!, {
-          description: expense.description,
-          people: [],
-        }),
+        id, reply_to: m.message_id,
+        text: question,
         expense_id: expense.expense_id,
+      });
+      addThread(ctx, chatOf(m), {
+        ...t,
+        id,
+        text: question,
+        data: { ...p, text, problems: retry.problems, asked_at: ctx.now() },
       });
       return true;
     }
@@ -307,18 +336,15 @@ async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
 async function answerConfirm(
   ctx: BrainCtx,
   m: Message,
+  t: Thread,
   p: Extract<Pending, { kind: "confirm" }>,
-  key: string,
-) {
-  const text = (m.text ?? "").trim();
-  if (m.sender_phone !== p.source.sender_phone) return false;
-  if (NO.test(text)) {
-    ctx.memory.pending.delete(key);
+  yes: boolean,
+): Promise<void> {
+  closeThread(ctx, chatOf(m), t);
+  if (!yes) {
     await tapback(ctx, m, "like");
-    return true;
+    return;
   }
-  if (!YES.test(text)) return false;
-  ctx.memory.pending.delete(key);
   if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source);
   else if (p.then === "adjustment" && p.extraction && p.expense_id) {
     const expense = ctx.store.expense(p.expense_id);
@@ -335,8 +361,15 @@ async function answerConfirm(
         source: p.source,
         extracted: { ...p.extraction, problems: [] },
       });
+  } else if (p.then === "finalize_and_settle") {
+    // Unclaimed items split evenly (§7.5), then one request for everything.
+    // Safe to do on anyone's yes: only each payer's 👍 moves money (P7).
+    for (const id of t.expense_ids ?? []) {
+      const e = ctx.store.expense(id);
+      if (e?.status === "itemizing") await finalize(ctx, e, { request: false });
+    }
+    await settleUp(ctx, m);
   }
-  return true;
 }
 
 function answeringNamePrompt(ctx: BrainCtx, m: Message): boolean {
@@ -401,114 +434,120 @@ export async function tick(ctx: BrainCtx): Promise<void> {
   await announceSettlements(ctx);
 }
 
-
-
-// An unexpired question from Tab about this expense (an adjustment detail,
-// or confirming a change to it).
+// An unexpired question from Tab about this expense: an open thread about
+// it, or a question that set none (holdOpen).
 function askingAbout(ctx: BrainCtx, expense_id: string): boolean {
-  const ttl = ctx.timing.durations.PENDING_QUESTION_TTL;
   const held = ctx.memory.holds.get(expense_id);
-  if (held && ctx.now().getTime() - held.getTime() <= ttl) return true;
-  return [...ctx.memory.pending.values()].some(
-    (p) => "expense_id" in p && p.expense_id === expense_id && ctx.now().getTime() - p.asked_at.getTime() <= ttl,
-  );
+  if (held && ctx.now().getTime() - held.getTime() <= ctx.timing.durations.PENDING_QUESTION_TTL) return true;
+  const e = ctx.store.expense(expense_id);
+  return Boolean(e && openThreads(ctx, { group_id: e.group_id }).some((t) => t.expense_id === expense_id));
 }
 
-// §7.4: only the payer answers questions about their receipt.
-async function answerReceipt(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind: "receipt" }>, key: string): Promise<boolean> {
-  if (m.sender_phone !== p.source.sender_phone) return false;
-  const text = (m.text ?? "").trim();
+// A receipt answer: yes or no to the total Tab read, else cents.
+type ReceiptAnswer = boolean | number;
+
+function receiptAnswer(text: string, p: Extract<Pending, { kind: "receipt" }>): ReceiptAnswer | undefined {
+  if (p.stage === "confirm_total") return yesNo(text);
+  // One amount and little else: "60, and I got gas for 30" says two things.
+  if ((text.match(/\d+(?:[.,]\d+)*/g) ?? []).length > 1 || text.split(/\s+/).length > 6) return undefined;
+  if (p.stage === "total") {
+    const total = answerCents(text);
+    return total !== undefined && total > 0 ? total : undefined;
+  }
   const { receipt } = p.read;
+  return /^(none|no tip|nothing|zero|didn'?t|no)\b/i.test(text)
+    ? 0
+    : answerPercent(text, receipt.subtotal_cents ?? receipt.total_cents ?? 0) ?? answerCents(text);
+}
+
+// §7.4: only the payer answers questions about their receipt (mayAnswer).
+async function answerReceipt(
+  ctx: BrainCtx,
+  m: Message,
+  t: Thread,
+  p: Extract<Pending, { kind: "receipt" }>,
+  answer: ReceiptAnswer,
+): Promise<void> {
+  const { receipt } = p.read;
+  closeThread(ctx, chatOf(m), t);
   if (p.stage === "confirm_total") {
-    if (YES.test(text)) {
-      ctx.memory.pending.delete(key);
+    if (answer === true) {
       await tapback(ctx, m, "like");
       // The items didn't add up, so split the confirmed total evenly.
       await proposeReceipt(ctx, p.source, p.read, { itemsTrusted: false });
-      return true;
+      return;
     }
-    if (!NO.test(text)) return false;
-    ctx.memory.pending.set(key, { ...p, stage: "total", asked_at: ctx.now() });
-    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: "What was the total?" });
-    return true;
+    const id = `clarify:${m.message_id}`;
+    const question = "What was the total?";
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question });
+    askReceipt(ctx, p.source, { id, text: question, read: p.read, stage: "total" });
+    return;
   }
-  if (p.stage === "total") {
-    const total = answerCents(text);
-    if (total === undefined || total <= 0) return false;
-    ctx.memory.pending.delete(key);
-    await tapback(ctx, m, "like");
-    await proposeReceipt(ctx, p.source, { ...p.read, receipt: { ...receipt, total_cents: total } }, { itemsTrusted: false });
-    return true;
-  }
-  // stage "tip"
-  const tip = /^(none|no tip|nothing|zero|didn'?t|no)\b/i.test(text)
-    ? 0
-    : answerPercent(text, receipt.subtotal_cents ?? receipt.total_cents ?? 0) ?? answerCents(text);
-  if (tip === undefined) return false;
-  ctx.memory.pending.delete(key);
+  if (typeof answer !== "number") return;
   await tapback(ctx, m, "like");
-  const withTip = { ...receipt, tip_cents: tip, total_cents: (receipt.total_cents ?? 0) + tip };
+  if (p.stage === "total") {
+    await proposeReceipt(ctx, p.source, { ...p.read, receipt: { ...receipt, total_cents: answer } }, { itemsTrusted: false });
+    return;
+  }
+  const withTip = { ...receipt, tip_cents: answer, total_cents: (receipt.total_cents ?? 0) + answer };
   await proposeReceipt(ctx, p.source, { ...p.read, receipt: withTip, tip_line_blank: false }, { itemsTrusted: true });
-  return true;
 }
 
-async function answerWhich(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind: "which" }>, key: string): Promise<boolean> {
-  if (m.sender_phone !== p.source.sender_phone) return false;
-  const n = Number((m.text ?? "").trim().replace(/^#/, ""));
-  const id = Number.isInteger(n) ? p.expense_ids[n - 1] : undefined;
-  const target = id ? ctx.store.expense(id) : undefined;
-  if (!target) return false;
-  ctx.memory.pending.delete(key);
-  await handleClaim(ctx, p.source, target);
-  return true;
+async function answerWhich(ctx: BrainCtx, m: Message, t: Thread, p: Extract<Pending, { kind: "which" }>, n: number): Promise<void> {
+  closeThread(ctx, chatOf(m), t);
+  const target = ctx.store.expense(p.expense_ids[n - 1]!);
+  if (target) await handleClaim(ctx, p.source, target);
 }
 
 // §7.6: the disputer answers "What's off?" with what they had ("I only had
 // $10"). Several disputed expenses: ask which one, then take a number. Only
-// the disputer answers; anything without an amount goes through normal
-// handling (e.g. "I wasn't there" is an adjustment).
-async function answerDispute(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind: "dispute" }>, key: string): Promise<boolean> {
-  if (m.sender_phone !== p.source.sender_phone) return false;
+// the disputer answers (an asker-only thread); anything without a clear
+// amount goes through normal handling (e.g. "I wasn't there" is an adjustment).
+function disputeAnswer(ctx: BrainCtx, m: Message, t: Thread, p: Extract<Pending, { kind: "dispute" }>, text: string) {
   const open = stillDisputed(ctx, m.sender_phone, p.expense_ids);
-  if (open.length === 0) {
-    ctx.memory.pending.delete(key);
-    return false;
-  }
-  const text = (m.text ?? "").trim();
-  let amount = p.amount_cents;
-  let target: Expense | undefined;
-  if (amount !== undefined) {
+  if (open.length === 0) return undefined;
+  if (p.amount_cents !== undefined) {
     // Numbered from the "Which one?" list, which is p.expense_ids.
     const n = Number(text.replace(/^#/, ""));
     const id = Number.isInteger(n) ? p.expense_ids[n - 1] : undefined;
-    target = open.find((e) => e.expense_id === id);
-    if (!target) return false;
-  } else {
-    amount = disputeCents(text);
-    if (amount === undefined || amount <= 0) return false;
-    if (open.length > 1) {
-      ctx.memory.pending.set(key, { ...p, expense_ids: open.map((e) => e.expense_id), amount_cents: amount, asked_at: ctx.now() });
-      await say(ctx, {
-        chat: chatOf(m),
-        purpose: "clarifying_question",
-        id: `clarify:${m.message_id}`,
-        reply_to: m.message_id,
-        text: whichDisputed(ctx, m.sender_phone, open),
-      });
-      return true;
-    }
-    target = open[0]!;
+    const target = open.find((e) => e.expense_id === id);
+    const amount = p.amount_cents;
+    return target ? () => answerDispute(ctx, m, t, p, open, amount, target) : undefined;
   }
+  const amount = disputeCents(text);
+  if (amount === undefined || amount <= 0) return undefined;
+  return () => answerDispute(ctx, m, t, p, open, amount);
+}
+
+async function answerDispute(
+  ctx: BrainCtx,
+  m: Message,
+  t: Thread,
+  p: Extract<Pending, { kind: "dispute" }>,
+  open: Expense[],
+  amount: number,
+  chosen?: Expense,
+): Promise<void> {
+  const chat = chatOf(m);
+  closeThread(ctx, chat, t);
+  const again = (id: string, text: string, expense_ids: string[], amount_cents?: number) =>
+    addThread(ctx, chat, { ...t, id, text, expense_ids, data: { ...p, expense_ids, amount_cents, asked_at: ctx.now() } });
+  if (!chosen && open.length > 1) {
+    const id = `clarify:${m.message_id}`;
+    const text = whichDisputed(ctx, m.sender_phone, open);
+    await say(ctx, { chat, purpose: "clarifying_question", id, reply_to: m.message_id, text });
+    again(id, text, open.map((e) => e.expense_id), amount);
+    return;
+  }
+  const target = chosen ?? open[0]!;
   if (await resolveDispute(ctx, m, target, amount)) {
     // Anything else they disputed is still open to an answer.
     const rest = open.filter((e) => e.expense_id !== target.expense_id).map((e) => e.expense_id);
-    if (rest.length > 0) ctx.memory.pending.set(key, { ...p, expense_ids: rest, amount_cents: undefined, asked_at: ctx.now() });
-    else ctx.memory.pending.delete(key);
+    if (rest.length > 0) again(t.id, t.text, rest);
   } else {
     // Too much for the payer's share to absorb: Tab asked again.
-    ctx.memory.pending.set(key, { ...p, expense_ids: [target.expense_id], amount_cents: undefined, asked_at: ctx.now() });
+    again(`clarify:${m.message_id}`, t.text, [target.expense_id]);
   }
-  return true;
 }
 
 // A reply to "What's off?" is usually a description, and "I had 2 beers" or
@@ -551,11 +590,9 @@ export function answerPercent(text: string, base_cents: number): number | undefi
 const EACH = /^(each|every time|after (each|every))\b/i;
 const LEDGER = /^(nah|no|nope|not really)\b|\b(running tab|long run|at the end|keep a tab)\b/i;
 
-async function answerSettleMode(ctx: BrainCtx, m: Message, key: string): Promise<boolean> {
-  const text = (m.text ?? "").trim();
-  const mode = EACH.test(text) ? "per_expense" : LEDGER.test(text) ? "ledger" : undefined;
-  if (!m.group_id || !mode) return false;
-  ctx.memory.pending.delete(key);
+async function answerSettleMode(ctx: BrainCtx, m: Message, t: Thread, mode: "ledger" | "per_expense"): Promise<void> {
+  if (!m.group_id) return;
+  closeThread(ctx, chatOf(m), t);
   await ctx.db.set_settle_mode({ group_id: m.group_id, settle_mode: mode });
   await say(ctx, {
     chat: chatOf(m),
@@ -564,5 +601,4 @@ async function answerSettleMode(ctx: BrainCtx, m: Message, key: string): Promise
     reply_to: m.message_id,
     text: T.settleModeSet(mode),
   });
-  return true;
 }

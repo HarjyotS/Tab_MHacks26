@@ -7,7 +7,6 @@ import * as T from "../copy/templates.js";
 import type { Expense, Message } from "../store/types.js";
 import {
   activeMembers,
-  chatKey,
   chatOf,
   inWords,
   outsideQuietHours,
@@ -24,6 +23,7 @@ import {
 } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { finalize } from "./settle.js";
+import { addThread } from "./threads.js";
 
 
 // Entry point for a photo (§7.4 steps 2–7).
@@ -52,14 +52,7 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
     return;
   }
   if (read.currency !== "USD") {
-    await askAbout(ctx, m, T.foreignCurrencyQuestion());
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "receipt",
-      stage: "total",
-      source: m,
-      read,
-      asked_at: ctx.now(),
-    });
+    await askAbout(ctx, m, T.foreignCurrencyQuestion(), read, "total");
     return;
   }
   if (read.math_problem) {
@@ -71,38 +64,52 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
       ctx,
       m,
       `I read the total as ${money(receipt.total_cents)}. Is that right?`,
-    );
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "receipt",
-      stage: "confirm_total",
-      source: m,
       read,
-      asked_at: ctx.now(),
-    });
+      "confirm_total",
+    );
     return;
   }
   if (read.tip_line_blank) {
     // §7.4 step 5: the only routine question for receipts.
-    await askAbout(ctx, m, "What tip did you leave?");
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "receipt",
-      stage: "tip",
-      source: m,
-      read,
-      asked_at: ctx.now(),
-    });
+    await askAbout(ctx, m, "What tip did you leave?", read, "tip");
     return;
   }
   await proposeReceipt(ctx, m, read, { itemsTrusted: true });
 }
 
-async function askAbout(ctx: BrainCtx, m: Message, question: string) {
+// §7.4: only the payer answers questions about their receipt. Without a
+// stage, nothing to answer ("send a clearer photo").
+async function askAbout(
+  ctx: BrainCtx,
+  m: Message,
+  question: string,
+  read?: ReceiptRead,
+  stage?: "confirm_total" | "total" | "tip",
+) {
+  const id = `clarify:${m.message_id}`;
   await tapback(ctx, m, "question");
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`, reply_to: m.message_id,
+    id, reply_to: m.message_id,
     text: question,
+  });
+  if (read && stage) askReceipt(ctx, m, { id, text: question, read, stage });
+}
+
+// The receipt's expense doesn't exist until the payer answers.
+export function askReceipt(
+  ctx: BrainCtx,
+  m: Message,
+  a: { id: string; text: string; read: ReceiptRead; stage: "confirm_total" | "total" | "tip" },
+) {
+  addThread(ctx, chatOf(m), {
+    id: a.id,
+    text: a.text,
+    expense_id: expenseIdFor(m.message_id),
+    who: "asker",
+    asker: m.sender_phone,
+    data: { kind: "receipt", stage: a.stage, source: m, read: a.read, asked_at: ctx.now() },
   });
 }
 
@@ -253,18 +260,21 @@ export async function handleClaim(
   if (targets.length === 0) return;
   if (targets.length > 1 && !m.group_id) {
     // §14: two open lists in a DM: ask which one with a numbered list.
+    const id = `clarify:${m.message_id}`;
+    const text = `Which one?\n${targets.map((e, i) => `${i + 1}. ${e.description}`).join("\n")}`;
     await tapback(ctx, m, "question");
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, reply_to: m.message_id,
-      text: `Which one?\n${targets.map((e, i) => `${i + 1}. ${e.description}`).join("\n")}`,
+      id, reply_to: m.message_id,
+      text,
     });
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "which",
-      source: m,
-      expense_ids: targets.map((e) => e.expense_id),
-      asked_at: ctx.now(),
+    addThread(ctx, chatOf(m), {
+      id,
+      text,
+      who: "asker",
+      asker: m.sender_phone,
+      data: { kind: "which", source: m, expense_ids: targets.map((e) => e.expense_id), asked_at: ctx.now() },
     });
     return;
   }

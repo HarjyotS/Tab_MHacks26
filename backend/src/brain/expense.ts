@@ -9,7 +9,6 @@ import * as T from "../copy/templates.js";
 import type { Expense, LineItem, Message, Share } from "../store/types.js";
 import {
   activeMembers,
-  chatKey,
   chatOf,
   outsideQuietHours,
   say,
@@ -19,6 +18,7 @@ import {
 } from "./context.js";
 import { extractInput } from "./inputs.js";
 import { startItemizing } from "./receipt.js";
+import { addThread } from "./threads.js";
 
 export const expenseIdFor = (source_message_id: string) =>
   `exp_${source_message_id}`;
@@ -50,15 +50,26 @@ async function ask(
     description,
     people: group_id ? people(ctx, group_id) : [],
   });
+  const id = `clarify:${m.message_id}`;
+  const expense_id = "expense_id" in pending ? pending.expense_id : undefined;
   await tapback(ctx, m, "question");
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`, reply_to: m.message_id,
+    id, reply_to: m.message_id,
     text: q,
-    expense_id: "expense_id" in pending ? pending.expense_id : undefined,
+    expense_id,
   });
-  ctx.memory.pending.set(chatKey(chatOf(m)), pending);
+  // A missing fact (who paid, how much) anyone in the chat may know; a
+  // confirmation is only the sender's to give.
+  addThread(ctx, chatOf(m), {
+    id,
+    text: q,
+    expense_id,
+    who: pending.kind === "confirm" ? "asker" : "anyone",
+    asker: m.sender_phone,
+    data: pending,
+  });
 }
 
 // Problems Tab can't resolve by asking for a missing fact.
@@ -354,9 +365,17 @@ export async function handleAdjustment(
       ? `${expense.description} is already locked in. Reopen it and change the split?`
       : `Change the split on ${expense.description}?`;
     await holdOpen(ctx, expense);
+    const id = `clarify:${m.message_id}`;
     await tapback(ctx, m, "question", expense.expense_id);
-    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
-    ctx.memory.pending.set(chatKey(chatOf(m)), { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() });
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
+    addThread(ctx, chatOf(m), {
+      id,
+      text: question,
+      expense_id: expense.expense_id,
+      who: "asker",
+      asker: m.sender_phone,
+      data: { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() },
+    });
     return;
   }
   await tapback(ctx, m, "like", expense.expense_id);
