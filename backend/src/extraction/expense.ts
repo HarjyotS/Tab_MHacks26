@@ -25,9 +25,11 @@ const FILLER = new Set(["the", "a", "an", "and", "of", "my", "some", "x", "had",
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const said = (word: string, text: string) => new RegExp(`(^|[^a-z0-9])${escapeRe(word)}($|[^a-z0-9])`, "i").test(text);
 
+// Possessives count as the name ("priyas fatass had half", "jake's"), but
+// only a trailing s or 's, so "Al" still never matches "also".
 export function nameSaid(name: string, text: string): boolean {
   const n = name.trim().toLowerCase();
-  return SELF.has(n) || n.split(/\s+/).some((part) => part.length > 1 && said(part, text));
+  return SELF.has(n) || n.split(/\s+/).some((part) => part.length > 1 && (said(part, text) || said(`${part}s`, text) || said(`${part}'s`, text) || said(`${part}’s`, text)));
 }
 
 export function itemSaid(item: string, text: string): boolean {
@@ -123,7 +125,8 @@ function systemPrompt(mode: ExpenseMode): string {
       : `The message adjusts the split of the sender's open expense. Do not extract a new total: amount_cents is null, amount_is_per_person is false, payer is "unknown".
 - exclusion_names: people the message says were not there or should be left out. "Just Sam and Alex" or "only Sam and Alex went" leaves out every other member. Never list someone the message says was there or had something.
 - fixed: people the message says had specific things, with the item and its price in cents if stated (null if not).
-  - only: true if the message says that was all they had ("Jake only had a Diet Coke", "I just had the salad"); false if it only says they had or got it ("Alex had both drinks", "I got the cheesecake"), so it's theirs and they may still share the rest.`;
+  - only: true if the message says that was all they had ("Jake only had a Diet Coke", "I just had the salad"); false if it only says they had or got it ("Alex had both drinks", "I got the cheesecake"), so it's theirs and they may still share the rest.
+  - A share of the whole thing ("Priya had half", "a third of it", "75%"): the fraction in the message's words as the item ("half of the pizza"), price null; code works out the amount. People who split "the rest" or "the other half": each one with that as the item.`;
   return `You extract structured data for Tab, a bot that splits shared expenses in a group chat.
 ${UNTRUSTED_RULE}
 

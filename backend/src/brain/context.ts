@@ -253,16 +253,36 @@ export async function say(
     // newest in its chat (§5.2 target_message_id; Harjyot's #19). Only for
     // answers, never unprompted messages.
     reply_to?: string;
+    // A clarifying question said differently, used once if Tab would
+    // otherwise ask the same thing again (below).
+    rephrase?: string;
   },
-) {
-  const text = compose({
-    purpose: a.purpose,
-    text: a.text,
-    in_group: Boolean(a.chat.group_id),
-    style: styleFor(ctx, a.chat),
-    names: namesFor(ctx, a.chat),
-    wit: a.wit,
-  });
+): Promise<boolean> {
+  const write = (raw: string) =>
+    compose({
+      purpose: a.purpose,
+      text: raw,
+      in_group: Boolean(a.chat.group_id),
+      style: styleFor(ctx, a.chat),
+      names: namesFor(ctx, a.chat),
+      wit: a.wit,
+    });
+  let text = write(a.text);
+  // Never the same question about an expense twice in a row (Harjyot's
+  // playground: "how much was Priya's half of the pizza?" three times).
+  // While it's still open, asking again goes out once as `rephrase`, and
+  // after that Tab stops asking. False when nothing went out: callers then
+  // skip their ❓ tapback but keep the question open to an answer.
+  if (a.purpose === "clarifying_question" && a.expense_id && stillAsking(ctx, a.chat, a.expense_id, a.text)) {
+    const again = a.rephrase === undefined ? undefined : write(a.rephrase);
+    const asked = (t: string) =>
+      ctx.store.outbox().some((o) => o.expense_id === a.expense_id && o.purpose === "clarifying_question" && o.status !== "cancelled" && o.text === t);
+    if (again === undefined || asked(again)) {
+      ctx.log("question_not_repeated", { expense_id: a.expense_id, action_id: a.id });
+      return false;
+    }
+    text = again;
+  }
   ctx.memory.lastHadWit.set(chatKey(a.chat), Boolean(a.wit));
   await ctx.db.enqueue_outbox({
     action_id: a.id,
@@ -275,6 +295,19 @@ export async function say(
     purpose: a.purpose,
     send_after: a.send_after ?? ctx.now(),
   });
+  return true;
+}
+
+// Tab's own unexpired question about this expense in this chat, in these
+// words (threads.ts). An invite's text is "Pizza: what's off?".
+function stillAsking(ctx: BrainCtx, chat: Chat, expense_id: string, text: string): boolean {
+  const ttl = ctx.timing.durations.PENDING_QUESTION_TTL;
+  return (ctx.memory.threads.get(chatKey(chat)) ?? []).some(
+    (t) =>
+      (t.expense_id === expense_id || Boolean(t.expense_ids?.includes(expense_id))) &&
+      ctx.now().getTime() - t.asked_at.getTime() <= ttl &&
+      (t.text === text || t.text.endsWith(`: ${text}`)),
+  );
 }
 
 // SPEC §13: Like = logged or understood; Question = not sure, a question follows.

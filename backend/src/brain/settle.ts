@@ -68,6 +68,17 @@ export async function finalize(ctx: BrainCtx, snapshot: Expense, opts: { request
   }
 }
 
+// One person is fine with a proposed split (§6.2): a 👍 on it, or "looks
+// right". Once every live share has responded it locks in now; nobody
+// waits for the deadline (P4). False when they have no share on it.
+export async function acceptSplit(ctx: BrainCtx, e: Expense, phone: string): Promise<boolean> {
+  const share = ctx.store.shares(e.expense_id).find((s) => s.phone === phone);
+  if (!share || share.status === "opted_out") return false;
+  if (!share.responded) await ctx.db.set_share({ ...share, responded: true });
+  if (liveShares(ctx, e.expense_id).every((s) => s.responded)) await finalize(ctx, ctx.store.expense(e.expense_id)!);
+  return true;
+}
+
 // One message for the given expenses, grouped by who is owed. Each expense
 // gets the request's id as settle_message_id, so a 👍 finds all of them.
 async function postSettleRequest(
@@ -379,6 +390,7 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
   if (!target) return;
 
   if (target.purpose === "settle_request") {
+    if (m.reaction === "like" && (await payeeTapped(ctx, m, target.action_id))) return;
     const request_id = liveRequest(ctx, m, target.action_id);
     if (!request_id) return;
     if (m.reaction === "like") await approveRequest(ctx, m, request_id);
@@ -394,14 +406,11 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
   const expense = ctx.store.expense(target.expense_id);
   if (expense?.status !== "proposed") return;
   if (m.reaction === "like") {
-    const share = ctx.store
-      .shares(expense.expense_id)
-      .find((s) => s.phone === m.sender_phone);
-    if (share && !share.responded && share.status !== "opted_out")
-      await ctx.db.set_share({ ...share, responded: true });
-    // Everyone liked it: finalize now, nobody waits for the deadline (P4).
-    if (liveShares(ctx, expense.expense_id).every((s) => s.responded))
-      await finalize(ctx, ctx.store.expense(expense.expense_id)!);
+    // The payer's 👍 locks it in for the group: they know what it cost and
+    // who was there (Harjyot's playground: Priya's 👍 did nothing). Anyone
+    // who disagrees can still change it (§7.7), and locking in never pays.
+    if (m.sender_phone === expense.payer_phone) await finalize(ctx, expense);
+    else await acceptSplit(ctx, expense, m.sender_phone);
   } else if (m.reaction === "dislike" || m.reaction === "question") {
     const id = `clarify:${m.message_id}`;
     await say(ctx, {
@@ -413,6 +422,27 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
     });
     addInvite(ctx, chatOf(m), { id, text: `${expense.description}: ${T.whatsOff(m.message_id)}`, kind: "adjust_open", expense_id: expense.expense_id });
   }
+}
+
+// The payee's own 👍 on a settle request pays nothing (P7), but Tab says
+// so once, by DM, with who it's still waiting on (Joe's review on #47:
+// Priya tapped five times). True when the tap was the payee's: they're
+// owed on this request and owe nothing on it.
+async function payeeTapped(ctx: BrainCtx, m: Message, request_id: string): Promise<boolean> {
+  const covered = requestExpenses(ctx, request_id);
+  const owed = covered.filter((e) => e.payer_phone === m.sender_phone);
+  if (owed.length === 0 || covered.some((e) => owing(ctx, e).some((s) => s.phone === m.sender_phone))) return false;
+  const id = `payee_tap:${request_id}:${m.sender_phone}`;
+  if (ctx.store.outbox().some((o) => o.action_id === id)) return true; // said once already
+  const group_id = owed[0]!.group_id;
+  const waiting = [...new Set(owed.flatMap((e) => owing(ctx, e).map((s) => s.phone)))];
+  await say(ctx, {
+    chat: { dm_phone: m.sender_phone },
+    purpose: "other",
+    id,
+    text: T.payeeTapped(waiting.map((phone) => person(ctx, group_id, phone))),
+  });
+  return true;
 }
 
 // After the scheduled reducer completes transfers (Kian's M0 note):

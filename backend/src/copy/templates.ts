@@ -136,6 +136,13 @@ export function settleRequest(a: { seed: string; owed: Owed[]; description?: str
 // A typed "yes" never moves money (P7, SPEC #15).
 export const tapToPay = () => "just tap 👍 on the settle msg to pay your part";
 
+// The payee's own 👍 on a settle request pays nothing (P7): said once, so
+// they know Tab saw it (Joe's review on #47: Priya tapped five times).
+export const payeeTapped = (waitingOn: Person[]) =>
+  waitingOn.length > 0
+    ? `you're the one getting paid, just waiting on ${listJoin(waitingOn.map(displayName))}`
+    : "everyone's already paid you";
+
 export const nothingToSettle = () => "nothing to settle, everyone's even";
 
 // "let's settle up" while a receipt is still waiting on claims (Harjyot's
@@ -279,6 +286,30 @@ export function clarifyingQuestion(
       return `${money(p.amount_cents)}${ctx.description ? ` for ${ctx.description}` : ""}? just making sure`;
     case "invalid_amount":
       return `how much was ${thing} actually? has to be more than ${money(0)}`;
+  }
+}
+
+// The same question once more, said differently, when the first didn't land
+// (Tab never asks the exact same thing twice in a row). Undefined when there
+// is no better way to put it: Tab just stops asking.
+export function rephraseQuestion(
+  p: Problem,
+  ctx: { description?: string; people: Person[]; example_cents?: number },
+): string | undefined {
+  const thing = ctx.description ? `the ${ctx.description}` : "it";
+  switch (p.kind) {
+    case "missing_item_price": {
+      const person = ctx.people.find((x) => x.phone === p.phone);
+      const example = ctx.example_cents ? ` like ${money(ctx.example_cents)}` : "";
+      return `how much should ${person ? displayName(person) : "they"} pay?${example}`;
+    }
+    case "missing_amount":
+    case "ungrounded_amount":
+      return `what did ${thing} cost all in? just the number works`;
+    case "missing_payer":
+      return `who covered ${thing}? just a name works`;
+    default:
+      return undefined;
   }
 }
 
