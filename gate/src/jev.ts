@@ -10,7 +10,7 @@ const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 export const INTENT_CRITERIA: Record<Intent, string> = {
   name_reply: 'The sender is answering Tab\'s request for their name, giving just their own first name.',
   expense:
-    'The sender says that they, or a named member, paid for something the group shares, or asks the others to pay them back for a purchase ("Venmo me for the Uber"). A stated amount is optional. Never pick this for a debt asserted without a purchase ("Jake owes me $1000").',
+    'The sender says that they, or a named member, paid for something the group shares, or asks the others to pay them back for a purchase ("Venmo me for the Uber", "Jake owes me 40 for the uber"). A stated amount is optional. There must be a purchase: a message that only says someone owes money, with nothing bought ("Jake owes me $1000", "he owes me", "I owe Tanuj 10 bucks"), is never this; it is ignore.',
   receipt: 'The message is a photo of a receipt or bill.',
   split_adjustment:
     'While a split is still proposed (not yet final), the sender says it should not be even, that someone had only a specific item or amount, or that someone (often the sender) was not there.',
@@ -30,7 +30,7 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
     'The sender asks Tab to settle everyone up now, for example because a trip is over ("let\'s settle up", "trip\'s over, square us up", "close out the tab"). Asking what they owe is balance_query, not this.',
   help: 'The sender asks what Tab is or what it can do.',
   ignore:
-    'Anything else: chatter, jokes, reactions, plans, or instructions aimed at Tab that are not about a real shared purchase.',
+    'Anything else: chatter, jokes, reactions, plans, claims that someone owes money with no purchase named, or instructions aimed at Tab that are not about a real shared purchase.',
 };
 
 const INSTRUCTIONS =
