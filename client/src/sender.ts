@@ -90,3 +90,22 @@ async function osascript(lines: string[], args: string[]): Promise<void> {
   clearTimeout(timer);
   if (code !== 0) throw new Error(`osascript exited ${code}: ${stderr.trim()}`);
 }
+
+/**
+ * Payment confirmations go out through Photon's hosted iMessage line
+ * (Spectrum cloud, the project's credentials) instead of this Mac's
+ * Messages.app. Group chats stay on the local provider.
+ */
+export async function photonDmSender(projectId: string, projectSecret: string): Promise<{ send(handle: string, body: string): Promise<void>; stop(): Promise<void> }> {
+  const { imessage } = await import("@spectrum-ts/imessage");
+  const app = await Spectrum({ projectId, projectSecret, providers: [imessage.config()], telemetry: false });
+  const im = imessage(app);
+  return {
+    async send(handle, body) {
+      const space = await im.space.get(`any;-;${handle}`);
+      await space.send(text(body));
+    },
+    stop: () => app.stop(),
+  };
+}
+
