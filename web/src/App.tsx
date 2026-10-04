@@ -13,6 +13,7 @@ import type {
   LedgerBalance, LedgerClaim, LedgerExpense, LedgerItem,
   LedgerMember, LedgerShare, LedgerTransfer,
 } from './module_bindings/types';
+import { Payments } from './Payments';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const formatMoney = (cents: bigint) => money.format(Number(cents) / 100);
@@ -175,6 +176,7 @@ export function App({ secret }: AppProps) {
           names={names}
         />
       )}
+      <Payments transfers={transfers} expenses={expenses} names={names} timeZone={group.timezone} />
       <footer>Simulated settlement · Nessie supplies setup-time sandbox profiles · No real money moves</footer>
     </main>
   );

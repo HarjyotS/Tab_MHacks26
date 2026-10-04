@@ -1,0 +1,15 @@
+/* The Payments history panel (Payments.tsx). Reuses .panel, .count and .status from styles.css. */
+.payments-panel { margin-top: 14px; }
+.payments-list { list-style: none; margin: 0; padding: 10px; }
+.payment-row { display: grid; grid-template-columns: 42px minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; }
+.payment-row + .payment-row { border-top: 1px solid #ebefec; border-radius: 0; }
+.payment-icon { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 12px; background: #e2f5ed; color: #1a7c5b; font-weight: 800; }
+.payment-what { min-width: 0; }
+.payment-what strong, .payment-what small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.payment-what small { margin-top: 3px; color: #7a867f; }
+.payment-amount { text-align: right; }
+.payment-amount b { display: block; font-family: 'Manrope'; }
+.payments-empty { margin: 0; padding: 22px 24px; }
+.payments-more { display: block; width: calc(100% - 20px); margin: 0 10px 12px; padding: 10px; border: 1px solid #dce3de; border-radius: 12px; background: transparent; color: #4d5b54; font-weight: 700; cursor: pointer; }
+.payments-more:hover { background: #f0f4f1; }
+@media (max-width: 620px) { .payment-row { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; padding: 10px 6px; } .payment-icon { width: 32px; height: 32px; } }

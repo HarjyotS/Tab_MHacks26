@@ -128,7 +128,7 @@ describe('stub classifier', () => {
   it('reads questions about the group\'s money as money_question, but not purchases or balances', async () => {
     const plain = toInput(byId(3));
     const intent = async (text: string) => (await stubClassifier({ ...plain, message: { ...plain.message, text } })).intent;
-    for (const text of ['what was on the bistro receipt?', 'how much did we spend on food?', 'who paid for the uber?', 'how was the pizza split', 'what\'s left to settle'])
+    for (const text of ['what was on the bistro receipt?', 'how much did we spend on food?', 'who paid for the uber?', 'how was the pizza split', 'what\'s left to settle', 'what have i paid this week', 'when did alex pay me back', 'show my history'])
       expect(await intent(text), text).toBe('money_question');
     expect(await intent('why do i owe jake 12')).toBe('breakdown_request');
     expect(await intent('what do i owe')).toBe('balance_query');

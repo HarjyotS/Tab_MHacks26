@@ -1,19 +1,22 @@
 // Read-only lookups over the database for answering questions (the money
 // brain, SPEC §7.8). Every number here is computed in code (P6): the agent
 // only phrases what these return. Scoped like balance replies: a group chat
-// sees that group, a DM sees every group the sender is in. Output names
-// people (never phone numbers) and refers to expenses by short refs (e1,
-// e2, …) mapped to expense ids here.
+// sees that group, a DM sees every group the sender is in, but only the
+// sender's own money there (§19): expenses they were part of, payments they
+// made or got, debts they're in. Output names people (never phone numbers)
+// and refers to expenses by short refs (e1, e2, …) mapped to expense ids here.
 import { displayName, money } from "../copy/format.js";
 import type { Expense, LineItem, Message, Share, Transfer } from "../store/types.js";
 import { activeMembers, type BrainCtx } from "./context.js";
 import { ledgerUrl } from "./ledger.js";
+import { relativeDay } from "./history.js";
 import { owing } from "./settle.js";
 import { debts, explainShare, groupsOf, owedLines } from "./talk.js";
 
-export type Scope = { groups: string[]; asker: string };
+// `personal`: a DM, which sees only the asker's own money in those groups.
+export type Scope = { groups: string[]; asker: string; personal?: boolean };
 
-export const scopeOf = (ctx: BrainCtx, m: Message): Scope => ({ groups: groupsOf(ctx, m), asker: m.sender_phone });
+export const scopeOf = (ctx: BrainCtx, m: Message): Scope => ({ groups: groupsOf(ctx, m), asker: m.sender_phone, personal: !m.group_id });
 
 // What each status means, so the agent can say it in words.
 const EXPENSE_STATUS: Record<Expense["status"], string> = {
@@ -120,9 +123,20 @@ export type ExpenseFilter = {
 
 type Err = { error: string };
 
+export type HistoryFilter = {
+  person?: string;
+  with?: string;
+  kind?: "payments" | "expenses";
+  since?: string;
+  until?: string;
+  limit?: number;
+};
+
 export function createLookup(ctx: BrainCtx, scope: Scope) {
   const groups = new Set(scope.groups);
   const multi = scope.groups.length > 1;
+  const personal = scope.personal === true;
+  const me = scope.asker;
   const members = scope.groups.flatMap((g) => activeMembers(ctx, g));
   const nameOf = (phone: string) => {
     const m = members.find((x) => x.phone === phone);
@@ -130,19 +144,33 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
   };
   const groupName = (group_id: string) => ctx.store.group(group_id)?.display_name ?? "the group";
 
+  const live = (e: Expense) => ctx.store.shares(e.expense_id).filter((s) => s.status !== "opted_out");
+  const inIt = (e: Expense, phone: string) => e.payer_phone === phone || live(e).some((s) => s.phone === phone);
+
   // Every expense in scope, oldest first; refs follow that order, so they
-  // stay the same for the whole conversation.
+  // stay the same for the whole conversation. A DM: only the asker's.
   const all = ctx.store
     .expenses()
-    .filter((e) => groups.has(e.group_id))
+    .filter((e) => groups.has(e.group_id) && (!personal || inIt(e, me)))
     .sort((a, b) => a.created_at.getTime() - b.created_at.getTime() || a.expense_id.localeCompare(b.expense_id));
   const refs = new Map(all.map((e, i) => [e.expense_id, `e${i + 1}`]));
   const refOf = (e: Expense) => refs.get(e.expense_id)!;
   const byRef = (ref: string) => all.find((e) => refOf(e) === ref.trim().toLowerCase());
+  // Payments in scope, newest first. A DM: only the asker's own.
+  const paidAt = (t: Transfer) => t.completed_at ?? t.created_at;
+  const transfers = () =>
+    ctx.store
+      .transfers()
+      .filter((t) => groups.has(t.group_id) && (!personal || t.from_phone === me || t.to_phone === me))
+      .sort((x, y) => paidAt(y).getTime() - paidAt(x).getTime());
+  // Debts and shares a DM may show: ones the asker is in.
+  const mine = (from: string, to: string) => !personal || from === me || to === me;
 
   const tz = (group_id: string) => ctx.store.group(group_id)?.timezone ?? "America/Detroit";
   const dateOf = (d: Date, group_id: string) =>
     new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: tz(group_id) }).format(d);
+  // "today", "yesterday", "mon", "sep 26": how Tab says a day (history.ts).
+  const whenOf = (d: Date, group_id: string) => relativeDay(d, ctx.now(), tz(group_id));
   const dayOf = (d: Date, group_id: string) =>
     new Intl.DateTimeFormat("en-CA", { year: "numeric", month: "2-digit", day: "2-digit", timeZone: tz(group_id) }).format(d);
 
@@ -158,9 +186,7 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
     return { error: `No one named "${name}" here. People: ${named.map((m) => displayName(m)).join(", ")}` };
   }
   const isErr = (v: unknown): v is Err => typeof v === "object" && v !== null && "error" in v;
-
-  const live = (e: Expense) => ctx.store.shares(e.expense_id).filter((s) => s.status !== "opted_out");
-  const inIt = (e: Expense, phone: string) => e.payer_phone === phone || live(e).some((s) => s.phone === phone);
+  const NOT_YOURS = { error: "This is a DM: only the sender's own money is visible here (what they owe, are owed, paid, or got)." };
 
   // Kept text only: a message is in the database only if it was about money.
   function sourceText(e: Expense): string | undefined {
@@ -214,9 +240,10 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
   const sum = (xs: number[]) => xs.reduce((a, b) => a + b, 0);
 
   // Netted per group like `debts`, then one line per pair (handleBalanceQuery).
+  // A DM: only debts the asker is in.
   function allDebts() {
     const byPair = new Map<string, { from: string; to: string; cents: number }>();
-    for (const d of scope.groups.flatMap((g) => debts(ctx, g))) {
+    for (const d of scope.groups.flatMap((g) => debts(ctx, g)).filter((x) => mine(x.from.phone, x.to.phone))) {
       const key = `${d.from.phone}>${d.to.phone}`;
       const seen = byPair.get(key);
       byPair.set(key, { from: d.from.phone, to: d.to.phone, cents: (seen?.cents ?? 0) + d.amount_cents });
@@ -225,7 +252,9 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
   }
 
   return {
-    refOf,
+    // Undefined for an expense outside this scope (another group, or not
+    // the asker's in a DM).
+    refOf: (e: Expense): string | undefined => refs.get(e.expense_id),
     byRef,
 
     findExpenses(f: ExpenseFilter) {
@@ -266,7 +295,9 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
           name: nameOf(s.phone),
           ...(s.role === "payer"
             ? { role: "payer", own_part: money(s.amount_cents) }
-            : { owes_payer: money(s.amount_cents), status: SHARE_STATUS[s.status] }),
+            : // Whether someone else has paid is theirs to know (a DM shows the
+              // asker's own, or everyone's to the asker as payer).
+              { owes_payer: money(s.amount_cents), ...(mine(s.phone, e.payer_phone ?? "") ? { status: SHARE_STATUS[s.status] } : {}) }),
           why: explainShare(ctx, e, s.phone),
         })),
         ...(items.length
@@ -283,10 +314,12 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
               }),
             }
           : {}),
-        payments: ctx.store
-          .transfers()
+        payments: transfers()
           .filter((t) => t.expense_id === e.expense_id)
-          .map((t) => ({ from: nameOf(t.from_phone), to: nameOf(t.to_phone), amount: money(t.amount_cents), status: TRANSFER_STATUS[t.status] })),
+          .map((t) => ({
+            from: nameOf(t.from_phone), to: nameOf(t.to_phone), amount: money(t.amount_cents), status: TRANSFER_STATUS[t.status],
+            date: dateOf(paidAt(t), t.group_id), when: whenOf(paidAt(t), t.group_id),
+          })),
         ...(sourceText(e) ? { logged_from_message: sourceText(e) } : {}),
         ...(multi ? { group: groupName(e.group_id) } : {}),
       };
@@ -306,6 +339,14 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
         const c = net.get(phone) ?? 0;
         return { name: nameOf(phone), ...(c > 0 ? { is_owed_in_total: money(c) } : c < 0 ? { owes_in_total: money(-c) } : { square: true }) };
       };
+      // A DM sees only the asker's debts, so only the asker's position is whole.
+      if (personal)
+        return {
+          you_are_square: ds.length === 0,
+          debts: shown.map((d) => ({ from: nameOf(d.from), owes: nameOf(d.to), amount: money(d.cents) })),
+          positions: [position(me)],
+          note: "A DM: only the sender's own debts. Counts every locked-in share not yet paid; proposed splits aren't owed until they lock in.",
+        };
       return {
         all_square: ds.length === 0,
         debts: shown.map((d) => ({ from: nameOf(d.from), owes: nameOf(d.to), amount: money(d.cents) })),
@@ -319,6 +360,7 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
       if (isErr(from)) return from;
       const to = person(a.to);
       if (isErr(to)) return to;
+      if (!mine(from, to)) return NOT_YOURS;
       const line = (l: ReturnType<typeof owedLines>[number]) => ({
         ref: refOf(l.expense),
         description: l.description,
@@ -378,27 +420,100 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
       };
     },
 
-    payments(a: { person?: string } = {}) {
+    payments(a: { person?: string; since?: string; until?: string } = {}) {
       const who = a.person ? person(a.person) : undefined;
       if (isErr(who)) return who;
-      const ts = ctx.store
-        .transfers()
-        .filter((t) => groups.has(t.group_id) && (!who || t.from_phone === who || t.to_phone === who))
-        .sort((x, y) => y.created_at.getTime() - x.created_at.getTime());
+      const ts = transfers()
+        .filter((t) => !who || t.from_phone === who || t.to_phone === who)
+        .filter((t) => !a.since || dayOf(paidAt(t), t.group_id) >= a.since)
+        .filter((t) => !a.until || dayOf(paidAt(t), t.group_id) <= a.until);
       return {
         count: ts.length,
         paid_total: money(sum(ts.filter((t) => t.status === "done").map((t) => t.amount_cents))),
         payments: ts.slice(0, 15).map((t) => {
           const e = ctx.store.expense(t.expense_id);
+          const ref = e && refs.get(e.expense_id);
           return {
             from: nameOf(t.from_phone),
             to: nameOf(t.to_phone),
             amount: money(t.amount_cents),
             status: TRANSFER_STATUS[t.status],
-            date: dateOf(t.completed_at ?? t.created_at, t.group_id),
-            ...(e ? { for: e.description, ref: refOf(e) } : {}),
+            date: dateOf(paidAt(t), t.group_id),
+            when: whenOf(paidAt(t), t.group_id),
+            ...(e ? { for: e.description, ...(ref ? { ref } : {}) } : {}),
           };
         }),
+      };
+    },
+
+    // One person's money over time, newest first (§7.8 History): the
+    // expenses they were part of and the payments they made or got. A DM
+    // only ever shows the asker's; naming someone else there narrows it to
+    // what the two of them share.
+    history(a: HistoryFilter = {}) {
+      const named = a.person ? person(a.person) : undefined;
+      if (isErr(named)) return named;
+      const other = a.with ? person(a.with) : undefined;
+      if (isErr(other)) return other;
+      const who = personal ? me : (named ?? me);
+      const shared = personal && named && named !== me ? named : other;
+      const inRange = (d: Date, group_id: string) =>
+        (!a.since || dayOf(d, group_id) >= a.since) && (!a.until || dayOf(d, group_id) <= a.until);
+      const payments = a.kind === "expenses" ? [] : transfers()
+        .filter((t) => (t.from_phone === who || t.to_phone === who) && (!shared || t.from_phone === shared || t.to_phone === shared))
+        .filter((t) => inRange(paidAt(t), t.group_id));
+      const expenses = a.kind === "payments" ? [] : all
+        .filter((e) => COUNTED.includes(e.status) && inIt(e, who) && (!shared || inIt(e, shared)))
+        .filter((e) => inRange(e.created_at, e.group_id));
+      const events = [
+        ...payments.map((t) => {
+          const e = ctx.store.expense(t.expense_id);
+          const ref = e && refs.get(e.expense_id);
+          return {
+            at: paidAt(t),
+            row: {
+              type: "payment",
+              when: whenOf(paidAt(t), t.group_id),
+              date: dateOf(paidAt(t), t.group_id),
+              from: nameOf(t.from_phone),
+              to: nameOf(t.to_phone),
+              amount: money(t.amount_cents),
+              ...(e ? { for: e.description, ...(ref ? { ref } : {}) } : {}),
+              status: TRANSFER_STATUS[t.status],
+              ...(multi ? { group: groupName(t.group_id) } : {}),
+            },
+          };
+        }),
+        ...expenses.map((e) => {
+          const share = live(e).find((s) => s.phone === who);
+          return {
+            at: e.created_at,
+            row: {
+              type: "expense",
+              when: whenOf(e.created_at, e.group_id),
+              date: dateOf(e.created_at, e.group_id),
+              ref: refOf(e),
+              description: e.description,
+              total: money(e.total_cents),
+              paid_by: e.payer_phone ? nameOf(e.payer_phone) : "unknown",
+              ...(share ? { [`${nameOf(who)}_part`]: money(share.amount_cents), part_status: SHARE_STATUS[share.status] } : {}),
+              status: EXPENSE_STATUS[e.status],
+              ...(multi ? { group: groupName(e.group_id) } : {}),
+            },
+          };
+        }),
+      ].sort((x, y) => y.at.getTime() - x.at.getTime());
+      const limit = cap(a.limit, 12);
+      const done = payments.filter((t) => t.status === "done");
+      return {
+        person: nameOf(who),
+        ...(shared ? { with: nameOf(shared) } : {}),
+        paid_out: money(sum(done.filter((t) => t.from_phone === who).map((t) => t.amount_cents))),
+        got_back: money(sum(done.filter((t) => t.to_phone === who).map((t) => t.amount_cents))),
+        paid_upfront_for_expenses: money(sum(expenses.filter((e) => e.payer_phone === who).map((e) => e.total_cents))),
+        events: events.slice(0, limit).map((x) => x.row),
+        ...(events.length > limit ? { more_not_shown: events.length - limit } : {}),
+        note: "paid_out and got_back count finished payments through Tab; paid_upfront_for_expenses is what they fronted for the group.",
       };
     },
 
@@ -410,7 +525,7 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
         es.flatMap((e) =>
           ctx.store
             .shares(e.expense_id)
-            .filter((s) => s.role === "participant" && s.status === status && s.amount_cents > 0)
+            .filter((s) => s.role === "participant" && s.status === status && s.amount_cents > 0 && mine(s.phone, e.payer_phone!))
             .map((s) => ({ name: nameOf(s.phone), amount: money(s.amount_cents), to: nameOf(e.payer_phone!), for: e.description })),
         );
       const unrequested = all.filter((x) => x.status === "finalized" && !x.settle_message_id);
@@ -424,7 +539,7 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
           disputed: people(es, "disputed"),
         })),
         locked_in_not_requested_yet: unrequested.flatMap((e) =>
-          owing(ctx, e).map((s) => ({ name: nameOf(s.phone), amount: money(s.amount_cents), to: nameOf(e.payer_phone!), for: e.description, ref: refOf(e) })),
+          owing(ctx, e).filter((s) => mine(s.phone, e.payer_phone!)).map((s) => ({ name: nameOf(s.phone), amount: money(s.amount_cents), to: nameOf(e.payer_phone!), for: e.description, ref: refOf(e) })),
         ),
         not_locked_in_yet: all
           .filter((e) => e.status === "proposed" || e.status === "itemizing")
@@ -436,16 +551,18 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
     searchMessages(a: { query?: string; limit?: number }) {
       const terms = a.query ? queryTerms(a.query) : [];
       // Money messages in scope (ignored chat has no text) and Tab's own
-      // replies there. Other people's DMs to Tab stay out.
+      // replies there. Other people's DMs to Tab stay out. A DM: only the
+      // asker's own messages, and Tab's about their expenses or to them.
+      const ids = new Set(all.map((e) => e.expense_id));
       const people = ctx.store
         .messages()
         .filter((x) => x.text && x.intent && x.intent !== "ignore" && x.kind === "text")
-        .filter((x) => (x.group_id ? groups.has(x.group_id) : x.sender_phone === scope.asker))
+        .filter((x) => (x.group_id ? groups.has(x.group_id) && (!personal || x.sender_phone === me) : x.sender_phone === scope.asker))
         .map((x) => ({ at: x.received_at, group_id: x.group_id ?? scope.groups[0]!, from: nameOf(x.sender_phone), text: x.text! }));
       const tab = ctx.store
         .outbox()
         .filter((o) => o.kind !== "reaction" && o.text && o.status !== "cancelled")
-        .filter((o) => (o.group_id ? groups.has(o.group_id) : o.to_phone === scope.asker))
+        .filter((o) => (o.group_id ? groups.has(o.group_id) && (!personal || (o.expense_id !== undefined && ids.has(o.expense_id))) : o.to_phone === scope.asker))
         .map((o) => ({ at: o.created_at, group_id: o.group_id ?? scope.groups[0]!, from: "Tab", text: o.text! }));
       const found = [...people, ...tab]
         .map((x) => ({ x, s: terms.length ? sum(terms.map((t) => (hits(words(x.text), t) ? 1 : 0))) : 1 }))
@@ -466,10 +583,10 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
         .flatMap((e) =>
           ctx.store
             .shares(e.expense_id)
-            .filter((s) => s.role === "participant" && STILL_OWED.includes(s.status))
+            .filter((s) => s.role === "participant" && STILL_OWED.includes(s.status) && mine(s.phone, e.payer_phone!))
             .map((s) => ({ from: nameOf(s.phone), to: nameOf(e.payer_phone!), cents: s.amount_cents })),
         );
-      return { net, lines, asker: nameOf(scope.asker) };
+      return { net, lines, asker: nameOf(scope.asker), personal };
     },
 
     async ledgerLink() {
