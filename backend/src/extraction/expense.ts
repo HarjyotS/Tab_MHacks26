@@ -126,6 +126,7 @@ function systemPrompt(mode: ExpenseMode): string {
 - description: two or three words for what was bought, like "Groceries" or "Uber to airport".
 - payer: "sender" if the sender says they paid, covered, or got it, or asks to be paid back; "named" with payer_name if the message names who paid; "unknown" if the message only states what something cost without saying who paid ("dinner was 60").
 - participants: "everyone" unless the message names who shared it; then "list" with participant_names.
+- "X owes 20 for the palm reading" or "X owes me 20 for it": the sender paid (payer "sender"), the amount is X's share, and participants is "list" with only X. The person who owes is never the payer.
 - exclusion_names: people the message says were not there.`
       : `The message adjusts the split of the sender's open expense. Do not extract a new total: amount_cents is null, amount_is_per_person is false, payer is "unknown".
 - exclusion_names: people the message says were not there or should be left out. "Just Sam and Alex" or "only Sam and Alex went" leaves out every other member. Never list someone the message says was there or had something.

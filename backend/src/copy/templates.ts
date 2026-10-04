@@ -39,6 +39,10 @@ export const namePrompt = (seed: string) =>
 
 function shareLine(a: { description: string; total_cents: number; shares: Share[] }): string {
   const amounts = new Set(a.shares.map((s) => s.amount_cents));
+  // One person owes all of it ("dhanush owes 20 for palm reading"): never
+  // "split 1 ways" (live run).
+  if (a.shares.length === 1)
+    return `${a.description} ${money(a.total_cents)}: ${displayName(a.shares[0]!.person)} owes ${money(a.shares[0]!.amount_cents)}`;
   if (amounts.size === 1)
     return `${a.description} ${money(a.total_cents)} split ${a.shares.length} ways, so ${money(a.shares[0]!.amount_cents)} each`;
   return `${a.description} ${money(a.total_cents)}: ${a.shares.map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`).join(", ")}`;
