@@ -9,6 +9,7 @@ import { processMessage, tick } from "../../src/brain/process.js";
 import { extractExpense } from "../../src/extraction/expense.js";
 import { resolveClaim } from "../../src/extraction/claim.js";
 import { extractCorrection } from "../../src/extraction/correction.js";
+import { resolveAnswer } from "../../src/extraction/answer.js";
 import type { ReceiptRead } from "../../src/extraction/receipt.js";
 import type { ChatClient } from "../../src/grok/structured.js";
 import type { Message } from "../../src/store/types.js";
@@ -48,7 +49,25 @@ export type Script = {
   receipt?: Record<string, ReceiptRead>;
   // correction text → raw correction extraction
   correction?: Record<string, object>;
+  // message text → raw answer resolution; thread_id "q1" is the newest
+  // question offered (answer.ts). Use `answer()` below for the defaults.
+  answer?: Record<string, object>;
 };
+
+// A raw answer resolution with everything null except what's given.
+export const answer = (over: object) => ({
+  thread_id: null,
+  relevance: 0,
+  yes_no: null,
+  amount_cents: null,
+  percent: null,
+  choice: null,
+  settle_mode: null,
+  restated: null,
+  also_new: false,
+  also_intent: null,
+  ...over,
+});
 
 export function world(
   script: Script,
@@ -91,6 +110,11 @@ export function world(
         const read = script.receipt?.[url];
         if (!read) throw missing("receipt", url);
         return read;
+      },
+      answer: (input, threads) => {
+        const out = script.answer?.[input.message.text ?? ""];
+        if (!out) throw missing("answer", input.message.text ?? "");
+        return resolveAnswer(grok(out), "m", input, threads);
       },
     },
     timing: timing({ DEMO_MODE: "true" }),

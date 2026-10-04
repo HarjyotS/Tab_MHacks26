@@ -10,9 +10,11 @@ import type { WitContext } from "../copy/wit.js";
 import type { ExpenseMode } from "../extraction/expense.js";
 import type {
   CorrectionExtraction,
+  AnswerResolution,
   ExpenseExtraction,
   Extracted,
   ExtractInput,
+  OpenThread,
   Problem,
 } from "../extraction/types.js";
 import type { ReceiptRead } from "../extraction/receipt.js";
@@ -116,6 +118,8 @@ export type Extractors = {
   receipt: (image_url: string, caption?: string) => Promise<ReceiptRead>;
   claim: (input: ExtractInput, items: ClaimItem[]) => Promise<Extracted<ClaimResolution>>;
   correction: (input: ExtractInput) => Promise<Extracted<CorrectionExtraction>>;
+  // Which of Tab's open questions a message answers, and the answer.
+  answer: (input: ExtractInput, threads: OpenThread[]) => Promise<AnswerResolution>;
 };
 
 export type BrainCtx = {

@@ -10,6 +10,7 @@ import { extractExpense } from "./extraction/expense.js";
 import { extractReceipt } from "./extraction/receipt.js";
 import { resolveClaim } from "./extraction/claim.js";
 import { extractCorrection } from "./extraction/correction.js";
+import { resolveAnswer } from "./extraction/answer.js";
 import { imageAsDataUrl } from "./extraction/image.js";
 import { witLine } from "./copy/wit.js";
 import { Memory, type BrainCtx } from "./brain/context.js";
@@ -67,6 +68,7 @@ const ctx: BrainCtx = {
     receipt: async (url, caption) => extractReceipt(xai, grok.model, await imageAsDataUrl(url), caption),
     claim: (input, items) => resolveClaim(xai, grok.model, input, items),
     correction: (input) => extractCorrection(xai, grok.model, input),
+    answer: (input, threads) => resolveAnswer(xai, grok.model, input, threads),
   },
   wit: (w) => witLine(xai, grok.model, w),
   timing: t,
