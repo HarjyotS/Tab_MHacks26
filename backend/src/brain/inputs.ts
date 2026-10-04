@@ -64,7 +64,7 @@ export function extractInput(ctx: BrainCtx, m: Message): ClassifyInput {
       image_url: m.image_url,
       reply_to_id: m.reply_to_id,
       reply_to_tab: m.reply_to_id
-        ? ctx.store.outbox().find((o) => o.sent_photon_id === m.reply_to_id)?.text ?? undefined
+        ? ctx.store.outbox().find((o) => o.sent_photon_id === m.reply_to_id)?.text
         : undefined,
     },
   };

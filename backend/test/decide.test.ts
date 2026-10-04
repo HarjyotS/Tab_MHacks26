@@ -56,6 +56,9 @@ describe("decide", () => {
     expect(decide({ intent: "help", confidence: 0.7 }, toTab)).toBe("act");
     expect(decide({ intent: "breakdown_request", confidence: 0.43 }, toTab)).toBe("clarify");
     expect(decide({ intent: "help", confidence: 0.2 }, toTab)).toBe("ignore");
+    // Money-changing intents still need 0.85 to act; below that Tab asks.
+    expect(decide({ intent: "split_adjustment", confidence: 0.62 }, toTab)).toBe("clarify");
+    expect(decide({ intent: "expense", confidence: 0.9 }, toTab)).toBe("act");
     expect(decide({ intent: "ignore", confidence: 0.9 }, toTab)).toBe("ignore");
     expect(decide({ intent: "approval", confidence: 0.7 }, { ...toTab, open_items: [] })).toBe("ignore");
   });
