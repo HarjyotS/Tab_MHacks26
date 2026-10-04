@@ -1,0 +1,44 @@
+# Deploys the web ledger to GitHub Pages so "@tab ledger" links open on any phone.
+# Served at https://kien-le-trung.github.io/Tab_MHacks26/g/<secret>
+name: Deploy web ledger
+
+on:
+  push:
+    branches: [main]
+    paths: ['web/**', '.github/workflows/pages.yml', 'package-lock.json']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build -w web -- --base=/Tab_MHacks26/
+        env:
+          VITE_SPACETIME_HOST: wss://maincloud.spacetimedb.com
+          VITE_SPACETIME_DB: tabmhacks2026-268xk
+      # Pages has no SPA rewrites; serving index.html as the 404 page routes /g/<secret> to the app.
+      - run: cp web/dist/index.html web/dist/404.html
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
