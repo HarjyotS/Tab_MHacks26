@@ -14,6 +14,7 @@ const { intent, confidence } = await classify({ message, context, members, open_
 
 - **`jevClassifier`** asks TypeSafe's Jev one choice question over the 14 intents in SPEC 6.1. Each option is written as a rule (SPEC 6.5). The state it sends is labeled data: chat type, members, the sender's open items, recent messages, and the new message. `confidence` is Jev's probability for the chosen intent, which is what the 0.85 and 0.50 thresholds in SPEC 6.4 expect. Reactions, system events, and bare photos never reach Jev.
 - **`stubClassifier`** is conservative keyword rules, for working offline or when Jev is down.
+- **`withPrefilter(classify)`** answers `{ intent: "ignore", confidence: 1, prefiltered: true }` without calling `classify` when `mightBeMoney(input)` is false, so "lol" and "who's driving" never cost a Jev call. It passes amounts, money and purchase words, Tab's commands, photos, DMs, replies to Tab, unnamed senders (name prompt), `tab_question_open`, and anything while the sender has an item list, a proposed split, or a settle request open. When unsure it passes. The backend puts it in front of Jev unless `GATE_PREFILTER` is `off|false|0|no`; `gate/test/prefilter.test.ts` checks that no money fixture is ever skipped.
 
 ## Input conventions
 
