@@ -63,6 +63,17 @@ describe("decide", () => {
     expect(decide({ intent: "approval", confidence: 0.7 }, { ...toTab, open_items: [] })).toBe("ignore");
   });
 
+  it("routes an answer to Tab's question on a lower bar, but only while Tab is waiting on one", () => {
+    const waiting: ClassifyInput = {
+      ...base,
+      open_questions: [{ id: "clarify:1", text: "How much was the Uber?", who_may_answer: "Kian" }],
+    };
+    expect(decide({ intent: "answer", confidence: 0.62 }, waiting)).toBe("act");
+    expect(decide({ intent: "answer", confidence: 0.4 }, waiting)).toBe("clarify");
+    expect(decide({ intent: "answer", confidence: 0.2 }, waiting)).toBe("ignore");
+    expect(decide({ intent: "answer", confidence: 0.99 }, base)).toBe("ignore");
+  });
+
   it("never acts on ignore, whatever the confidence", () => {
     expect(decide({ intent: "ignore", confidence: 1 }, base)).toBe("ignore");
   });

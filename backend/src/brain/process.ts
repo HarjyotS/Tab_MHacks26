@@ -33,9 +33,11 @@ import * as T from "../copy/templates.js";
 
 // Intents whose messages are about money: the only ones kept as context and
 // the only ones (besides answers from the person Tab asked) sent to Grok.
+// `answer` is kept only once it actually answers one of Tab's questions.
 const MONEY_INTENTS = new Set<Intent>([
   "expense", "receipt", "split_adjustment", "claim", "correction",
   "approval", "dispute", "payment_reported", "balance_query", "breakdown_request",
+  "answer",
 ]);
 
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
@@ -82,7 +84,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       intent = result.intent;
       confidence = result.confidence;
       const decision = decide(result, input);
-      const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent);
+      const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent) && intent !== "answer";
       ctx.log("classified", {
         message_id: m.message_id, group_id: m.group_id, intent, confidence, decision,
         prefiltered: result.prefiltered === true,
@@ -96,6 +98,8 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       const ledger = !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);
       keep = answered || moneyRelated || why || ledger;
+      // Stored as an answer, so it stays in later context (§19 keeps it).
+      if (answered) intent = "answer";
       if (!keep) intent = "ignore";
       if (!answered && !why && !ledger) {
         if (decision === "act") await act(ctx, m, result.intent);
@@ -176,6 +180,8 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return handleClaim(ctx, m, boundIf("itemizing"));
     case "correction":
       return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : undefined);
+    case "answer":
+      return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
     // payment_reported is ignored in the MVP; ignore needs nothing.
     default:
       ctx.log("intent_not_handled", { message_id: m.message_id, intent });

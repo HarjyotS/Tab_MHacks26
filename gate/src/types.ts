@@ -14,6 +14,7 @@ export const INTENTS = [
   'payment_reported',
   'settle_up',
   'help',
+  'answer',
   'ignore',
 ] as const;
 
@@ -51,6 +52,19 @@ export interface ClassifyInput {
    * by the backend for the pre-filter only; Jev never sees it.
    */
   tab_question_open?: boolean;
+  /**
+   * Questions Tab asked in this chat and is still waiting on, newest first.
+   * Only Tab's own words, so sending them to the gate reveals nothing new.
+   */
+  open_questions?: OpenQuestion[];
+}
+
+export interface OpenQuestion {
+  id: string;
+  /** What Tab asked. */
+  text: string;
+  /** "anyone", or the name of the one person who may answer. */
+  who_may_answer: string;
 }
 
 export interface ClassifyResult {

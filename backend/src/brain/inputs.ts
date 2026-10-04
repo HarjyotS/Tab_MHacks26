@@ -7,6 +7,7 @@ import {
   recentContext,
   type BrainCtx,
 } from "./context.js";
+import { openThreads } from "./threads.js";
 
 const OPEN = new Set(["needs_info", "proposed", "itemizing", "finalized"]);
 const DONE_SHARE = new Set(["paid", "opted_out"]);
@@ -47,15 +48,34 @@ export function openItemsFor(
     });
 }
 
+// What Tab asked in this chat and is still waiting on (threads.ts), so the
+// gate can tell an answer from a new message. Only Tab's own words.
+export function openQuestionsFor(
+  ctx: BrainCtx,
+  m: Message,
+  members: { phone: string; name?: string }[],
+): NonNullable<ClassifyInput["open_questions"]> {
+  return openThreads(ctx, chatOf(m)).map((t) => ({
+    id: t.id,
+    text: t.text,
+    who_may_answer:
+      t.who === "anyone"
+        ? "anyone"
+        : (members.find((x) => x.phone === t.asker)?.name ?? `member ending ${(t.asker ?? "").slice(-4)}`),
+  }));
+}
+
 export function extractInput(ctx: BrainCtx, m: Message): ClassifyInput {
   const members = senderGroups(ctx, m).flatMap((g) =>
     activeMembers(ctx, g).map((x) => ({ phone: x.phone, name: x.name })),
   );
   const unique = [...new Map(members.map((x) => [x.phone, x])).values()];
+  const open_questions = openQuestionsFor(ctx, m, unique);
   return {
     members: [{ phone: "tab", name: "Tab" }, ...unique],
     context: recentContext(ctx, chatOf(m), m.received_at),
     open_items: openItemsFor(ctx, m),
+    ...(open_questions.length ? { open_questions } : {}),
     message: {
       sender_phone: m.sender_phone,
       is_dm: m.is_dm,

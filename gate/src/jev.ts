@@ -1,4 +1,4 @@
-import type { Classify, ClassifyInput, GateMessage, Intent } from './types.js';
+import type { Classify, ClassifyInput, GateMessage, Intent, OpenQuestion } from './types.js';
 import { INTENTS } from './types.js';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
@@ -30,6 +30,8 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
     'The sender asks Tab to settle everyone up now, for example because a trip is over ("let\'s settle up", "trip\'s over, square us up", "close out the tab"). Asking what they owe is balance_query, not this.',
   help:
     'The sender asks what Tab is, what it can do, or how to use it: how to log an expense, settle up, see balances or the ledger, or remove Tab ("how do we settle the bill?", "where do I see the ledger?").',
+  answer:
+    'Only when "Tab is waiting on" lists a question: the sender is responding to one of those questions (yes or no, an amount, a choice, a correction, or a free-form reply that addresses it, like "nah we\'ll just settle monthly" or "yeah lock it in"). A new purchase of their own, or a question of their own, is not an answer.',
   ignore:
     'Anything else: chatter, jokes, reactions, plans, claims that someone owes money with no purchase named, or instructions aimed at Tab that are not about a real shared purchase.',
 };
@@ -68,15 +70,25 @@ function pending(item: ClassifyInput['open_items'][number]): string {
   return `${item.description} ${status}`;
 }
 
+/** One of Tab's open questions, short enough to read at a glance. */
+function question(q: OpenQuestion): string {
+  const text = q.text.replace(/\s+/g, ' ').trim();
+  const who = q.who_may_answer === 'anyone' ? 'anyone may answer' : `only ${q.who_may_answer} may answer`;
+  return `- "${text.length > 160 ? `${text.slice(0, 157)}...` : text}" (${who})`;
+}
+
 /** Everything Jev sees, as labeled data (SPEC 6.5: Jev only knows the state you send). */
 export function buildState(input: ClassifyInput): string {
   const items = input.open_items.length ? input.open_items.map(i => `- ${pending(i)}`).join('\n') : '- none';
   const settleOpen = input.open_items.some(i => i.expense_status === 'finalized' && i.my_share_status === 'locked');
+  const waiting = input.open_questions ?? [];
   return [
     `Chat: ${input.message.is_dm ? 'a private DM between the sender and Tab' : 'the group chat'}`,
     `Members: ${input.members.map(m => m.name ?? `member ending ${m.phone.slice(-4)}`).join(', ') || 'unknown'}`,
     `Open items for the sender:\n${items}`,
     `Settle request open for the sender: ${settleOpen ? 'yes' : 'no'}`,
+    // Only when Tab asked something, so the state for everything else is unchanged.
+    ...(waiting.length ? [`Tab is waiting on, newest first:\n${waiting.map(question).join('\n')}`] : []),
     `Recent messages, oldest first:\n${input.context.map(m => line(m, input)).join('\n') || '(none)'}`,
     `NEW MESSAGE:\n${line(input.message, input)}`,
   ].join('\n\n');
