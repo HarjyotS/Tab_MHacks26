@@ -121,6 +121,7 @@ describe("combined questions", () => {
     const reply = w.db.outbox().find((o) => o.target_message_id === m.message_id)!;
     expect(reply.text!.split("\n")).toEqual([
       "you owe Joe $26.00 and Jake $6.00",
+      "not locked in yet: groceries: $15.75 to Kian",
       "Priya owes Joe $26.00: the bistro $14.00, pizza $12.00",
       "uber to the airport $6.00: split 4 ways",
     ]);
@@ -165,7 +166,7 @@ describe("privacy: a DM answers only about the sender's own money", () => {
     await w.say("Priya", "who owes what");
     expect(w.said("balance_reply").at(-1)).toMatch(/Kian owes Joe \$27\.00/); // the group sees the group
     const m = await w.dm("Priya", "who owes what");
-    expect(w.db.outbox().find((o) => o.target_message_id === m.message_id)!.text).toBe("you owe Joe $26.00 and Jake $6.00");
+    expect(w.db.outbox().find((o) => o.target_message_id === m.message_id)!.text).toBe("you owe Joe $26.00 and Jake $6.00\nnot locked in yet: groceries: $15.75 to Kian");
   });
 
   it("a DM breakdown of two other people shows only the sender's balance with each", async () => {

@@ -595,3 +595,18 @@ describe("payment receipt with the Nessie mirror on", () => {
     expect(text).toBe("done, you paid Sam $12.00 for pizza through capital one nessie (sandbox, no real money moved)\nyou're all square");
   });
 });
+
+describe("personal balance with a split that isn't locked in", () => {
+  const sam = { phone: "+15550000002", name: "Sam" };
+  it("says what they'd owe once it's locked in instead of 'square'", () => {
+    expect(T.personalBalanceReply({ owes: [], owed: [], pending: [{ description: "the bistro", other: sam, amount_cents: 2715, owes: true }] }))
+      .toBe("nothing locked in yet\nonce it is: the bistro: $27.15 to Sam");
+  });
+  it("adds pending splits after what's already owed", () => {
+    expect(T.personalBalanceReply({ owes: [{ from: { phone: "+1", name: "Alex" }, to: sam, amount_cents: 1200 }], owed: [], pending: [{ description: "the bistro", other: sam, amount_cents: 2715, owes: true }] }))
+      .toBe("you owe Sam $12.00\nnot locked in yet: the bistro: $27.15 to Sam");
+  });
+  it("is still square with nothing anywhere", () => {
+    expect(T.personalBalanceReply({ owes: [], owed: [] })).toBe("you're square with everyone");
+  });
+});
