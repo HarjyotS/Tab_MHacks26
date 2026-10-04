@@ -165,8 +165,13 @@ export type BrainCtx = {
 
 // ── Reading chat state ───────────────────────────────────────────────────
 
+// TAB_GONE: phone endings of people who left a chat ("6453,1234"). The
+// module has no way to mark a member as left yet (left_at is never set), so
+// until it does, this keeps them out of new splits.
+const GONE = (process.env.TAB_GONE ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+
 export function activeMembers(ctx: BrainCtx, group_id: string) {
-  return ctx.store.members(group_id).filter((m) => !m.left_at);
+  return ctx.store.members(group_id).filter((m) => !m.left_at && !GONE.some((end) => m.phone.endsWith(end)));
 }
 
 // Names Tab keeps the way they were saved: the group's members, or in a DM,
