@@ -169,6 +169,7 @@ const transfers = table(
       { accessor: 'by_group', algorithm: 'btree', columns: ['group_id'] as const },
       { accessor: 'by_expense', algorithm: 'btree', columns: ['expense_id'] as const },
       { accessor: 'by_status', algorithm: 'btree', columns: ['status'] as const },
+      { accessor: 'by_approval_expense', algorithm: 'btree', columns: ['approved_by_message_id', 'expense_id'] as const },
     ],
   },
   {
@@ -180,7 +181,9 @@ const transfers = table(
     amount_cents: t.i64(),
     provider: t.string(),
     status: t.string(),
-    approved_by_message_id: t.string().unique(),
+    // One approval (a 👍 on a combined settle request) can pay several shares, so
+    // this is not unique: create_transfer dedupes on (approval, expense) instead.
+    approved_by_message_id: t.string(),
     created_at: t.timestamp(),
     completed_at: t.option(t.timestamp()),
     error: t.option(t.string()),
@@ -194,6 +197,12 @@ const transfer_completion_schedule = table(
     scheduled_at: t.scheduleAt(),
     transfer_id: t.string(),
   }
+);
+
+// One row per group that has chosen a settle mode (SPEC 7.6). No row means "ledger".
+const group_settings = table(
+  {},
+  { group_id: t.string().primaryKey(), settle_mode: t.string(), updated_at: t.timestamp() }
 );
 
 const service_roles = table(
@@ -254,6 +263,7 @@ const spacetime = schema({
   shares,
   transfers,
   transfer_completion_schedule,
+  group_settings,
   service_roles,
   module_config,
   ledger_secrets,
@@ -590,7 +600,8 @@ export const create_transfer = spacetime.reducer(
   { transfer_id: t.string(), expense_id: t.string(), from_phone: t.string(), approved_by_message_id: t.string() },
   (ctx, input) => {
     requireRole(ctx, 'backend', 'seeder');
-    const existing = ctx.db.transfers.approved_by_message_id.find(input.approved_by_message_id);
+    const existing = ctx.db.transfers.by_approval_expense
+      .filter([input.approved_by_message_id, input.expense_id]).next().value;
     if (existing) return;
     const expense = ctx.db.expenses.expense_id.find(input.expense_id);
     if (!expense || !expense.payer_phone) throw new Error('Expense has no payer');
@@ -614,6 +625,44 @@ export const create_transfer = spacetime.reducer(
       scheduled_at: ScheduleAt.time(ctx.timestamp.microsSinceUnixEpoch + delay),
       transfer_id: input.transfer_id,
     });
+  }
+);
+
+const SETTLE_MODES = ['ledger', 'per_expense'] as const;
+
+export const set_settle_mode = spacetime.reducer(
+  { group_id: t.string(), settle_mode: t.string() },
+  (ctx, { group_id, settle_mode }) => {
+    requireRole(ctx, 'backend');
+    requireValue(settle_mode, SETTLE_MODES, 'settle mode');
+    if (!ctx.db.groups.group_id.find(group_id)) throw new Error('Unknown group');
+    const row = { group_id, settle_mode, updated_at: ctx.timestamp };
+    if (ctx.db.group_settings.group_id.find(group_id)) ctx.db.group_settings.group_id.update(row);
+    else ctx.db.group_settings.insert(row);
+  }
+);
+
+// SPEC 7.6 disputes: only the disputing person's amount changes, and the payer's
+// own share absorbs the difference so the expense total (and everyone else) is unchanged.
+export const resolve_dispute = spacetime.reducer(
+  { expense_id: t.string(), phone: t.string(), amount_cents: t.i64() },
+  (ctx, { expense_id, phone, amount_cents }) => {
+    requireRole(ctx, 'backend');
+    if (amount_cents < 0n) throw new Error('Amount must not be negative');
+    const expense = ctx.db.expenses.expense_id.find(expense_id);
+    if (!expense) throw new Error('Unknown expense');
+    if (expense.status !== 'finalized') throw new Error('Only finalized expenses have disputes to resolve');
+    if (!expense.payer_phone) throw new Error('Expense has no payer');
+    const share = ctx.db.shares.share_id.find(`${expense_id}:${phone}`);
+    if (!share || share.role !== 'participant' || share.status !== 'disputed') throw new Error('Share is not disputed');
+    const payerShare = ctx.db.shares.share_id.find(`${expense_id}:${expense.payer_phone}`);
+    if (!payerShare) throw new Error('Payer share is missing');
+    const payerAmount = payerShare.amount_cents - (amount_cents - share.amount_cents);
+    if (payerAmount < 0n) throw new Error("Amount exceeds what the payer's share can absorb");
+    ctx.db.shares.share_id.update({ ...share, amount_cents, status: 'locked', updated_at: ctx.timestamp });
+    ctx.db.shares.share_id.update({ ...payerShare, amount_cents: payerAmount, updated_at: ctx.timestamp });
+    const sum = [...ctx.db.shares.by_expense.filter(expense_id)].reduce((total, row) => total + row.amount_cents, 0n);
+    if (sum !== expense.total_cents) throw new Error('Shares do not match expense total');
   }
 );
 
@@ -745,6 +794,10 @@ const backendMemberRow = t.row('BackendMember', {
   name: t.option(t.string()), joined_at: t.timestamp(), left_at: t.option(t.timestamp()),
 });
 
+const backendGroupSettingsRow = t.row('BackendGroupSetting', {
+  group_id: t.string().primaryKey(), settle_mode: t.string(),
+});
+
 const clientOutboxRow = t.row('ClientOutboxItem', {
   action_id: t.string().primaryKey(), kind: t.string(), group_id: t.option(t.string()), to_phone: t.option(t.string()),
   target_message_id: t.option(t.string()), text: t.option(t.string()), reaction: t.option(t.string()),
@@ -772,6 +825,15 @@ export const backend_messages = spacetime.view(
 export const backend_groups = spacetime.view(
   { name: 'backend_groups', public: true }, t.array(groups.rowType), ctx =>
     canReadBackendViews(ctx) ? [...ctx.db.groups] : []
+);
+
+/** One row per group with its effective settle mode ("ledger" when never set). */
+export const backend_group_settings = spacetime.view(
+  { name: 'backend_group_settings', public: true }, t.array(backendGroupSettingsRow), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.groups].map(group => ({
+      group_id: group.group_id,
+      settle_mode: ctx.db.group_settings.group_id.find(group.group_id)?.settle_mode ?? 'ledger',
+    })) : []
 );
 
 export const backend_members = spacetime.view(

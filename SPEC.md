@@ -293,10 +293,16 @@ table transfers {
   amount_cents: number
   provider: "spacetime_simulated"
   status: "pending" | "done" | "failed"
-  approved_by_message_id: string  // the tapback or reply that approved it
+  approved_by_message_id: string  // the tapback that approved it; one 👍 can approve several shares (unique per expense)
   created_at: Timestamp
   completed_at?: Timestamp
   error?: string
+}
+
+table group_settings {
+  group_id: string              // one row per group that chose a mode; no row means "ledger"
+  settle_mode: "ledger" | "per_expense"   // section 7.6
+  updated_at: Timestamp
 }
 
 type Reaction = "like" | "love" | "dislike" | "laugh" | "emphasize" | "question"
@@ -346,6 +352,7 @@ The payer has a share too, with `role: "payer"`, representing what they themselv
 | outbox                               | Backend enqueues and cancels; client updates status                                        | Client; web ledger optionally                        |
 | expenses, line_items, claims, shares | Backend, through reducers                                                                  | Web ledger                                           |
 | transfers                            | Backend creates on approval; scheduled reducer completes                                   | Web ledger, backend                                  |
+| group_settings                       | Backend, through `set_settle_mode`                                                        | Backend, through the `backend_group_settings` view   |
 
 ### 5.5 Reducers
 
@@ -364,7 +371,9 @@ Reducer names and the fields they set are **[CONTRACT]**. Argument order, helper
 | `set_share`                          | Backend                                 | Creates or updates a share: role, status,`fixed_cents`, `responded`, follow-up counters.                                                                               |
 | `recompute_expense`                  | Backend, or internally after any change | Runs the split math in section 8 and writes`amount_cents` on every share. Must run after any change to items, claims, shares, or amounts until the expense is finalized. |
 | `enqueue_outbox` / `cancel_outbox` | Backend                                 | Queues an outbound action, or cancels queued actions matching an`expense_id` and phone.                                                                                  |
-| `create_transfer`                    | Backend                                 | Creates a pending transfer after an approval.                                                                                                                              |
+| `create_transfer`                    | Backend                                 | Creates a pending transfer after an approval. Idempotent per (`approved_by_message_id`, `expense_id`), so one 👍 can pay one share in each of several expenses.          |
+| `set_settle_mode`                    | Backend                                 | Stores a group's settle mode (`ledger` or `per_expense`). Read it through the `backend_group_settings` view, which shows `ledger` for groups that never set one.        |
+| `resolve_dispute`                    | Backend                                 | Sets a `disputed` share on a finalized expense to a new amount and back to `locked`; the payer's share absorbs the difference so the total is unchanged (7.6).            |
 | `complete_simulated_transfer`        | SpacetimeDB scheduler                   | Marks the transfer done, pays its share, and settles the expense when every participant has paid.                                                                          |
 | `set_nessie_ids`                     | Nessie seed script                      | Stores resumable setup progress and the member's mock customer/account ids.                                                                                                |
 
