@@ -6,6 +6,8 @@ export type Reaction = "like" | "love" | "dislike" | "laugh" | "emphasize" | "qu
 export interface InboundMessage {
   message_id: string;
   group_id?: string;
+  /** The group chat's name in Messages, when it has one (`ingest_message.group_display_name`). */
+  group_name?: string;
   sender_phone: string;
   is_dm: boolean;
   kind: "text" | "image" | "reaction" | "system";

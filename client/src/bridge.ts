@@ -112,8 +112,9 @@ export class Bridge {
       const left = before.filter((h) => !now.includes(h));
       if (joined.length === 0 && left.length === 0) continue;
       const at = new Date(this.opts.now());
-      for (const h of joined) await this.hub.ingest(systemMessage(group, h, "member_joined", at));
-      for (const h of left) await this.hub.ingest(systemMessage(group, h, "member_left", at));
+      const fields = this.groupFields(group);
+      for (const h of joined) await this.hub.ingest(systemMessage(fields, h, "member_joined", at));
+      for (const h of left) await this.hub.ingest(systemMessage(fields, h, "member_left", at));
       this.gate.setRoster(group, now);
     }
   }
@@ -162,7 +163,7 @@ export class Bridge {
       sender_phone: sender,
       is_dm: !isGroup,
       received_at: appleDate(row.date),
-      ...(isGroup ? { group_id: chat } : {}),
+      ...(isGroup ? this.groupFields(chat) : {}),
     };
 
     if (isAssociated(row.associated_message_type)) {
@@ -204,6 +205,12 @@ export class Bridge {
       });
     }
     return "done";
+  }
+
+  /** The group's id plus its Messages name, so the ledger can title the group. */
+  private groupFields(chat: string): { group_id: string; group_name?: string } {
+    const name = this.db.chatName(chat)?.trim();
+    return name ? { group_id: chat, group_name: name } : { group_id: chat };
   }
 
   /** From-me rows are Tab's own sends, the owner's commands, or the owner typing by hand. */
@@ -386,10 +393,15 @@ function isReady(a: RawAttachment): boolean {
   return a.transfer_state === TRANSFER_FINISHED && !!a.filename;
 }
 
-function systemMessage(group: string, handle: string, event: string, at: Date): InboundMessage {
+function systemMessage(
+  group: { group_id: string; group_name?: string },
+  handle: string,
+  event: string,
+  at: Date,
+): InboundMessage {
   return {
-    message_id: `${group}:${handle}:${event}:${at.getTime()}`,
-    group_id: group,
+    message_id: `${group.group_id}:${handle}:${event}:${at.getTime()}`,
+    ...group,
     sender_phone: handle,
     is_dm: false,
     kind: "system",
