@@ -1,5 +1,6 @@
 // SPEC §7.6 finalizing and settling (with #15: tap-only approvals, ledger
 // mode, one DM confirmation per person), and §6.2 reaction routing.
+import { listJoin } from "../copy/format.js";
 import * as T from "../copy/templates.js";
 import type { Expense, Message, Share } from "../store/types.js";
 import { MAX_DMS_PER_EXPENSE } from "../config.js";
@@ -477,9 +478,12 @@ export async function announceSettlements(ctx: BrainCtx) {
           x.group_id === e.group_id &&
           owing(ctx, x).some((s) => s.phone === from),
       );
+    // What it was for: the expenses themselves ("pizza and groceries"),
+    // the group's name only when there are too many to list.
+    const descriptions = [...new Set(ts.map((t) => ctx.store.expense(t.expense_id)?.description).filter((d): d is string => !!d))];
     const label =
-      ts.length === 1
-        ? e.description
+      descriptions.length > 0 && descriptions.length <= 3
+        ? listJoin(descriptions)
         : ctx.store.group(e.group_id)?.display_name;
     await say(ctx, {
       chat: { dm_phone: from },

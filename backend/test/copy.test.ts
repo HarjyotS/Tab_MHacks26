@@ -363,7 +363,7 @@ describe("templates", () => {
 
   it("says the settlement receipt is simulated, as SPEC 7.6 requires", () => {
     expect(T.paymentConfirmation({ paid: [{ payee: joe, amount_cents: 3825 }, { payee: priya, amount_cents: 1200 }], label: "Vegas Trip", allSquare: true })).toBe(
-      "done, you paid Joe $38.25 and Priya $12.00 for Vegas Trip (simulated, no real money moved)\nyou're all square",
+      "done, you paid Joe $38.25 and Priya $12.00 for Vegas Trip through capital one nessie (sandbox, no real money moved)\nyou're all square",
     );
   });
 
