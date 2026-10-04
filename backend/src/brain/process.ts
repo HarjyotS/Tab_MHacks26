@@ -183,12 +183,20 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
       const ledger = !breakdown && !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);
-      keep = breakdown || answered || moneyRelated || why || ledger;
+      // "$20" right after the sender's own photo (live run: a receipt with no
+      // total on it, then the amount): the photo's sender paid that much.
+      const photoAmount = !breakdown && !answered && !why && !ledger ? amountAfterPhoto(ctx, m) : undefined;
+      if (photoAmount) {
+        await eyes(ctx, m);
+        await handleExpense(ctx, m, photoAmount, m);
+      }
+      keep = breakdown || answered || moneyRelated || why || ledger || photoAmount !== undefined;
       // Stored as an answer, so it stays in later context (§19 keeps it).
       if (answered) intent = "answer";
+      if (photoAmount) intent = "expense";
       if (!keep) intent = "ignore";
       let failed: unknown;
-      if (!breakdown && !answered && !why && !ledger) {
+      if (!breakdown && !answered && !why && !ledger && !photoAmount) {
         try {
           // These go to Grok and take a few seconds: 👀 first.
           if ((decision === "act" && SLOW.has(result.intent)) || (decision !== "ignore" && result.intent === "money_question")) await eyes(ctx, m);
@@ -1124,3 +1132,23 @@ function recentSplit(ctx: BrainCtx, m: Message): Expense | undefined {
   return latestOpen(ctx, groupFor(ctx, m), ["proposed", "finalized"]);
 }
 
+
+
+// A bare amount ("$20", "20 bucks", "it was 20") sent within three minutes
+// of the same person's photo that didn't become an expense: the words to
+// read as their expense, or undefined.
+const BARE_AMOUNT = /^(?:it was|that was|total(?: was)?|was)?\s*\$?\s*(\d{1,5}(?:\.\d{1,2})?)\s*(?:bucks|dollars|usd)?\s*(?:total)?[.!]*$/i;
+function amountAfterPhoto(ctx: BrainCtx, m: Message): string | undefined {
+  if (m.kind !== "text" || !m.group_id) return undefined;
+  const amount = (m.text ?? "").trim().match(BARE_AMOUNT)?.[1];
+  if (!amount || Number(amount) <= 0) return undefined;
+  const before = ctx.store
+    .messages()
+    .filter((x) => x.group_id === m.group_id && x.sender_phone === m.sender_phone && x.message_id !== m.message_id && x.received_at <= m.received_at)
+    .sort((a, b) => b.received_at.getTime() - a.received_at.getTime())[0];
+  if (!before || before.kind !== "image" || m.received_at.getTime() - before.received_at.getTime() > 3 * 60_000) return undefined;
+  if (ctx.store.expenses().some((e) => e.source_message_id === before.message_id && e.status !== "void")) return undefined;
+  const note = ctx.memory.photos.get(before.message_id);
+  const what = note && "description" in note && typeof note.description === "string" && note.description ? `the photo (${note.description.slice(0, 80)})` : "the receipt in my photo";
+  return `i paid $${amount} for ${what}, split it with everyone`;
+}
