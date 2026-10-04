@@ -790,11 +790,11 @@ export async function tick(ctx: BrainCtx): Promise<void> {
         chat: { group_id: e.group_id },
         purpose: "objection_reminder",
         id,
-        text: T.objectionReminder(e.expense_id),
+        text: T.objectionReminder(),
         expense_id: e.expense_id,
       });
-      // "anything else on this one?" reopens the split for replies.
-      addInvite(ctx, { group_id: e.group_id }, { id, text: `${e.description}: ${T.objectionReminder(e.expense_id)}`, kind: "split_open", expense_id: e.expense_id });
+      // "anything else?" reopens the split for replies.
+      addInvite(ctx, { group_id: e.group_id }, { id, text: `${e.description}: ${T.objectionReminder()}`, kind: "split_open", expense_id: e.expense_id });
     }
   });
   await claimFollowups(ctx);

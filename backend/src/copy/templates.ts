@@ -9,6 +9,7 @@
 // reproducible.
 import type { Problem } from "../extraction/types.js";
 import { displayName, listJoin, money, type Person } from "./format.js";
+import { deco } from "./style.js";
 
 function pick(seed: string, variants: readonly string[]): string {
   let h = 0;
@@ -23,14 +24,14 @@ export type Share = { person: Person; amount_cents: number };
 // 👋 shows only if the group uses emoji (style.ts), so it gets its own line.
 export const onboardingIntro = (seed: string) =>
   pick(seed, [
-    `hey i'm tab 👋\ni keep track of who paid for what so nobody has to be the spreadsheet friend\njust say what you paid ("paid 40 for groceries") or drop a receipt pic. you can remove me anytime`,
-    `hey i'm tab 👋\ni keep the group's tab so nobody has to do the math\njust talk like normal ("got groceries 40") or drop a receipt pic. you can kick me out whenever`,
+    `hey i'm tab ${deco("👋")}\ni keep track of who paid for what so nobody has to be the spreadsheet friend\njust say what you paid ("paid 40 for groceries") or drop a receipt pic. you can remove me anytime`,
+    `hey i'm tab ${deco("👋")}\ni keep the group's tab so nobody has to do the math\njust talk like normal ("got groceries 40") or drop a receipt pic. you can kick me out whenever`,
   ]);
 
 export const namePrompt = (seed: string) =>
   pick(seed, [
-    "what should i call you? just reply w your first name",
-    "drop your first name so i know who's who",
+    "what should i call everyone? reply w your first name",
+    "drop your first names so i know who's who",
     "what's everyone's name? just reply w your first name",
   ]);
 
@@ -52,7 +53,7 @@ export function splitProposal(a: {
 }): string {
   const line = shareLine(a);
   if (a.updated)
-    return `${pick(a.seed, ["ok redid it", "fixed it", "bet, redid it"])}: ${line}`;
+    return `${pick(a.seed, ["ok redid it", "fixed it"])}: ${line}`;
   const ask = pick(a.seed, [
     "lmk if it wasn't even or someone skipped",
     "shout if it wasn't even or someone wasn't there",
@@ -63,8 +64,7 @@ export function splitProposal(a: {
 
 // Joe's copy (replaces SPEC 7.3's countdown): a light check-in, and about an
 // hour later the settle request.
-export const objectionReminder = (seed = "") =>
-  pick(seed, ["anything else on this one?", "we all good on this one?"]);
+export const objectionReminder = () => "anything else?";
 
 // ── Itemizing (§7.5) ─────────────────────────────────────────────────────
 
@@ -128,9 +128,9 @@ export function settleRequest(a: { seed: string; owed: Owed[]; description?: str
   const list = (shares: Share[]) => shares.map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`).join(", ");
   if (a.owed.length === 1) {
     const o = a.owed[0]!;
-    return `ok here's what's owed to ${displayName(o.payee)}${a.description ? ` for ${a.description}` : ""}:\n${list(o.shares)}\n${tap}`;
+    return `cool, here's what's owed to ${displayName(o.payee)}${a.description ? ` for ${a.description}` : ""}:\n${list(o.shares)}\n${tap}`;
   }
-  return `ok here's the tab:\n${a.owed.map((o) => `owed to ${displayName(o.payee)}: ${list(o.shares)}`).join("\n")}\n${tap}`;
+  return `cool, here's what's owed:\n${a.owed.map((o) => `owed to ${displayName(o.payee)}: ${list(o.shares)}`).join("\n")}\n${tap}`;
 }
 
 // A typed "yes" never moves money (P7, SPEC #15).
@@ -199,9 +199,9 @@ export function approvalFollowup(a: {
 // the settle request covered several expenses.
 export function allSquare(a: { seed: string; description?: string }): string {
   if (!a.description)
-    return pick(a.seed, ["and that's everyone square 🎉", "everyone's square, nice 🎉"]);
+    return pick(a.seed, [`and that's everyone square ${deco("🎉")}`, `everyone's square, nice ${deco("🎉")}`]);
   return pick(a.seed, [
-    `everyone's square on ${a.description} 🎉`,
+    `everyone's square on ${a.description} ${deco("🎉")}`,
     `${a.description} is all settled, everyone's square`,
     `and that's everyone square on ${a.description}`,
   ]);
@@ -267,7 +267,7 @@ export function clarifyingQuestion(
     case "ungrounded_amount":
       return `how much was ${thing}?`;
     case "missing_payer":
-      return `who got ${thing}?`;
+      return `who paid for ${thing}?`;
     case "missing_item_price": {
       const person = ctx.people.find((x) => x.phone === p.phone);
       const { item, plural } = itemLabel(p.item);
@@ -343,7 +343,7 @@ export function balanceReply(a: {
       (d) =>
         `${displayName(d.from)} owes ${displayName(d.to)} ${money(d.amount_cents)}`,
     );
-  if (a.debts.length <= 2) return `rn: ${lines.join(", ")}`;
+  if (a.debts.length <= 2) return `ok so rn: ${lines.join(", ")}`;
   const more =
     a.debts.length > 6
       ? `\nand ${a.debts.length - 6} more${a.ledger_url ? `, all here: ${a.ledger_url}` : ""}`
