@@ -431,8 +431,15 @@ export function priceFromReceipt(
   };
 }
 
-const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
-const STOP = new Set(["the", "a", "an", "of", "and", "my", "his", "her", "their", "x", "w", "with", "some"]);
+const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, both: 2 };
+// Filler and quantifiers never block a match: "both drinks", "all the
+// drinks" and "those drinks" are all the drinks line (Harjyot's playground).
+const STOP = new Set([
+  "the", "a", "an", "of", "and", "my", "his", "her", "their", "our", "your", "x", "w", "with", "some",
+  "all", "those", "these", "that", "this",
+]);
+// Leading filler before a quantity: "the 2 drinks", "all of the drinks".
+const LEADING = /^((the|all|of|those|these|our|my|his|her|their)\s+)+/;
 
 function words(text: string): string[] {
   return text
@@ -458,7 +465,8 @@ export function receiptPrice(item: string, items: LineItem[]): number | undefine
   if (matches.length !== 1) return undefined;
   const line = matches[0]!;
   const lineQty = Math.max(line.quantity, Number(line.description.match(/^\s*(\d+)\s*x\b/i)?.[1] ?? 1));
-  const asked = item.trim().toLowerCase().match(/^(\d+|a|an|one|two|three|four|five|six)\b/)?.[1];
+  // "all the drinks" (no count after the filler) is the whole line.
+  const asked = item.trim().toLowerCase().replace(LEADING, "").match(/^(\d+|a|an|one|two|three|four|five|six|both)\b/)?.[1];
   const qty = asked === undefined ? lineQty : Number(asked) || NUMBER_WORDS[asked]!;
   if (qty >= lineQty) return line.amount_cents;
   return Math.round((line.amount_cents * qty) / lineQty);

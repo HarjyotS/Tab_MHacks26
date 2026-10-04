@@ -1798,6 +1798,108 @@
       "expect": {
         "intent": "ignore"
       }
+    },
+    {
+      "id": 209,
+      "note": "Harjyot's playground: who went, to an open split (Jev said name_reply 0.41)",
+      "context": [
+        {
+          "from": "Priya",
+          "text": "[photo]"
+        },
+        {
+          "from": "Tab",
+          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it."
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e3",
+          "description": "THE BISTRO",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "open_questions": [
+        {
+          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it.",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Kian",
+        "text": "just me and priya"
+      },
+      "expect": {
+        "one_of": [
+          "split_adjustment",
+          "answer"
+        ]
+      }
+    },
+    {
+      "id": 210,
+      "note": "Harjyot's playground: items named on an even receipt (Jev said claim 0.50)",
+      "context": [
+        {
+          "from": "Priya",
+          "text": "[photo]"
+        },
+        {
+          "from": "Tab",
+          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it."
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e3",
+          "description": "THE BISTRO",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "open_questions": [
+        {
+          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it.",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Priya",
+        "text": "i got both drinks and john got the cheesecake"
+      },
+      "expect": {
+        "one_of": [
+          "split_adjustment",
+          "claim",
+          "answer"
+        ]
+      }
+    },
+    {
+      "id": 211,
+      "note": "Only X and Y went, with no open question listed",
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e1",
+          "description": "Pizza",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "only joe and kian went"
+      },
+      "expect": {
+        "intent": "split_adjustment"
+      }
     }
   ]
 }

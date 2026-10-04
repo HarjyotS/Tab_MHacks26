@@ -33,6 +33,7 @@ export type Thread = {
   // questions about their own money; anyone, for facts the group knows.
   who: "asker" | "anyone";
   asker?: string; // phone of the person Tab asked
+  followed_up?: boolean; // Tab already asked again after an answer it couldn't use
   data: Pending | Invite;
 };
 

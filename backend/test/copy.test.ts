@@ -288,6 +288,12 @@ describe("templates", () => {
         { people },
       ),
     ).toBe("How much was John's Diet Coke?");
+    // Quantifiers drop and a plural takes "were" (Harjyot's playground on #35).
+    const item = (i: string) => T.clarifyingQuestion({ kind: "missing_item_price", phone: "+15555550106", item: i }, { people });
+    expect(item("both drinks")).toBe("How much were John's drinks?");
+    expect(item("2 soft drinks")).toBe("How much were John's 2 soft drinks?");
+    expect(item("fries")).toBe("How much were John's fries?");
+    expect(item("a glass of wine")).toBe("How much was John's glass of wine?");
     expect(
       T.clarifyingQuestion(
         { kind: "large_amount", amount_cents: 120000 },

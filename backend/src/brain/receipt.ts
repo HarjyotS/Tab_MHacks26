@@ -285,19 +285,7 @@ export async function handleClaim(
   const e = targets[0]!;
   const items = ctx.store.lineItems(e.expense_id);
   const { result } = await ctx.extract.claim(extractInput(ctx, m), items);
-  if (result.kind === "unclear") {
-    const id = `clarify:${m.message_id}`;
-    await tapback(ctx, m, "question", e.expense_id);
-    await say(ctx, {
-      chat: chatOf(m),
-      purpose: "clarifying_question",
-      id, reply_to: m.message_id,
-      text: 'Which ones? Reply with the numbers, or "even".',
-      expense_id: e.expense_id,
-    });
-    addInvite(ctx, chatOf(m), { id, text: `Which ones from ${e.description}? Reply with the numbers, or "even".`, kind: "claims_open", expense_id: e.expense_id });
-    return;
-  }
+  if (result.kind === "unclear") return askWhichItems(ctx, m, e);
   await applyClaim(ctx, m, e, result);
   await tapback(ctx, m, "like", e.expense_id);
   // §7.5: as soon as everyone has responded, finalize. Nobody waits.
@@ -306,6 +294,20 @@ export async function handleClaim(
     .filter((s) => s.status !== "opted_out");
   if (live.every((s) => s.responded))
     await finalize(ctx, ctx.store.expense(e.expense_id)!);
+}
+
+// "Which ones?" about an open item list, open to the answer.
+export async function askWhichItems(ctx: BrainCtx, m: Message, e: Expense) {
+  const id = `clarify:${m.message_id}`;
+  await tapback(ctx, m, "question", e.expense_id);
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "clarifying_question",
+    id, reply_to: m.message_id,
+    text: 'Which ones? Reply with the numbers, or "even".',
+    expense_id: e.expense_id,
+  });
+  addInvite(ctx, chatOf(m), { id, text: `Which ones from ${e.description}? Reply with the numbers, or "even".`, kind: "claims_open", expense_id: e.expense_id });
 }
 
 async function applyClaim(

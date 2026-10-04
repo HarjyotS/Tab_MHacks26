@@ -330,6 +330,21 @@ describe("an item named without a price (SPEC 7.5)", () => {
     expect(receiptPrice(item, bistro)).toBe(cents);
   });
 
+  // Harjyot's playground on #35: "alex had both drinks" got "How much was
+  // Alex's both drinks?"; quantifiers and filler mustn't block a match.
+  it.each([
+    ["both drinks", 598],
+    ["both soft drinks", 598],
+    ["the drinks", 598],
+    ["all the drinks", 598],
+    ["those drinks", 598],
+    ["our drinks", 598],
+    ["a drink", 299],
+    ["the 2 drinks", 598],
+  ])("matches %s to the drinks line", (item, cents) => {
+    expect(receiptPrice(item, bistro)).toBe(cents);
+  });
+
   it("asks rather than guess on no match or a tie", () => {
     expect(receiptPrice("key lime pie", bistro)).toBeUndefined();
     expect(receiptPrice("burger", items([["CHEESE BURGER", 1, 1200], ["VEGGIE BURGER", 1, 1100]]))).toBeUndefined();

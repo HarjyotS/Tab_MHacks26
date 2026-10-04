@@ -7,7 +7,7 @@ import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
 import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
-import { askReceipt, claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
+import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   announceSettlements,
   approvalFollowups,
@@ -53,9 +53,22 @@ const NO = /^(no|nope|nah|wrong|not right)\b/i;
 
 // Questions Tab asks when the gate is unsure (§6.4 clarify band). Intents
 // that only read data are answered directly; names are never guessed.
+// Never silence on money talk (Harjyot's playground on #35): every money
+// intent Tab can act on has a question here or its own handler in clarify().
 const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
   expense: "Want me to split that?",
+  correction: "Want me to change that expense?",
+  dispute: "Is something off with what you owe?",
+  settle_up: "Want me to settle everyone up now?",
 };
+
+// Intents that only read data or point to the 👍: answered even when unsure.
+const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval", "receipt"]);
+
+// "just me and priya", "only sam and alex went", "priya and I went, no one
+// else", "jordan didn't come": who was there, said to an open split.
+const PRESENCE =
+  /\b(just|only)\s+\w+\s+(and|&)\s+\w+|\b(no ?one|nobody) else\b|\b(didn'?t|did not|wasn'?t|weren'?t)\s+(go|come|there|in)\b|\bskipped\b/i;
 
 // iPhones type curly quotes ("I’m", "didn’t"); every parser expects ASCII.
 export function normalizeText(text: string | undefined): string | undefined {
@@ -186,8 +199,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return handleHelp(ctx, m);
     case "receipt":
       return handleReceipt(ctx, m);
-    case "claim":
-      return handleClaim(ctx, m, boundIf("itemizing"));
+    case "claim": {
+      // "i got both drinks and jordan got the cheesecake" on an even receipt
+      // nobody is itemizing yet: price what they named from the receipt.
+      const receipt = claimTargets(ctx, m).length === 0 && !boundIf("itemizing") ? receiptToSplit(ctx, m) : undefined;
+      return receipt ? handleAdjustment(ctx, m, m.text ?? "", receipt) : handleClaim(ctx, m, boundIf("itemizing"));
+    }
     case "correction":
       return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : undefined);
     case "answer":
@@ -204,6 +221,16 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
+  if (ANSWER_ANYWAY.has(intent)) return act(ctx, m, intent);
+  if (intent === "claim") {
+    // An open item list: ask which. An even receipt: confirm the change.
+    const bound = repliedExpense(ctx, m);
+    const list = bound?.status === "itemizing" ? bound : claimTargets(ctx, m)[0];
+    if (list) return askWhichItems(ctx, m, list);
+    const receipt = receiptToSplit(ctx, m);
+    if (receipt) return handleAdjustment(ctx, m, m.text ?? "", receipt, { confirmOnly: true });
+    return ctx.log("no_handler", { message_id: m.message_id, intent });
+  }
   // §6.4: an unsure adjustment is about an open expense, so ask rather than
   // stay silent: explain what's wrong, or confirm before applying.
   if (intent === "split_adjustment") {
@@ -212,7 +239,7 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     return handleAdjustment(ctx, m, m.text ?? "", target, { confirmOnly: true });
   }
   const question = CONFIRM_QUESTION[intent];
-  if (!question) return; // e.g. a possible name: never guess (P3), stay quiet (P1)
+  if (!question) return ctx.log("no_handler", { message_id: m.message_id, intent });
   await tapback(ctx, m, "question");
   await say(ctx, {
     chat: chatOf(m),
@@ -225,8 +252,21 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     text: question,
     who: "asker",
     asker: m.sender_phone,
-    data: { kind: "confirm", then: "expense", source: m, asked_at: ctx.now() },
+    data: intent === "expense"
+      ? { kind: "confirm", then: "expense", source: m, asked_at: ctx.now() }
+      : { kind: "confirm", then: "act", intent, source: m, asked_at: ctx.now() },
   });
+}
+
+// The proposed receipt a message about items is about: the one it replies
+// to, else the newest in the group with line items.
+function receiptToSplit(ctx: BrainCtx, m: Message): Expense | undefined {
+  const bound = repliedExpense(ctx, m);
+  if (bound) return bound.status === "proposed" && ctx.store.lineItems(bound.expense_id).length > 0 ? bound : undefined;
+  return ctx.store
+    .expenses()
+    .filter((e) => e.group_id === groupFor(ctx, m) && e.status === "proposed" && ctx.store.lineItems(e.expense_id).length > 0)
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
 }
 
 type Reply = {
@@ -277,12 +317,74 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   if (reask && (await answerExpense(ctx, m, reask, isAsker(reask, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m)))))
     return { answered: true };
 
+  // "just me and priya" to an open split (Harjyot's playground: Jev called
+  // it name_reply at 0.41 and Tab said nothing). Taken as a change to that
+  // split unless the gate is sure it's something else or plain chatter;
+  // short of the act bar Tab confirms first.
+  const split = pool.find((t) => t.data.kind === "split_open");
+  const elsewhere = decision === "act" && result.intent !== "split_adjustment" && result.intent !== "answer";
+  const chatter = result.intent === "ignore" && result.confidence >= thresholds.clarify;
+  if (split && PRESENCE.test(m.text) && !elsewhere && !chatter) {
+    const e = threadExpense(ctx, split, "proposed");
+    if (e) {
+      const sure = decision === "act" && result.confidence >= thresholds.act;
+      await handleAdjustment(ctx, m, m.text, e, { confirmOnly: !sure });
+      return { answered: true };
+    }
+  }
+
+  // A message that clearly answers one of Tab's questions but can't be used
+  // gets one short follow-up, never silence (Harjyot's playground: "its on
+  // the receipt" got nothing, and its text was cleared). Clearly: the gate
+  // passed it as an answer, or it replies inline to that question; a
+  // question of their own is answered as one instead.
+  const clearly = (t: Thread | undefined) =>
+    t && !INVITES.has(t.data.kind) && passed && !ASKING.has(result.intent) && (result.intent === "answer" || t === replied)
+      ? t
+      : undefined;
+  const stuck = clearly(reask) ?? clearly(replied);
+  const grok = await askGrok(ctx, m, result, decision, pool.filter((t) => t !== reask));
+  if (grok.answered) return grok;
+  // Grok matched a question it couldn't read an answer to, or the parsers
+  // and the re-read couldn't.
+  const unresolved = grok.matched && !INVITES.has(grok.matched.data.kind) ? grok.matched : stuck;
+  return unresolved ? followUp(ctx, m, unresolved) : no;
+}
+
+// "its on the receipt" when it isn't: say so once and ask again, keeping
+// the question open. The message counts as an answer (kept, §19).
+async function followUp(ctx: BrainCtx, m: Message, t: Thread): Promise<Reply> {
+  ctx.log("answer_unresolved", { message_id: m.message_id, group_id: m.group_id, kind: t.data.kind });
+  if (t.followed_up) return { answered: true }; // asked again once already: quiet (P1)
+  t.followed_up = true;
+  const onReceipt = /\breceipt\b/i.test(m.text ?? "") && Boolean(t.expense_id && ctx.store.lineItems(t.expense_id).length > 0);
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "clarifying_question",
+    id: `followup:${m.message_id}`,
+    reply_to: m.message_id,
+    text: T.answerFollowup(t.text, onReceipt),
+    expense_id: t.expense_id,
+  });
+  return { answered: true };
+}
+
+// Step 3 of answerThreads.
+async function askGrok(
+  ctx: BrainCtx,
+  m: Message,
+  result: ClassifyResult,
+  decision: Decision,
+  offered: Thread[],
+): Promise<Reply & { matched?: Thread }> {
+  const no: Reply = { answered: false };
+
   // 3. Grok, for everything the parsers can't read. Only a money message or
-  //    an answer the gate acts on ever reaches it (§19, §16.3). For invites alone the gate's
-  //    own intent already reaches the same handler ("2" to the item list is
-  //    a claim), so it isn't asked then unless the gate called it an answer.
-  //    A dispute takes only a clear amount, which the parsers read already.
-  const offered = pool.filter((t) => t !== reask);
+  //    an answer the gate acts on ever reaches it (§19, §16.3). For invites
+  //    alone the gate's own intent already reaches the same handler ("2" to
+  //    the item list is a claim), so it isn't asked then unless the gate
+  //    called it an answer. A dispute takes only a clear amount, which the
+  //    parsers read already.
   // The settle-mode question stays open for hours after onboarding; the
   // parsers read most answers to it, so it alone doesn't send every new
   // expense to Grok.
@@ -303,9 +405,10 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   }
   const t = offered.find((x) => x.id === r.thread_id);
   ctx.log("answer_resolved", { message_id: m.message_id, group_id: m.group_id, kind: t?.data.kind, relevance: r.relevance, also_new: r.also_new });
-  // 4. Low relevance, or nothing it could read: handled as before.
+  // 4. Low relevance: handled as before. Relevant but nothing usable: the
+  //    caller follows up.
   if (!t || r.relevance < 0.5) return no;
-  if (!(await applyAnswer(ctx, m, t, r, result, decision))) return no;
+  if (!(await applyAnswer(ctx, m, t, r, result, decision))) return { answered: false, matched: t };
   return { answered: true, rest: restOf(t, r, result, decision) };
 }
 
@@ -620,6 +723,8 @@ async function answerConfirm(
         source: p.source,
         extracted: { ...p.extraction, problems: [] },
       });
+  } else if (p.then === "act" && p.intent) {
+    await act(ctx, p.source, p.intent);
   } else if (p.then === "finalize_and_settle") {
     // Unclaimed items split evenly (§7.5), then one request for everything.
     // Safe to do on anyone's yes: only each payer's 👍 moves money (P7).

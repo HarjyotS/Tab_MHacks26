@@ -1,6 +1,6 @@
 // Everything a handler needs, injected so tests can run the whole brain
 // against an in-memory database and fake models.
-import type { Classify, GateMessage } from "@tab/gate";
+import type { Classify, GateMessage, Intent } from "@tab/gate";
 import { CONTEXT_MESSAGES, type LedgerConfig, type Timing } from "../config.js";
 import type { BackendReducers } from "../db/reducers.js";
 import type { OutboxPurpose, Reaction } from "../db/types.js";
@@ -51,7 +51,9 @@ export type Pending =
       source: Message;
       // finalize_and_settle: "Still waiting on claims… settle now?"; the
       // expenses are the thread's expense_ids.
-      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle";
+      // act: an unsure money intent (§6.4 clarify band), acted on on yes.
+      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act";
+      intent?: Intent;
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
       asked_at: Date;

@@ -8,12 +8,13 @@ const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
  * not a synonym, so Jev can tell neighbors like approval and claim apart.
  */
 export const INTENT_CRITERIA: Record<Intent, string> = {
-  name_reply: 'The sender is answering Tab\'s request for their name, giving just their own first name.',
+  name_reply:
+    'Only when Tab asked this sender for their name and they have none yet (they appear as "member ending …"): they answer with just their own first name. Naming people who went or had something ("just me and Priya") is never this.',
   expense:
     'The sender says that they, or a named member, paid for something the group shares, or asks the others to pay them back for a purchase ("Venmo me for the Uber", "Jake owes me 40 for the uber"). A stated amount is optional. There must be a purchase: a message that only says someone owes money, with nothing bought ("Jake owes me $1000", "he owes me", "I owe Tanuj 10 bucks"), is never this; it is ignore.',
   receipt: 'The message is a photo of a receipt or bill.',
   split_adjustment:
-    'While a split is still proposed (not yet final), the sender says it should not be even, that someone had only a specific item or amount, or that someone (often the sender) was not there.',
+    'While a split is still proposed (not yet final), the sender says it should not be even, that someone had only a specific item or amount, or that someone (often the sender) was not there. Examples: "just me and Priya", "only Jake and Kian went", "Priya and I went, no one else", "I got both drinks and Jake got the cheesecake".',
   claim:
     'An item list is open and the sender says which items they had: item numbers, item names, "same as" another person, "even", or that everyone shared an item.',
   correction:
