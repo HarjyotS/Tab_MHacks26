@@ -6,7 +6,7 @@ import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
 import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
-import { extractInput } from "./inputs.js";
+import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   announceSettlements,
@@ -60,10 +60,12 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
   correction: T.confirmCorrection(),
   dispute: T.confirmDispute(),
   settle_up: T.confirmSettleUp(),
+  // An unsure photo: ask before the receipt read, never go quiet (§6.4).
+  receipt: T.confirmReceipt(),
 };
 
 // Intents that only read data or point to the 👍: answered even when unsure.
-// Not `receipt`: an unsure photo stays with Tab, never Grok's vision (§19).
+// Not `receipt`: an unsure photo gets a question, not the receipt read (§19).
 const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval"]);
 
 // "just me and priya", "only sam and alex went", "priya and I went, no one
@@ -98,7 +100,11 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       // the module clears its text and later context never includes it.
       // An open question tells the pre-filter to pass even "the 2nd one",
       // since a bystander's inline answer only counts if the gate passes it.
-      const input = { ...extractInput(ctx, m), tab_question_open: openThreads(ctx, chatOf(m)).length > 0 };
+      // Photos are described by Grok vision first (§7.4, user-authorized),
+      // so the gate can tell a receipt from a meme.
+      await describePhotos(ctx, m);
+      const input = { ...gateInput(ctx, m), tab_question_open: openThreads(ctx, chatOf(m)).length > 0 };
+      remember(ctx, m); // the gate's 15-minute raw transcript, memory only
       const result = await ctx.classify(input);
       intent = result.intent;
       confidence = result.confidence;
@@ -162,15 +168,8 @@ function wantsLedger(m: Message, intent: Intent, decision: string): boolean {
   return TO_TAB.test(text) || m.group_id === undefined || (decision !== "ignore" && READ_INTENTS.has(intent));
 }
 
-// An inline reply binds a message to one expense (Harjyot's review on #14,
-// like §6.2 for tapbacks): a reply to Tab's message about an expense, or to
-// the message that created it. Used to pick the target, never to lower a bar.
-export function repliedExpense(ctx: BrainCtx, m: Message): Expense | undefined {
-  if (!m.reply_to_id) return undefined;
-  const tab = ctx.store.outbox().find((o) => o.sent_photon_id === m.reply_to_id && o.expense_id);
-  const id = tab?.expense_id ?? ctx.store.expenses().find((e) => e.source_message_id === m.reply_to_id)?.expense_id;
-  return id ? ctx.store.expense(id) : undefined;
-}
+// Lives in inputs.ts now, which also shows the gate the bound expense.
+export { repliedExpense };
 
 async function act(ctx: BrainCtx, m: Message, intent: Intent) {
   const bound = repliedExpense(ctx, m);
