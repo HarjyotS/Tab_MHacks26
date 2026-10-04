@@ -27,9 +27,14 @@ const said = (word: string, text: string) => new RegExp(`(^|[^a-z0-9])${escapeRe
 
 // Possessives count as the name ("priyas fatass had half", "jake's"), but
 // only a trailing s or 's, so "Al" still never matches "also".
+// The sender counts only when the message speaks for them ("i", "me",
+// "my"): "half of the cost" on its own never pins a share on whoever sent it.
+const FIRST_PERSON = /\b(i|me|my|mine|myself|i'm|im|i'd|i've|ive)\b/i;
+
 export function nameSaid(name: string, text: string): boolean {
   const n = name.trim().toLowerCase();
-  return SELF.has(n) || n.split(/\s+/).some((part) => part.length > 1 && (said(part, text) || said(`${part}s`, text) || said(`${part}'s`, text) || said(`${part}’s`, text)));
+  if (SELF.has(n)) return FIRST_PERSON.test(text);
+  return n.split(/\s+/).some((part) => part.length > 1 && (said(part, text) || said(`${part}s`, text) || said(`${part}'s`, text) || said(`${part}’s`, text)));
 }
 
 export function itemSaid(item: string, text: string): boolean {
@@ -170,7 +175,7 @@ function toContract(
       : { kind: "everyone" };
   // The sender may be written as their own name ("Priya" for "I").
   const inMessage = (name: string) =>
-    mode !== "adjustment" || nameSaid(name, text) || resolveName(name, members, message.sender_phone) === message.sender_phone;
+    mode !== "adjustment" || nameSaid(name, text) || (resolveName(name, members, message.sender_phone) === message.sender_phone && FIRST_PERSON.test(text));
   // Exclusions aren't checked: "it was just sam and alex" excludes people who,
   // by definition, aren't named (H4, Joe's review on #44).
   const exclusions = resolveAll(r.exclusion_names);

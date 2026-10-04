@@ -207,7 +207,16 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       const reason = ctx.ask && !wrote() && !replied
         ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0)
         : undefined;
-      if (reason) {
+      // A bare "yeah" / "ok" / "bet" right after a split is agreement, not a
+      // question for the money brain (playground: "yeah" after the payer's 👍
+      // got the proposal posted again). Tab likes it; an open split counts it.
+      const agreed = reason && !m.is_dm ? recentSplit(ctx, m) : undefined;
+      if (agreed) {
+        await tapback(ctx, m, "like", agreed.expense_id);
+        if (agreed.status === "proposed") await acceptSplit(ctx, agreed, m.sender_phone);
+        keep = true;
+        ctx.log("agreement_liked", { message_id: m.message_id, group_id: m.group_id, expense_id: agreed.expense_id });
+      } else if (reason) {
         ctx.log("fallback_ask", { message_id: m.message_id, group_id: m.group_id, reason, intent: result.intent, confidence: result.confidence });
         const about = repliedExpense(ctx, m) ?? latestOpen(ctx, groupFor(ctx, m), ["proposed", "itemizing"]);
         // Kept (§19) only if Tab actually answered it.
@@ -1085,3 +1094,14 @@ async function answerSettleMode(ctx: BrainCtx, m: Message, t: Thread, mode: "led
     text: T.settleModeSet(mode),
   });
 }
+
+// "yeah", "ok", "bet", "sounds good", 👍: a short message that only agrees.
+const BARE_AGREEMENT = /^(?:y(?:ea+h?|es+|ep|up|a)|ok(?:ay)?|k+|kk|cool|bet|word|facts|perfect|sounds? good|looks? (?:good|right)|all good|that'?s right|correct|true|fair|for sure|fs|deal|done|👍|👌|💯)[\s!.]*$/iu;
+
+// The split a bare agreement is about: the newest one in this chat that's
+// proposed or just locked in.
+function recentSplit(ctx: BrainCtx, m: Message): Expense | undefined {
+  if (!BARE_AGREEMENT.test((m.text ?? "").trim())) return undefined;
+  return latestOpen(ctx, groupFor(ctx, m), ["proposed", "finalized"]);
+}
+

@@ -143,7 +143,10 @@ describe("fixed names and items come from the message (#44 #3)", () => {
     expect(nameSaid("Al", "all good")).toBe(false);
     expect(nameSaid("Al", "al had the fries")).toBe(true);
     expect(nameSaid("Jo", "joe paid")).toBe(false);
-    expect(nameSaid("me", "anything")).toBe(true);
+    // The sender counts only when the message speaks for them.
+    expect(nameSaid("me", "i had half")).toBe(true);
+    expect(nameSaid("me", "half of the cost")).toBe(false);
+    expect(nameSaid("Priya", "priyas fatass had half")).toBe(true);
     expect(itemSaid("both drinks", "alex had both drinks")).toBe(true);
     expect(itemSaid("2 soft drinks", "i only had a soft drink")).toBe(true);
     expect(itemSaid("1 and 4", "thats not even")).toBe(false);
