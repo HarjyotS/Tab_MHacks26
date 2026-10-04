@@ -4,7 +4,6 @@ import {
   Controls,
   MarkerType,
   ReactFlow,
-  useNodesInitialized,
   useReactFlow,
   type Edge,
   type Node,
@@ -158,10 +157,10 @@ export function App({ secret }: AppProps) {
               <div className="empty-state"><span>✓</span><strong>Everyone is square</strong><small>No outstanding balances</small></div>
             ) : (
               <ReactFlow
-                nodes={graph.nodes} edges={graph.edges} fitView fitViewOptions={FIT_VIEW}
+                nodes={graph.nodes} edges={graph.edges} defaultViewport={WHOLE_BOX}
                 minZoom={0.2} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}
               >
-                <FitOnResize box={graphBox} nodeCount={graph.nodes.length} />
+                <ShowWholeGraph box={graphBox} />
                 <Background color="#d7dfda" gap={22} size={1} />
                 <Controls showInteractive={false} />
               </ReactFlow>
@@ -277,18 +276,20 @@ function ExpenseDetail({ expense, shares, items, claims, transfers, names }: {
 
 type Size = { width: number; height: number };
 
-const FIT_VIEW = { padding: 0.08, maxZoom: 1.2 };
+// buildGraph lays nodes out inside the measured box, so the unzoomed viewport shows all of them.
+const WHOLE_BOX = { x: 0, y: 0, zoom: 1 };
 const NARROW_GRAPH = 520;
 
-/** Fits the whole graph whenever its box or node count changes, not only on first render. */
-function FitOnResize({ box, nodeCount }: { box: Size; nodeCount: number }) {
-  const { fitView } = useReactFlow();
-  const initialized = useNodesInitialized();
+/**
+ * Resets the view whenever the box changes, so a resize or rotation never leaves
+ * people off screen. (useReactFlow().fitView waits for the next node change,
+ * which a pure resize may never bring, so it can't be relied on here.)
+ */
+function ShowWholeGraph({ box }: { box: Size }) {
+  const { setViewport } = useReactFlow();
   useEffect(() => {
-    if (!initialized || !box.width) return;
-    const frame = requestAnimationFrame(() => { void fitView(FIT_VIEW); });
-    return () => cancelAnimationFrame(frame);
-  }, [initialized, box.width, box.height, nodeCount, fitView]);
+    if (box.width) void setViewport(WHOLE_BOX);
+  }, [box.width, box.height, setViewport]);
   return null;
 }
 
@@ -296,7 +297,7 @@ function buildGraph(
   members: readonly LedgerMember[], balances: readonly LedgerBalance[], pulse: Pulse | undefined,
   names: Map<string, string>, box: Size
 ): { nodes: Node[]; edges: Edge[] } {
-  // A circle sized to the container, so fitView barely has to zoom on narrow screens.
+  // An ellipse sized to the container, so everyone is in view at zoom 1 on any screen.
   const width = box.width || 440;
   const height = box.height || 400;
   const narrow = width < NARROW_GRAPH;
