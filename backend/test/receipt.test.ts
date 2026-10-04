@@ -180,6 +180,17 @@ describe("receipts (SPEC 7.4)", () => {
   });
 });
 
+describe("settling while a receipt is open", () => {
+  it("names a receipt still waiting on claims instead of saying everyone's square", async () => {
+    const w = world({ receipt: { frita: FRITA }, claim: claims });
+    await w.photo("Joe", "frita");
+    expect(w.db.expenses()[0]!.status).toBe("itemizing");
+    await w.say("Kian", "let's settle up");
+    expect(w.said("balance_reply")[0]).toMatch(/isn't locked in yet/);
+    expect(w.db.expenses()[0]!.status).toBe("itemizing");
+  });
+});
+
 describe("claims and finalizing (SPEC 7.5)", () => {
   it("locks each claim, finalizes when everyone has answered, and splits by what people had", async () => {
     const w = world({ receipt: { frita: FRITA }, claim: claims });
