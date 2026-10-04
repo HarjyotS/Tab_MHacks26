@@ -218,7 +218,7 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       // they win; a reply already queued for this message wins too.
       const replied = ctx.store.outbox().some((o) => o.target_message_id === m.message_id);
       const reason = !wrote() && !replied
-        ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0)
+        ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0 || tabJustAsked(ctx, m))
         : undefined;
       // A bare "yeah" / "ok" / "bet" right after a split is agreement, not a
       // question for the money brain (playground: "yeah" after the payer's 👍
@@ -1181,4 +1181,18 @@ function amountAfterPhoto(ctx: BrainCtx, m: Message): string | undefined {
 
 // "just paid for 47 uber", "got dinner 60", "i covered the tickets, $40".
 const STATES_PURCHASE = /^(?=.*\d)(?=.*\b(paid|pay(?:ed)?|got|bought|covered|spent|grabbed|picked up)\b)/i;
+
+// Live chats: Tab's newest message here is a question from the last three
+// minutes (the money brain's own questions aren't tracked as threads), so a
+// low-confidence reply still gets an answer, never silence
+// (live run: "no it was dhanush not tanuj").
+function tabJustAsked(ctx: BrainCtx, m: Message): boolean {
+  if (!ctx.eyes) return false;
+  const last = ctx.store
+    .outbox()
+    .filter((o) => o.kind !== "reaction" && o.status !== "cancelled" && Boolean(o.text) && o.created_at <= m.received_at &&
+      (m.group_id ? o.group_id === m.group_id : o.to_phone === m.sender_phone))
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+  return Boolean(last && m.received_at.getTime() - last.created_at.getTime() <= 3 * 60_000 && /\?\s*$/.test(last.text ?? ""));
+}
 
