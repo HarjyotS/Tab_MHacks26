@@ -208,6 +208,7 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
     ? T.personalBalanceReply({
         owes: all.filter((d) => d.from.phone === m.sender_phone),
         owed: all.filter((d) => d.to.phone === m.sender_phone),
+        pending: groups.flatMap((g) => pendingFor(ctx, g, m.sender_phone)),
       })
     : T.balanceReply({
         debts: all,
@@ -225,3 +226,24 @@ export async function handleHelp(ctx: BrainCtx, m: Message) {
     text: T.helpReply(m.message_id),
   });
 }
+
+
+// Proposed or itemizing splits that involve this person and aren't owed
+// yet ("how much do i owe sam?" while the bistro is still a proposal).
+function pendingFor(ctx: BrainCtx, group_id: string, phone: string): T.Pending[] {
+  const members = activeMembers(ctx, group_id);
+  const person = (p: string) => ({ phone: p, name: members.find((x) => x.phone === p)?.name });
+  const out: T.Pending[] = [];
+  for (const e of ctx.store.expenses()) {
+    if (e.group_id !== group_id || (e.status !== "proposed" && e.status !== "itemizing") || !e.payer_phone) continue;
+    const shares = ctx.store.shares(e.expense_id).filter((s) => s.status !== "opted_out" && s.amount_cents > 0);
+    if (e.payer_phone === phone) {
+      for (const s of shares) if (s.phone !== phone) out.push({ description: e.description, other: person(s.phone), amount_cents: s.amount_cents, owes: false });
+    } else {
+      const mine = shares.find((s) => s.phone === phone);
+      if (mine) out.push({ description: e.description, other: person(e.payer_phone), amount_cents: mine.amount_cents, owes: true });
+    }
+  }
+  return out;
+}
+

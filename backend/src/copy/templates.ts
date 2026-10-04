@@ -391,12 +391,20 @@ export function balanceReply(a: {
 
 
 // Just the amounts. "@Tab breakdown" gets the explanation (breakdownCommandReply).
-export function personalBalanceReply(a: { owes: Debt[]; owed: Debt[] }): string {
-  if (a.owes.length === 0 && a.owed.length === 0) return "you're square with everyone";
+// A split that isn't locked in yet, so it isn't owed yet (§7.5): what the
+// person would owe, or be owed, once it is.
+export type Pending = { description: string; other: Person; amount_cents: number; owes: boolean };
+
+export function personalBalanceReply(a: { owes: Debt[]; owed: Debt[]; pending?: Pending[] }): string {
+  const pending = a.pending ?? [];
   const parts: string[] = [];
   if (a.owes.length) parts.push(`you owe ${listJoin(a.owes.map((d) => `${displayName(d.to)} ${money(d.amount_cents)}`))}`);
   if (a.owed.length) parts.push(listJoin(a.owed.map((d) => `${displayName(d.from)} owes you ${money(d.amount_cents)}`)));
-  return parts.join("\n");
+  if (pending.length) {
+    const what = listJoin(pending.map((p) => (p.owes ? `${p.description}: ${money(p.amount_cents)} to ${displayName(p.other)}` : `${p.description}: ${displayName(p.other)} ${money(p.amount_cents)}`)));
+    parts.push(parts.length ? `not locked in yet: ${what}` : `nothing locked in yet\nonce it is: ${what}`);
+  }
+  return parts.length ? parts.join("\n") : "you're square with everyone";
 }
 
 
