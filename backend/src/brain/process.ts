@@ -359,6 +359,8 @@ export async function tick(ctx: BrainCtx): Promise<void> {
   await perExpense(ctx, ctx.store.expenses().filter((x) => x.status === "proposed" && x.objection_deadline), async (e) => {
     const deadline = e.objection_deadline!;
     if (now >= deadline) {
+      // §7.5: never lock in under one of Tab's own open questions about it.
+      if (askingAbout(ctx, e.expense_id)) return;
       await finalize(ctx, e);
       return;
     }
@@ -384,6 +386,15 @@ export async function tick(ctx: BrainCtx): Promise<void> {
 }
 
 
+
+// An unexpired question from Tab about this expense (an adjustment detail,
+// or confirming a change to it).
+function askingAbout(ctx: BrainCtx, expense_id: string): boolean {
+  const ttl = ctx.timing.durations.PENDING_QUESTION_TTL;
+  return [...ctx.memory.pending.values()].some(
+    (p) => "expense_id" in p && p.expense_id === expense_id && ctx.now().getTime() - p.asked_at.getTime() <= ttl,
+  );
+}
 
 // §7.4: only the payer answers questions about their receipt.
 async function answerReceipt(ctx: BrainCtx, m: Message, p: Extract<Pending, { kind: "receipt" }>, key: string): Promise<boolean> {

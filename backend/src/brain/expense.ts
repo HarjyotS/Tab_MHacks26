@@ -6,7 +6,7 @@ import type {
 } from "../extraction/types.js";
 import { money, type Person } from "../copy/format.js";
 import * as T from "../copy/templates.js";
-import type { Expense, Message, Share } from "../store/types.js";
+import type { Expense, LineItem, Message, Share } from "../store/types.js";
 import {
   activeMembers,
   chatKey,
@@ -286,14 +286,16 @@ export async function handleAdjustment(
     });
     return;
   }
-  const { result, problems } = await ctx.extract.expense(
+  const extracted = await ctx.extract.expense(
     extractInput(ctx, { ...m, text }),
     "adjustment",
   );
+  const { result, problems } = priceFromReceipt(extracted, ctx.store.lineItems(expense.expense_id));
   const unknown = problems.filter(
     (p) => p.kind === "unknown_name" || p.kind === "missing_item_price",
   );
   if (unknown.length > 0) {
+    await holdOpen(ctx, expense);
     await ask(
       ctx,
       m,
@@ -318,6 +320,7 @@ export async function handleAdjustment(
       await startItemizing(ctx, expense);
       return;
     }
+    await holdOpen(ctx, expense);
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
@@ -334,6 +337,7 @@ export async function handleAdjustment(
   if (pinned > base) {
     const who = result.fixed.find((f) => f.amount_cents !== undefined)!;
     const name = activeMembers(ctx, expense.group_id).find((x) => x.phone === who.phone)?.name ?? "they";
+    await holdOpen(ctx, expense);
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
@@ -349,6 +353,7 @@ export async function handleAdjustment(
     const question = locked
       ? `${expense.description} is already locked in. Reopen it and change the split?`
       : `Change the split on ${expense.description}?`;
+    await holdOpen(ctx, expense);
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
     ctx.memory.pending.set(chatKey(chatOf(m)), { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() });
@@ -356,6 +361,77 @@ export async function handleAdjustment(
   }
   await tapback(ctx, m, "like", expense.expense_id);
   await applyAdjustment(ctx, expense, result);
+}
+
+// §7.5: while Tab is asking about a proposed split, it must not lock in
+// under the question (Harjyot's playground: the bistro locked with Alex and
+// Sam still on it, 6 seconds after "How much was Priya's 2 soft drinks?").
+async function holdOpen(ctx: BrainCtx, expense: Expense) {
+  if (expense.status !== "proposed") return;
+  const until = ctx.now().getTime() + ctx.timing.durations.OBJECTION_EXTENSION;
+  if ((expense.objection_deadline?.getTime() ?? 0) >= until) return;
+  await ctx.db.upsert_expense({ ...expense, objection_deadline: new Date(until) });
+}
+
+// §7.5: "If an item is named without a price and a receipt exists, match it
+// to a line item." Only one clear match counts; anything else is asked.
+function priceFromReceipt(
+  extracted: Extracted<ExpenseExtraction>,
+  items: LineItem[],
+): Extracted<ExpenseExtraction> {
+  if (items.length === 0) return extracted;
+  const priced = new Map<string, number>();
+  for (const f of extracted.result.fixed) {
+    if (f.amount_cents !== undefined || !f.item) continue;
+    const cents = receiptPrice(f.item, items);
+    if (cents !== undefined) priced.set(`${f.phone}|${f.item}`, cents);
+  }
+  if (priced.size === 0) return extracted;
+  return {
+    result: {
+      ...extracted.result,
+      fixed: extracted.result.fixed.map((f) => {
+        const cents = priced.get(`${f.phone}|${f.item}`);
+        return cents === undefined ? f : { ...f, amount_cents: cents };
+      }),
+    },
+    problems: extracted.problems.filter(
+      (p) => !(p.kind === "missing_item_price" && priced.has(`${p.phone}|${p.item}`)),
+    ),
+  };
+}
+
+const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
+const STOP = new Set(["the", "a", "an", "of", "and", "my", "his", "her", "their", "x", "w", "with", "some"]);
+
+function words(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/@\s*\$?\d+(\.\d+)?/g, " ")
+    .split(/[^a-z]+/)
+    .filter((w) => w.length > 1 && !STOP.has(w) && !(w in NUMBER_WORDS))
+    .map((w) => w.replace(/(ies)$/, "y").replace(/(?<!s)s$/, ""));
+}
+
+// "2 soft drinks" against "2 x SOFT DRINK @ $2.99" ($5.98): the whole line.
+// "a soft drink" against the same line: one of two, $2.99.
+export function receiptPrice(item: string, items: LineItem[]): number | undefined {
+  const want = words(item);
+  if (want.length === 0) return undefined;
+  const scored = items
+    .map((line) => {
+      const have = new Set(words(line.description));
+      return { line, hits: want.filter((w) => have.has(w)).length };
+    })
+    .filter((s) => s.hits > 0)
+    .sort((a, b) => b.hits - a.hits);
+  if (scored.length === 0 || (scored[1] && scored[1].hits === scored[0]!.hits)) return undefined;
+  const { line } = scored[0]!;
+  const lineQty = Math.max(line.quantity, Number(line.description.match(/^\s*(\d+)\s*x\b/i)?.[1] ?? 1));
+  const asked = item.trim().toLowerCase().match(/^(\d+|a|an|one|two|three|four|five|six)\b/)?.[1];
+  const qty = asked === undefined ? lineQty : Number(asked) || NUMBER_WORDS[asked]!;
+  if (qty >= lineQty) return line.amount_cents;
+  return Math.round((line.amount_cents * qty) / lineQty);
 }
 
 // Approved or paid shares mean a transfer exists; those can't be undone.

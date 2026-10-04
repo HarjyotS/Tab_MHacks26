@@ -3,6 +3,9 @@ import {
   checkReceiptMath,
   type ReceiptRead,
 } from "../src/extraction/receipt.js";
+import { receiptPrice } from "../src/brain/expense.js";
+import type { LineItem } from "../src/store/types.js";
+import { tick } from "../src/brain/process.js";
 import { PEOPLE, world, type Script } from "./support/harness.js";
 
 const read = (
@@ -41,6 +44,37 @@ const MEIJER = read({
   ],
   subtotal_cents: 1700,
   total_cents: 1700,
+});
+
+// Harjyot's playground receipt: even split, a drinks line with a count.
+const BISTRO = read({
+  merchant: "THE BISTRO",
+  items: [
+    { description: "BURGER DELUXE", quantity: 1, amount_cents: 1499 },
+    { description: "CAESAR SALAD", quantity: 1, amount_cents: 999 },
+    { description: "2 x SOFT DRINK @ $2.99", quantity: 1, amount_cents: 598 },
+    { description: "CHEESECAKE", quantity: 1, amount_cents: 799 },
+  ],
+  subtotal_cents: 3895,
+  tax_cents: 312,
+  tip_cents: 500,
+  total_cents: 4707,
+});
+
+const adjustment = (
+  exclusion_names: string[],
+  fixed: { name: string; amount_cents: number | null; item: string | null }[],
+) => ({
+  is_expense: true,
+  amount_cents: null,
+  amount_is_per_person: false,
+  description: null,
+  payer: "unknown",
+  payer_name: null,
+  participants: "everyone",
+  participant_names: [],
+  exclusion_names,
+  fixed,
 });
 
 const claims: Script["claim"] = {
@@ -188,6 +222,67 @@ describe("settling while a receipt is open", () => {
     await w.say("Kian", "let's settle up");
     expect(w.said("balance_reply")[0]).toMatch(/isn't locked in yet/);
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
+  });
+});
+
+describe("an item named without a price (SPEC 7.5)", () => {
+  const SOFT = "kian and jake wasn't there and I only had 2 soft drinks";
+  const PIE = "I only had the key lime pie";
+
+  it("takes the price from the receipt instead of asking", async () => {
+    const w = world({
+      receipt: { bistro: BISTRO },
+      expense: {
+        [`adjustment|${SOFT}`]: adjustment(["Kian", "Jake"], [{ name: "Priya", amount_cents: null, item: "2 soft drinks" }]),
+      },
+    });
+    await w.photo("Priya", "bistro");
+    const id = w.db.expenses()[0]!.expense_id;
+    expect(w.db.expense(id)!.status).toBe("proposed");
+    await w.say("Priya", SOFT);
+    expect(w.said("clarifying_question")).toEqual([]);
+    const shares = Object.fromEntries(w.db.shares(id).map((s) => [s.phone, s]));
+    expect(shares[PEOPLE.Priya]!.fixed_cents).toBe(598);
+    expect(shares[PEOPLE.Kian]!.status).toBe("opted_out");
+    expect(shares[PEOPLE.Jake]!.status).toBe("opted_out");
+  });
+
+  it("asks when the item isn't on the receipt, and doesn't lock in under the question", async () => {
+    const w = world({
+      receipt: { bistro: BISTRO },
+      expense: {
+        [`adjustment|${PIE}`]: adjustment([], [{ name: "Priya", amount_cents: null, item: "key lime pie" }]),
+      },
+    });
+    await w.photo("Priya", "bistro");
+    const id = w.db.expenses()[0]!.expense_id;
+    await w.say("Priya", PIE);
+    expect(w.said("clarifying_question")).toHaveLength(1);
+    w.advance(31_000);
+    await tick(w.ctx);
+    expect(w.db.expense(id)!.status).toBe("proposed");
+  });
+
+  const items = (rows: [string, number, number][]): LineItem[] =>
+    rows.map(([description, quantity, amount_cents], i) => ({
+      item_id: `i${i}`, expense_id: "e", position: i + 1, description, quantity, amount_cents,
+    }));
+  const bistro = items([["BURGER DELUXE", 1, 1499], ["2 x SOFT DRINK @ $2.99", 1, 598], ["CHEESECAKE", 1, 799]]);
+
+  it.each([
+    ["2 soft drinks", 598],
+    ["soft drinks", 598],
+    ["a soft drink", 299],
+    ["one soft drink", 299],
+    ["the burger", 1499],
+    ["cheesecake", 799],
+  ])("matches %s to the receipt", (item, cents) => {
+    expect(receiptPrice(item, bistro)).toBe(cents);
+  });
+
+  it("asks rather than guess on no match or a tie", () => {
+    expect(receiptPrice("key lime pie", bistro)).toBeUndefined();
+    expect(receiptPrice("burger", items([["CHEESE BURGER", 1, 1200], ["VEGGIE BURGER", 1, 1100]]))).toBeUndefined();
   });
 });
 
