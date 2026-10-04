@@ -33,6 +33,8 @@ export type ShareRole = "payer" | "participant";
 export type OutboxKind = "group_message" | "dm" | "reaction" | "contact_card";
 export type Reaction =
   "like" | "love" | "dislike" | "laugh" | "emphasize" | "question";
+// SPEC §7.6, stored by set_settle_mode. A group that never chose is "ledger".
+export type SettleMode = "ledger" | "per_expense";
 
 export type SetMessageResult = {
   message_id: string;

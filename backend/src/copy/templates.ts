@@ -185,6 +185,20 @@ export function disputeFollowup(a: {
   ]);
 }
 
+// §7.6: the disputer's new amount is in. In the group the new settle request
+// says it; this line is for a DM, or when there's no request to approve.
+export function disputeResolved(a: { description: string; amount_cents: number; requested: boolean }): string {
+  return `Fixed: you're down for ${money(a.amount_cents)} for ${a.description}.${a.requested ? " Tap 👍 on the new settle request to pay." : ""}`;
+}
+
+// The payer's share absorbs a dispute (§7.6), so it caps the new amount.
+export const disputeTooMuch = (a: { description: string; max_cents: number }) =>
+  `Your part of ${a.description} can be at most ${money(a.max_cents)}. What did you actually have?`;
+
+// An amount for a dispute that covered several expenses.
+export const whichDispute = (items: { description: string; amount_cents: number }[]) =>
+  `Which one?\n${items.map((i, n) => `${n + 1}. ${i.description} (${money(i.amount_cents)})`).join("\n")}`;
+
 // ── Questions (one per extraction Problem, P2/P3) ────────────────────────
 
 export function clarifyingQuestion(

@@ -177,7 +177,7 @@ describe("text expense (SPEC 7.3)", () => {
 
 describe("reminder and lock-in in DEMO_MODE (M2)", () => {
   it("reminds once before the deadline, then locks in and asks to settle", async () => {
-    ctx.memory.settleMode.set(G, "per_expense");
+    await ctx.db.set_settle_mode({ group_id: G, settle_mode: "per_expense" });
     const m = await send(JOE, "got groceries, $63");
     advance(15_000);
     await tick(ctx);
@@ -214,7 +214,7 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
 
 describe("settling, per-expense mode (SPEC 7.6)", () => {
   async function finalized() {
-    ctx.memory.settleMode.set(G, "per_expense");
+    await ctx.db.set_settle_mode({ group_id: G, settle_mode: "per_expense" });
     const m = await send(JOE, "got groceries, $63");
     advance(31_000);
     await tick(ctx);
@@ -253,7 +253,6 @@ describe("settling, per-expense mode (SPEC 7.6)", () => {
 
 describe("settling, ledger mode (SPEC 7.6, default)", () => {
   it("asks nobody to pay until someone says let's settle up, then one 👍 pays everything they owe", async () => {
-    db.transferKey = "approval_expense"; // needs Kian's create_transfer change (#2)
     const groceries = await send(JOE, "got groceries, $63");
     const pizza = await send(PRIYA, "got pizza, $40");
     advance(31_000);
@@ -282,7 +281,6 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
   });
 
   it("locks in a split still open for changes when someone asks to settle now", async () => {
-    db.transferKey = "approval_expense";
     const groceries = await send(JOE, "got groceries, $63");
     expect(db.expense(expenseId(groceries))!.status).toBe("proposed");
     const settle = await send(KIAN, "let's settle up");
@@ -293,8 +291,7 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
   });
 
   it("posts one request, not two, in per-expense mode", async () => {
-    db.transferKey = "approval_expense";
-    ctx.memory.settleMode.set(G, "per_expense");
+    await ctx.db.set_settle_mode({ group_id: G, settle_mode: "per_expense" });
     await send(JOE, "got groceries, $63");
     await send(KIAN, "let's settle up");
     expect(said("settle_request")).toHaveLength(1);
@@ -368,10 +365,11 @@ describe("onboarding (SPEC 7.2)", () => {
     advance(1000);
     await processMessage(ctx, db.ingest({ sender_phone: KIAN, group_id: "trip", text: "kian" }));
     expect(db.outbox().filter((o) => o.action_id === "settle_mode:trip").map((o) => o.text)).toHaveLength(1);
-    expect(ctx.memory.settleMode.get("trip")).toBeUndefined(); // ledger by default
+    expect(db.settings.has("trip")).toBe(false);
+    expect(db.settleMode("trip")).toBe("ledger"); // ledger by default
     advance(1000);
     await processMessage(ctx, db.ingest({ sender_phone: KIAN, group_id: "trip", text: "each" }));
-    expect(ctx.memory.settleMode.get("trip")).toBe("per_expense");
+    expect(db.settleMode("trip")).toBe("per_expense");
   });
 
   it("introduces Tab once and names people as they answer", async () => {

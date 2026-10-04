@@ -10,6 +10,7 @@ import type {
   GroupStatus,
   LineItemInput,
   SetMessageResult,
+  SettleMode,
   SetShare,
   UpsertExpense,
 } from "./types.js";
@@ -31,6 +32,8 @@ export type ReducerClient = Pick<
   | "enqueueOutbox"
   | "cancelOutbox"
   | "createTransfer"
+  | "setSettleMode"
+  | "resolveDispute"
   | "setLedgerSecret"
 >;
 
@@ -224,6 +227,25 @@ export function createReducers(r: ReducerClient) {
             approvedByMessageId: a.approved_by_message_id,
           }),
       ),
+
+    // SPEC §7.6: stored per group, so it survives a backend restart.
+    set_settle_mode: (a: { group_id: string; settle_mode: SettleMode }) =>
+      call("set_settle_mode", { group_id: a.group_id }, () =>
+        r.setSettleMode({ groupId: a.group_id, settleMode: a.settle_mode }),
+      ),
+
+    // SPEC §7.6 disputes: a disputed share gets its new amount and goes back
+    // to locked; the module moves the difference onto the payer's share.
+    resolve_dispute: (a: {
+      expense_id: string;
+      phone: string;
+      amount_cents: number;
+    }) => {
+      const amountCents = cents("amount_cents", a.amount_cents);
+      return call("resolve_dispute", { expense_id: a.expense_id }, () =>
+        r.resolveDispute({ expenseId: a.expense_id, phone: a.phone, amountCents }),
+      );
+    },
 
     set_ledger_secret: (a: { group_id: string; secret: string }) =>
       call("set_ledger_secret", { group_id: a.group_id }, () =>

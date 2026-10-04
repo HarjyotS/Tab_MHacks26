@@ -3,20 +3,21 @@
 import * as T from "../copy/templates.js";
 import type { Expense, Message, Share } from "../store/types.js";
 import { MAX_DMS_PER_EXPENSE } from "../config.js";
-import { activeMembers, type BrainCtx, chatOf, outsideQuietHours, say, styleFor } from "./context.js";
+import type { SettleMode } from "../db/types.js";
+import { activeMembers, type BrainCtx, chatKey, chatOf, outsideQuietHours, type Pending, say, styleFor, tapback } from "./context.js";
 import { liveShares } from "./expense.js";
 
-export type SettleMode = "ledger" | "per_expense";
+export type { SettleMode };
 
 const person = (ctx: BrainCtx, group_id: string, phone: string) => ({
   phone,
   name: activeMembers(ctx, group_id).find((m) => m.phone === phone)?.name,
 });
 
-// The group's mode: Kian's stored setting once it exists, else what the
-// group answered this session, else the default.
+// The group's stored mode (backend_group_settings), "ledger" until it
+// answers "each". Stored in the module, so it survives a backend restart.
 export function settleModeFor(ctx: BrainCtx, group_id: string): SettleMode {
-  return ctx.memory.settleMode.get(group_id) ?? "ledger";
+  return ctx.store.settleMode(group_id);
 }
 
 const owing = (ctx: BrainCtx, e: Expense): Share[] =>
@@ -159,7 +160,9 @@ function requestExpenses(ctx: BrainCtx, request_id: string): Expense[] {
 }
 
 // The only way money moves (P7): a 👍 from the person whose shares these
-// are. One create_transfer per share they owe in the request.
+// are. One create_transfer per share they owe in the request, all with the
+// same approval: the module dedupes on (approval, expense), so one 👍 pays
+// every share and a repeat delivery of it pays nothing twice.
 async function approveRequest(
   ctx: BrainCtx,
   reaction: Message,
@@ -229,8 +232,9 @@ export async function dispute(ctx: BrainCtx, m: Message, expenses: Expense[]) {
   }
   if (disputed.length === 0) return;
   const one = disputed.length === 1 ? disputed[0] : undefined;
+  const chat = m.kind === "reaction" ? { dm_phone: m.sender_phone } : chatOf(m);
   await say(ctx, {
-    chat: m.kind === "reaction" ? { dm_phone: m.sender_phone } : chatOf(m),
+    chat,
     purpose: "dispute_followup",
     id: `dispute_followup:${m.message_id}`,
     // A tapback can trigger this; only a text message can be replied to.
@@ -238,7 +242,74 @@ export async function dispute(ctx: BrainCtx, m: Message, expenses: Expense[]) {
     text: T.disputeFollowup({ seed: m.message_id, description: one?.description, amount_cents: total }),
     expense_id: one?.expense_id,
   });
+  // Their answer ("I only had $10") goes to resolveDispute.
+  ctx.memory.pending.set(chatKey(chat), {
+    kind: "dispute",
+    source: m,
+    expense_ids: disputed.map((e) => e.expense_id),
+    asked_at: ctx.now(),
+  } satisfies Pending);
 }
+
+// Expenses a pending dispute still covers: finalized, with the disputer's
+// share still `disputed`.
+export function stillDisputed(ctx: BrainCtx, phone: string, expense_ids: string[]): Expense[] {
+  return expense_ids
+    .map((id) => ctx.store.expense(id))
+    .filter((e): e is Expense => e?.status === "finalized")
+    .filter((e) =>
+      ctx.store.shares(e.expense_id).some((s) => s.phone === phone && s.role === "participant" && s.status === "disputed"),
+    );
+}
+
+// SPEC §7.6 disputes: only the disputing person's amount changes.
+// resolve_dispute sets it and puts the share back to locked, and the payer's
+// own share absorbs the difference, so nobody else is affected (P4). Then
+// they get a new request to approve; on the running tab (no request yet)
+// the share just stays outstanding. Returns false, writing nothing, when the
+// payer's share can't absorb that much.
+export async function resolveDispute(ctx: BrainCtx, m: Message, e: Expense, amount_cents: number): Promise<boolean> {
+  const shares = ctx.store.shares(e.expense_id);
+  const share = shares.find((s) => s.phone === m.sender_phone);
+  const payer = shares.find((s) => s.phone === e.payer_phone);
+  if (!share || !payer || payer.amount_cents - (amount_cents - share.amount_cents) < 0) {
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `clarify:${m.message_id}`,
+      reply_to: m.message_id,
+      text: T.disputeTooMuch({ description: e.description, max_cents: (share?.amount_cents ?? 0) + (payer?.amount_cents ?? 0) }),
+      expense_id: e.expense_id,
+    });
+    return false;
+  }
+  await ctx.db.resolve_dispute({ expense_id: e.expense_id, phone: m.sender_phone, amount_cents });
+  await tapback(ctx, m, "like", e.expense_id);
+  const updated = ctx.store.expense(e.expense_id)!;
+  const requested =
+    Boolean(updated.settle_message_id) &&
+    (await postSettleRequest(ctx, updated.group_id, [updated], `settle_request:${updated.expense_id}:${ctx.now().getTime()}`));
+  // In the group the new request already shows the new amount.
+  if (requested && m.group_id) return true;
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "dispute_followup",
+    id: `dispute_resolved:${m.message_id}`,
+    reply_to: m.message_id,
+    text: T.disputeResolved({ description: e.description, amount_cents, requested }),
+    expense_id: e.expense_id,
+  });
+  return true;
+}
+
+// "Which one?" when an amount answers a dispute that covered several expenses.
+export const whichDisputed = (ctx: BrainCtx, phone: string, expenses: Expense[]) =>
+  T.whichDispute(
+    expenses.map((e) => ({
+      description: e.description,
+      amount_cents: ctx.store.shares(e.expense_id).find((s) => s.phone === phone)?.amount_cents ?? 0,
+    })),
+  );
 
 // What a typed "no" disputes: the sender's shares in their open settle
 // request, else the latest finalized expense they owe on.

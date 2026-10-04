@@ -57,15 +57,14 @@ describe("settle requests (findings 1, 2)", () => {
     ]);
   });
 
-  it("pays one share per 👍 under today's module, which keys transfers by approval", async () => {
+  it("pays every share a 👍 covers: the module dedupes on (approval, expense)", async () => {
     const w = world(script);
     await finalized(w);
     await w.say("Priya", "got groceries, $60");
     await w.wait(31_000);
     const settle = await w.say("Kian", "let's settle up");
     await w.react("Jake", `settle_request:${GROUP}:${settle.message_id}`);
-    // Kian's create_transfer change (#2) lifts this to both shares.
-    expect(w.db.transfers()).toHaveLength(1);
+    expect(w.db.transfers()).toHaveLength(2);
   });
 });
 
@@ -159,7 +158,7 @@ describe("typed amounts (finding 4)", () => {
 describe("finalize (finding 6)", () => {
   it("does nothing the second time, even from a stale snapshot", async () => {
     const w = world(script);
-    w.ctx.memory.settleMode.set(GROUP, "per_expense");
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
     const pizza = await w.say("Joe", "got pizza, $40");
     const stale = w.db.expense(`exp_${pizza.message_id}`)!;
     await finalize(w.ctx, stale);
@@ -223,7 +222,7 @@ describe("claims (finding 7)", () => {
 describe("settling gaps in §7.6 (finding 8)", () => {
   it("nudges people who haven't tapped 👍, in the group, until they do", async () => {
     const w = world(script);
-    w.ctx.memory.settleMode.set(GROUP, "per_expense");
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
     const id = await finalized(w);
     await w.react("Kian", `settle_request:${id}`);
     await w.wait(21_000); // the first nudge: 2h, scaled

@@ -54,7 +54,7 @@ describe("inline replies", () => {
 
   it("never pays on a typed yes, even replying to the settle request (P7)", async () => {
     const w = world({ expense: { "new|got pizza, $40": raw(4000, "Pizza") } });
-    w.ctx.memory.settleMode.set("house", "per_expense");
+    await w.ctx.db.set_settle_mode({ group_id: "house", settle_mode: "per_expense" });
     const pizza = await w.say("Joe", "got pizza, $40");
     await w.wait(31_000);
     const settle = w.db.out.get(`settle_request:exp_${pizza.message_id}`)!;

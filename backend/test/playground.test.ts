@@ -81,7 +81,7 @@ describe("the settle-mode answer", () => {
         "nah we are just adding it for friend expenses in the long run",
       ),
     ).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
-    expect(w.ctx.memory.settleMode.get("trip")).toBe("ledger");
+    expect(w.db.settings.get("trip")).toBe("ledger"); // stored, not just the default
   });
 
   it("still takes the answer half a minute later in DEMO_MODE", async () => {
@@ -94,13 +94,13 @@ describe("the settle-mode answer", () => {
         34_000,
       ),
     ).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
-    expect(w.ctx.memory.settleMode.get("trip")).toBe("ledger");
+    expect(w.db.settings.get("trip")).toBe("ledger"); // stored, not just the default
   });
 
   it('confirms "each"', async () => {
     const { w, reply } = await asked();
     expect(await reply("each")).toBe("got it, i'll settle after each expense");
-    expect(w.ctx.memory.settleMode.get("trip")).toBe("per_expense");
+    expect(w.db.settleMode("trip")).toBe("per_expense");
   });
 
   it("stays quiet on unrelated chatter", async () => {
@@ -134,7 +134,6 @@ describe("let's settle up with something still open", () => {
     // "settle it now lol" used to get "isn't locked in yet", and "yeah
     // lock it in" after that went nowhere.
     const w = world(script);
-    w.db.transferKey = "approval_expense";
     await w.say("Joe", "got pizza, $40");
     await w.say("Kian", "let's settle up");
     expect(w.said("balance_reply")).toEqual([]);
@@ -170,7 +169,7 @@ describe("changing a locked-in expense (§7.7)", () => {
   it("posts a new settle request after reopening in per-expense mode", async () => {
     const w = world(script);
     cokeIsAnAdjustment(w);
-    w.ctx.memory.settleMode.set(GROUP, "per_expense");
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
     await w.say("Joe", "got pizza, $40");
     await w.wait(31_000);
     await w.say("Kian", COKE);
@@ -183,7 +182,7 @@ describe("changing a locked-in expense (§7.7)", () => {
   it("explains it can't change one that's already being paid", async () => {
     const w = world(script);
     cokeIsAnAdjustment(w);
-    w.ctx.memory.settleMode.set(GROUP, "per_expense");
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
     const pizza = await w.say("Joe", "got pizza, $40");
     await w.wait(31_000);
     await w.react("Priya", `settle_request:exp_${pizza.message_id}`);

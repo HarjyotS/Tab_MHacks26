@@ -7,6 +7,7 @@ import type {
   OutboxKind,
   OutboxPurpose,
   Reaction,
+  SettleMode,
   ShareRole,
   SplitMode,
 } from "../db/types.js";
@@ -137,6 +138,8 @@ export interface Store {
   messages(): Message[];
   group(group_id: string): Group | undefined;
   groups(): Group[];
+  // backend_group_settings: "ledger" for a group that never chose (§7.6).
+  settleMode(group_id: string): SettleMode;
   members(group_id: string): Member[];
   outbox(): Outbox[];
   expense(expense_id: string): Expense | undefined;
