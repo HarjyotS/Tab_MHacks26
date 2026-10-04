@@ -71,6 +71,40 @@ describe("extractExpense validation", () => {
     ]);
   });
 
+  it('marks "had" (not "only had") on a fixed item, and only when there is an item', async () => {
+    const out = await extractExpense(
+      fake(
+        expenseRaw({
+          fixed: [
+            { name: "Priya", amount_cents: null, item: "both drinks", only: false },
+            { name: "Kian", amount_cents: 300, item: "diet coke", only: true },
+            { name: "John", amount_cents: 500, item: null, only: false },
+            { name: "Joe", amount_cents: 400, item: "fries" }, // older output: only
+          ],
+        }),
+      ),
+      "m",
+      input("priya had both drinks, kian only had a $3 diet coke, john owes 5, joe 4 for fries"),
+      "adjustment",
+    );
+    expect(out.result.fixed).toEqual([
+      { phone: PHONES.Priya, item: "both drinks", had: true },
+      { phone: PHONES.Kian, amount_cents: 300, item: "diet coke" },
+      { phone: PHONES.John, amount_cents: 500 },
+      { phone: PHONES.Joe, amount_cents: 400, item: "fries" },
+    ]);
+  });
+
+  it("never excludes someone the message says had something (live Grok did, for \"jake only had\")", async () => {
+    const out = await extractExpense(
+      fake(expenseRaw({ exclusion_names: ["Kian", "Priya"], fixed: [{ name: "Kian", amount_cents: 300, item: "diet coke", only: true }] })),
+      "m",
+      input("kian only had a $3 diet coke, priya wasn't there"),
+      "adjustment",
+    );
+    expect(out.result.exclusions).toEqual([PHONES.Priya]);
+  });
+
   it("never turns an unknown name into a member", async () => {
     const out = await extractExpense(
       fake(

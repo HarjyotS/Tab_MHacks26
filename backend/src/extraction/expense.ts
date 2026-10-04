@@ -33,6 +33,9 @@ const raw = z.object({
       name: z.string(),
       amount_cents: z.number().int().nullable(),
       item: z.string().nullable(),
+      // "only had" / "just had" (their whole share) vs "had" (it's theirs,
+      // and they still share the rest). Missing reads as only, as before.
+      only: z.boolean().optional(),
     }),
   ),
 });
@@ -70,11 +73,12 @@ const JSON_SCHEMA = {
       items: {
         type: "object",
         additionalProperties: false,
-        required: ["name", "amount_cents", "item"],
+        required: ["name", "amount_cents", "item", "only"],
         properties: {
           name: { type: "string" },
           amount_cents: nullable("integer"),
           item: nullable("string"),
+          only: { type: "boolean" },
         },
       },
     },
@@ -95,8 +99,9 @@ function systemPrompt(mode: ExpenseMode): string {
 - participants: "everyone" unless the message names who shared it; then "list" with participant_names.
 - exclusion_names: people the message says were not there.`
       : `The message adjusts the split of the sender's open expense. Do not extract a new total: amount_cents is null, amount_is_per_person is false, payer is "unknown".
-- exclusion_names: people the message says were not there or should be left out.
-- fixed: people the message says only had specific things, with the item and its price in cents if stated (null if not).`;
+- exclusion_names: people the message says were not there or should be left out. "Just Sam and Alex" or "only Sam and Alex went" leaves out every other member. Never list someone the message says was there or had something.
+- fixed: people the message says had specific things, with the item and its price in cents if stated (null if not).
+  - only: true if the message says that was all they had ("Jake only had a Diet Coke", "I just had the salad"); false if it only says they had or got it ("Alex had both drinks", "I got the cheesecake"), so it's theirs and they may still share the rest.`;
   return `You extract structured data for Tab, a bot that splits shared expenses in a group chat.
 ${UNTRUSTED_RULE}
 
@@ -173,10 +178,19 @@ function toContract(
       phone,
       ...(cents !== undefined ? { amount_cents: cents } : {}),
       ...(f.item ? { item: f.item } : {}),
+      // Owning an item needs an item to own.
+      ...(f.only === false && f.item ? { had: true as const } : {}),
     });
     if (cents === undefined && f.item)
       problems.push({ kind: "missing_item_price", phone, item: f.item });
   }
+
+  // Someone who had something was there (live: "jake only had a $3 diet
+  // coke" also came back with Jake excluded).
+  const had = new Set(fixed.map((f) => f.phone));
+  const there = exclusions.filter((p) => !had.has(p));
+  exclusions.length = 0;
+  exclusions.push(...there);
 
   // Missing fields are derived here, never trusted from the model.
   const missing: ExpenseExtraction["missing"] = [];

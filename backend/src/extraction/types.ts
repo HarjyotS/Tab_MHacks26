@@ -11,7 +11,10 @@ export type ExpenseExtraction = {
     | { kind: "unknown" };
   participants: { kind: "everyone" } | { kind: "list"; phones: string[] };
   exclusions: string[];
-  fixed: { phone: string; amount_cents?: number; item?: string }[];
+  // had: "Alex had both drinks", not "only had": on a receipt the item is
+  // theirs and they still share the rest (§7.5 item ownership). Absent
+  // means only that: a fixed amount (custom split).
+  fixed: { phone: string; amount_cents?: number; item?: string; had?: true }[];
   missing: ("amount" | "payer" | "item_price")[];
 };
 
