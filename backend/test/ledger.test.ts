@@ -16,7 +16,7 @@ describe("@tab ledger (SPEC 12.3)", () => {
     const w = withLedger();
     await w.say("Kian", "@tab ledger");
     const url = `https://tab.example/g/${ledgerSecret(KEY, "house")}`;
-    expect(w.db.outbox().find((o) => o.action_id.startsWith("ledger_link:"))!.text).toBe(`Here's the ledger: ${url}`);
+    expect(w.db.outbox().find((o) => o.action_id.startsWith("ledger_link:"))!.text).toBe(`here's the ledger: ${url}`);
     expect(secretSets(w).get("house")).toBe(ledgerSecret(KEY, "house"));
   });
 
@@ -47,7 +47,7 @@ describe("@tab ledger (SPEC 12.3)", () => {
   it("says it isn't set up when there's no ledger configured", async () => {
     const w = world({});
     await w.say("Kian", "@tab ledger");
-    expect(w.db.outbox().find((o) => o.action_id.startsWith("ledger_link:"))!.text).toBe("The web ledger isn't set up yet.");
+    expect(w.db.outbox().find((o) => o.action_id.startsWith("ledger_link:"))!.text).toBe("the ledger site isn't set up yet");
   });
 
   it("ignores the word in passing chatter", async () => {

@@ -60,6 +60,15 @@ describe('pre-filter', () => {
     ]) expect(mightBeMoney(say(text)), text).toBe(true);
   });
 
+  it('passes questions about the group\'s money (the money brain)', () => {
+    for (const text of [
+      'what was on the bistro receipt?', 'how much did we spend on food?', 'who paid for the uber?', 'why do i owe jake 12',
+      'who still hasn\'t paid?', 'how much has priya spent this trip', 'what\'s left to settle', 'how was the pizza split',
+      'what have we been spending on', 'what did it all come to', 'what did the groceries come to', 'did my payment go through',
+      'what purchases did joe make', 'what has the trip added up to',
+    ]) expect(mightBeMoney(say(text)), text).toBe(true);
+  });
+
   it('passes anything while the sender has a list, a proposed split, or a settle request open', () => {
     expect(mightBeMoney(say('just the fries', { open_items: item('itemizing', 'awaiting_claim') }))).toBe(true);
     expect(mightBeMoney(say('I wasn\'t there', { open_items: item('proposed', 'proposed') }))).toBe(true);

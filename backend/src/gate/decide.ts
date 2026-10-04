@@ -6,7 +6,7 @@ export type Decision = "act" | "clarify" | "ignore";
 type Thresholds = { act: number; clarify: number };
 
 // Intents that only read data; nothing is written when Tab acts on them.
-const READ_ONLY = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+const READ_ONLY = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
 
 function hasSettleRequestFor(input: ClassifyInput): boolean {
   return input.open_items.some(

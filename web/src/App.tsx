@@ -14,6 +14,7 @@ import type {
   LedgerBalance, LedgerClaim, LedgerExpense, LedgerItem,
   LedgerMember, LedgerShare, LedgerTransfer,
 } from './module_bindings/types';
+import { Payments } from './Payments';
 
 const money = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
 const formatMoney = (cents: bigint) => money.format(Number(cents) / 100);
@@ -149,6 +150,20 @@ export function App({ secret }: AppProps) {
         <Metric label="People" value={String(members.length)} />
       </section>
 
+      {/* Synced by the Nessie mirror from each member's Nessie records; hidden until it has run. */}
+      {members.some(member => member.bankBalanceCents !== undefined) && (
+        <section className="bank" aria-label="Bank balances">
+          <p className="eyebrow">Bank balances · Nessie sandbox</p>
+          <div className="bank-list">
+            {members.filter(member => member.bankBalanceCents !== undefined).map(member => (
+              <div className="bank-item" key={member.ledgerMemberId}>
+                <span>{member.name ?? 'Unnamed'}</span><strong>{formatMoney(member.bankBalanceCents!)}</strong>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="dashboard-grid">
         <article className="panel graph-panel">
           <div className="panel-heading"><div><p className="eyebrow">Money flow</p><h2>Who owes whom</h2></div><span className="hint">Live</span></div>
@@ -192,6 +207,7 @@ export function App({ secret }: AppProps) {
           names={names}
         />
       )}
+      <Payments transfers={transfers} expenses={expenses} names={names} timeZone={group.timezone} />
       <footer>Simulated settlement · Nessie supplies setup-time sandbox profiles · No real money moves</footer>
     </main>
   );

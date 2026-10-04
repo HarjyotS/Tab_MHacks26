@@ -1,6 +1,6 @@
 // SPEC §7.2 onboarding and names, and §7.8 queries.
 import * as T from "../copy/templates.js";
-import type { Debt, OwedLine } from "../copy/templates.js";
+import type { Debt } from "../copy/templates.js";
 import { listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
 import { ledgerUrl } from "./ledger.js";
@@ -137,7 +137,7 @@ const PERSONAL = /\b(i|me|my|am i)\b/i;
 
 // Why someone's share of an expense is what it is, in words, built only from
 // the database (P6): the split mode, pinned amounts, claims, and extras.
-export function explainShare(ctx: BrainCtx, e: Expense, phone: string): string {
+export function explainShare(ctx: BrainCtx, e: Expense, phone: string, who = "you"): string {
   const shares = ctx.store.shares(e.expense_id).filter((s) => s.status !== "opted_out");
   const members = activeMembers(ctx, e.group_id);
   const nameOf = (p: string) => members.find((m) => m.phone === p)?.name ?? `…${p.slice(-4)}`;
@@ -158,22 +158,28 @@ export function explainShare(ctx: BrainCtx, e: Expense, phone: string): string {
     return `${parts.join(", ") || "even share"}${plus}`;
   }
   const mine = shares.find((s) => s.phone === phone);
-  if (e.split_mode === "custom" && mine?.fixed_cents !== undefined) return "what you had";
+  if (e.split_mode === "custom" && mine?.fixed_cents !== undefined) return `what ${who} had`;
   const pinned = shares.filter((s) => s.fixed_cents !== undefined && s.phone !== phone);
   const after = pinned.length ? ` after ${listJoin(pinned.map((s) => `${nameOf(s.phone)}'s ${money(s.fixed_cents!)}`))}` : "";
   return `split ${shares.length - pinned.length} ways${after}${plus}`;
 }
 
+// Share statuses that count toward a debt (same as `debts`).
 const OWING = ["locked", "approved", "disputed"];
 
-function myLines(ctx: BrainCtx, group_id: string, phone: string): (OwedLine & { to: string })[] {
+export type OwedLine = { description: string; amount_cents: number; why: string };
+
+// The expenses behind what `phone` owes in a group, newest first: one line
+// per share they still owe, with why it's that amount. `to` narrows it to
+// one payer (lookup.ts whyOwe).
+export function owedLines(ctx: BrainCtx, group_id: string, phone: string, to?: string): (OwedLine & { to: string; expense: Expense })[] {
   return ctx.store
     .expenses()
-    .filter((e) => e.group_id === group_id && e.payer_phone && e.payer_phone !== phone)
+    .filter((e) => e.group_id === group_id && e.payer_phone && e.payer_phone !== phone && (!to || e.payer_phone === to))
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
     .flatMap((e) => {
       const s = ctx.store.shares(e.expense_id).find((x) => x.phone === phone && x.role === "participant");
-      return s && OWING.includes(s.status) ? [{ to: e.payer_phone!, description: e.description, amount_cents: s.amount_cents, why: explainShare(ctx, e, phone) }] : [];
+      return s && OWING.includes(s.status) ? [{ to: e.payer_phone!, expense: e, description: e.description, amount_cents: s.amount_cents, why: explainShare(ctx, e, phone) }] : [];
     });
 }
 
@@ -187,44 +193,41 @@ export function groupsOf(ctx: BrainCtx, m: Message): string[] {
     .map((g) => g.group_id);
 }
 
-export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
-  const groups = groupsOf(ctx, m);
-  if (groups.length === 0) return;
-  // The same two people can owe each other in several groups: one line each.
+// Netted per group, then one line per pair: the same two people can owe
+// each other in several groups.
+export function pairDebts(ctx: BrainCtx, groups: string[]): Debt[] {
   const byPair = new Map<string, Debt>();
   for (const d of groups.flatMap((g) => debts(ctx, g))) {
     const key = `${d.from.phone}>${d.to.phone}`;
     const seen = byPair.get(key);
     byPair.set(key, seen ? { ...seen, amount_cents: seen.amount_cents + d.amount_cents } : d);
   }
-  const all = [...byPair.values()];
-  const text = PERSONAL.test(m.text ?? "")
-    ? T.personalBalanceReply({
-        owes: all.filter((d) => d.from.phone === m.sender_phone),
-        owed: all.filter((d) => d.to.phone === m.sender_phone),
-      })
+  return [...byPair.values()];
+}
+
+// What the sender owes and is owed, across the groups the message covers.
+export function myDebts(ctx: BrainCtx, m: Message): { owes: Debt[]; owed: Debt[] } {
+  const all = pairDebts(ctx, groupsOf(ctx, m));
+  return { owes: all.filter((d) => d.from.phone === m.sender_phone), owed: all.filter((d) => d.to.phone === m.sender_phone) };
+}
+
+// `more` adds lines under the sender's own balance (history.ts: what it was
+// for, or their last payment when they're square).
+export async function handleBalanceQuery(ctx: BrainCtx, m: Message, more?: (mine: { owes: Debt[]; owed: Debt[] }) => string[]) {
+  const groups = groupsOf(ctx, m);
+  if (groups.length === 0) return;
+  const all = pairDebts(ctx, groups);
+  // A DM only ever shows the sender's own money (§19).
+  const mine = { owes: all.filter((d) => d.from.phone === m.sender_phone), owed: all.filter((d) => d.to.phone === m.sender_phone) };
+  const text = !m.group_id || PERSONAL.test(m.text ?? "")
+    ? [T.personalBalanceReply({ ...mine, pending: groups.flatMap((g) => pendingFor(ctx, g, m.sender_phone)) }), ...(more?.(mine) ?? [])].join("\n")
     : T.balanceReply({
         debts: all,
+        pending: pendingDebts(ctx, groups),
         // Past six lines the rest is on the ledger (§7.8).
         ledger_url: all.length > 6 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
       });
   await say(ctx, { chat: chatOf(m), purpose: "balance_reply", id: `balance_reply:${m.message_id}`, reply_to: m.message_id, text });
-}
-
-export async function handleBreakdown(ctx: BrainCtx, m: Message) {
-  const groups = groupsOf(ctx, m);
-  if (groups.length === 0) return;
-  const lines = groups.flatMap((g) => myLines(ctx, g, m.sender_phone));
-  await say(ctx, {
-    chat: chatOf(m),
-    purpose: "breakdown_reply",
-    id: `breakdown_reply:${m.message_id}`, reply_to: m.message_id,
-    text: T.breakdownReply({
-      lines,
-      // Past five lines the rest is on the ledger (§7.8).
-      ledger_url: lines.length > 5 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
-    }),
-  });
 }
 
 export async function handleHelp(ctx: BrainCtx, m: Message) {
@@ -235,3 +238,49 @@ export async function handleHelp(ctx: BrainCtx, m: Message) {
     text: T.helpReply(m.message_id),
   });
 }
+
+
+// Proposed or itemizing splits that involve this person and aren't owed
+// yet ("how much do i owe sam?" while the bistro is still a proposal).
+function pendingFor(ctx: BrainCtx, group_id: string, phone: string): T.Pending[] {
+  const members = activeMembers(ctx, group_id);
+  const person = (p: string) => ({ phone: p, name: members.find((x) => x.phone === p)?.name });
+  const out: T.Pending[] = [];
+  for (const e of ctx.store.expenses()) {
+    if (e.group_id !== group_id || (e.status !== "proposed" && e.status !== "itemizing") || !e.payer_phone) continue;
+    const shares = ctx.store.shares(e.expense_id).filter((s) => s.status !== "opted_out" && s.amount_cents > 0);
+    if (e.payer_phone === phone) {
+      for (const s of shares) if (s.phone !== phone) out.push({ description: e.description, other: person(s.phone), amount_cents: s.amount_cents, owes: false });
+    } else {
+      const mine = shares.find((s) => s.phone === phone);
+      if (mine) out.push({ description: e.description, other: person(e.payer_phone), amount_cents: mine.amount_cents, owes: true });
+    }
+  }
+  return out;
+}
+
+// What open splits would come to, netted per pair like `debts`: proposed
+// expenses, and receipts still being claimed (shares already worked out).
+export function pendingDebts(ctx: BrainCtx, groups: string[]): Debt[] {
+  const out: Debt[] = [];
+  for (const group_id of groups) {
+    const members = activeMembers(ctx, group_id);
+    const person = (phone: string) => ({ phone, name: members.find((x) => x.phone === phone)?.name });
+    const owed = new Map<string, number>();
+    for (const e of ctx.store.expenses()) {
+      if (e.group_id !== group_id || !e.payer_phone || (e.status !== "proposed" && e.status !== "itemizing")) continue;
+      for (const sh of ctx.store.shares(e.expense_id)) {
+        if (sh.phone === e.payer_phone || sh.status === "opted_out" || sh.amount_cents <= 0) continue;
+        const key = `${sh.phone}>${e.payer_phone}`;
+        owed.set(key, (owed.get(key) ?? 0) + sh.amount_cents);
+      }
+    }
+    for (const [key, cents] of owed) {
+      const [from, to] = key.split(">") as [string, string];
+      const net = cents - (owed.get(`${to}>${from}`) ?? 0);
+      if (net > 0) out.push({ from: person(from), to: person(to), amount_cents: net });
+    }
+  }
+  return out.sort((a, b) => b.amount_cents - a.amount_cents);
+}
+

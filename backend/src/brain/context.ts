@@ -1,12 +1,13 @@
 // Everything a handler needs, injected so tests can run the whole brain
 // against an in-memory database and fake models.
-import type { Classify, GateMessage, Intent } from "@tab/gate";
+import type { Classify, GateMessage, Intent, PhotoNote } from "@tab/gate";
 import { CONTEXT_MESSAGES, type LedgerConfig, type Timing } from "../config.js";
 import type { BackendReducers } from "../db/reducers.js";
 import type { OutboxPurpose, Reaction } from "../db/types.js";
 import { compose } from "../copy/compose.js";
 import { styleFlags, styleFromFlags, type GroupStyle, type StyleFlags } from "../copy/style.js";
 import type { WitContext } from "../copy/wit.js";
+import type { SummaryInput } from "../copy/summary.js";
 import type { ExpenseMode } from "../extraction/expense.js";
 import type {
   CorrectionExtraction,
@@ -21,6 +22,9 @@ import type { ReceiptRead } from "../extraction/receipt.js";
 import type { ClaimResolution, LineItem as ClaimItem } from "../extraction/types.js";
 import type { Expense, Message, Store } from "../store/types.js";
 import type { Thread } from "./threads.js";
+import { PhotoNotes } from "./photos.js";
+import { Transcript } from "./transcript.js";
+import type { ChatClient } from "../grok/structured.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
 
@@ -53,6 +57,9 @@ export type Pending =
       // expenses are the thread's expense_ids.
       // act: an unsure money intent (§6.4 clarify band), acted on on yes.
       then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act";
+      // then "expense": the gate was fairly sure (just under the act bar),
+      // so the person who said it and says yes is taken as the payer.
+      sender_paid?: boolean;
       intent?: Intent;
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
@@ -84,12 +91,17 @@ export type Pending =
       asked_at: Date;
     };
 
-// Process-local memory, lost on restart: Tab's open questions, and what
-// style matching needs.
+// Process-local memory, lost on restart: Tab's open questions, photo
+// descriptions, the gate's raw transcript, and what style matching needs.
 export class Memory {
   // Open questions per chat (threads.ts), keyed by chatKey.
   threads = new Map<string, Thread[]>();
   lastHadWit = new Map<string, boolean>();
+  // What Grok vision saw in each photo, by message_id (§7.4); null when the
+  // image couldn't be read. Re-described from image_url when missing.
+  photos = new PhotoNotes();
+  // The gate-only raw transcript (§19): 12 lines, 15 minutes, never stored.
+  transcript = new Transcript();
   // Groups whose ledger secret this process has set. The secret is derived,
   // so setting it again after a restart writes the same value.
   ledgerSecretSet = new Set<string>();
@@ -118,6 +130,16 @@ export type Extractors = {
   correction: (input: ExtractInput) => Promise<Extracted<CorrectionExtraction>>;
   // Which of Tab's open questions a message answers, and the answer.
   answer: (input: ExtractInput, threads: OpenThread[]) => Promise<AnswerResolution>;
+  // What a photo shows, before the gate (§7.4). Absent: photos go undescribed.
+  describe?: (image_url: string, caption?: string) => Promise<PhotoNote>;
+};
+
+export type AskAgent = {
+  client: ChatClient;
+  model: string;
+  budgetMs?: number; // whole answer, retry included (default 25 s)
+  maxRounds?: number; // tool rounds per attempt (default 5)
+  clock?: () => number; // for the budget; defaults to Date.now
 };
 
 export type BrainCtx = {
@@ -127,6 +149,11 @@ export type BrainCtx = {
   classify: Classify;
   extract: Extractors;
   wit?: (ctx: WitContext) => Promise<string | null>;
+  // The money brain (ask.ts): Grok with lookup tools. Absent means
+  // questions get the template answers.
+  ask?: AskAgent;
+  // A short reason per balance for a long "@Tab breakdown"; null falls back to the full list.
+  summarize?: (input: SummaryInput) => Promise<string[] | null>;
   timing: Timing;
   ledger?: LedgerConfig; // §12.3 links; absent means Tab posts none
   memory: Memory;
@@ -137,6 +164,18 @@ export type BrainCtx = {
 
 export function activeMembers(ctx: BrainCtx, group_id: string) {
   return ctx.store.members(group_id).filter((m) => !m.left_at);
+}
+
+// Names Tab keeps the way they were saved: the group's members, or in a DM,
+// everyone in the groups the person is in.
+export function namesFor(ctx: BrainCtx, chat: Chat): string[] {
+  const groups = chat.group_id
+    ? [chat.group_id]
+    : ctx.store
+        .groups()
+        .map((g) => g.group_id)
+        .filter((g) => activeMembers(ctx, g).some((x) => x.phone === chat.dm_phone));
+  return groups.flatMap((g) => activeMembers(ctx, g).map((x) => x.name)).filter((n): n is string => Boolean(n));
 }
 
 export function styleFor(ctx: BrainCtx, chat: Chat): GroupStyle {
@@ -150,13 +189,32 @@ export function recentContext(
   chat: Chat,
   before: Date,
 ): GateMessage[] {
+  return recentEntries(ctx, chat, before).map((x) => x.msg);
+}
+
+// The message ids recentContext shows (Tab's own lines have none), so a
+// photo looked up again after a restart is only one that context will use.
+export function recentMessageIds(ctx: BrainCtx, chat: Chat, before: Date): string[] {
+  return recentEntries(ctx, chat, before).flatMap((x) => (x.message_id ? [x.message_id] : []));
+}
+
+function recentEntries(
+  ctx: BrainCtx,
+  chat: Chat,
+  before: Date,
+): { at: Date; message_id?: string; msg: GateMessage }[] {
   // Kept messages only: the backend reports everything else as `ignore`,
   // and the module clears that text (§19).
   const humans = ctx.store
     .messages()
-    .filter((x) => x.status === "done" && x.text && x.intent && x.intent !== "ignore" && x.received_at < before)
+    .filter((x) => x.status === "done" && (x.text || x.kind === "image") && x.intent && x.intent !== "ignore" && x.received_at < before)
     .filter((x) => (chat.group_id ? x.group_id === chat.group_id : !x.group_id && x.sender_phone === chat.dm_phone))
-    .map((x) => ({ at: x.received_at, msg: { sender_phone: x.sender_phone, is_dm: !chat.group_id, kind: "text" as const, text: x.text } }));
+    .map((x) => {
+      // A kept photo comes with what Grok vision saw in it (§7.4), if known.
+      const photo = x.kind === "image" ? ctx.memory.photos.get(x.message_id) : undefined;
+      const kind = x.kind === "image" ? ("image" as const) : ("text" as const);
+      return { at: x.received_at, message_id: x.message_id, msg: { sender_phone: x.sender_phone, is_dm: !chat.group_id, kind, text: x.text, ...(photo ? { photo } : {}) } };
+    });
   const tab = ctx.store
     .outbox()
     .filter(
@@ -179,8 +237,7 @@ export function recentContext(
     }));
   return [...humans, ...tab]
     .sort((a, b) => a.at.getTime() - b.at.getTime())
-    .slice(-CONTEXT_MESSAGES)
-    .map((x) => x.msg);
+    .slice(-CONTEXT_MESSAGES);
 }
 
 // ── Sending (every write goes through reducers) ──────────────────────────
@@ -199,15 +256,36 @@ export async function say(
     // newest in its chat (§5.2 target_message_id; Harjyot's #19). Only for
     // answers, never unprompted messages.
     reply_to?: string;
+    // A clarifying question said differently, used once if Tab would
+    // otherwise ask the same thing again (below).
+    rephrase?: string;
   },
-) {
-  const text = compose({
-    purpose: a.purpose,
-    text: a.text,
-    in_group: Boolean(a.chat.group_id),
-    style: styleFor(ctx, a.chat),
-    wit: a.wit,
-  });
+): Promise<boolean> {
+  const write = (raw: string) =>
+    compose({
+      purpose: a.purpose,
+      text: raw,
+      in_group: Boolean(a.chat.group_id),
+      style: styleFor(ctx, a.chat),
+      names: namesFor(ctx, a.chat),
+      wit: a.wit,
+    });
+  let text = write(a.text);
+  // Never the same question about an expense twice in a row (Harjyot's
+  // playground: "how much was Priya's half of the pizza?" three times).
+  // While it's still open, asking again goes out once as `rephrase`, and
+  // after that Tab stops asking. False when nothing went out: callers then
+  // skip their ❓ tapback but keep the question open to an answer.
+  if (a.purpose === "clarifying_question" && a.expense_id && stillAsking(ctx, a.chat, a.expense_id, a.text)) {
+    const again = a.rephrase === undefined ? undefined : write(a.rephrase);
+    const asked = (t: string) =>
+      ctx.store.outbox().some((o) => o.expense_id === a.expense_id && o.purpose === "clarifying_question" && o.status !== "cancelled" && o.text === t);
+    if (again === undefined || asked(again)) {
+      ctx.log("question_not_repeated", { expense_id: a.expense_id, action_id: a.id });
+      return false;
+    }
+    text = again;
+  }
   ctx.memory.lastHadWit.set(chatKey(a.chat), Boolean(a.wit));
   await ctx.db.enqueue_outbox({
     action_id: a.id,
@@ -220,6 +298,19 @@ export async function say(
     purpose: a.purpose,
     send_after: a.send_after ?? ctx.now(),
   });
+  return true;
+}
+
+// Tab's own unexpired question about this expense in this chat, in these
+// words (threads.ts). An invite's text is "Pizza: what's off?".
+function stillAsking(ctx: BrainCtx, chat: Chat, expense_id: string, text: string): boolean {
+  const ttl = ctx.timing.durations.PENDING_QUESTION_TTL;
+  return (ctx.memory.threads.get(chatKey(chat)) ?? []).some(
+    (t) =>
+      (t.expense_id === expense_id || Boolean(t.expense_ids?.includes(expense_id))) &&
+      ctx.now().getTime() - t.asked_at.getTime() <= ttl &&
+      (t.text === text || t.text.endsWith(`: ${text}`)),
+  );
 }
 
 // SPEC §13: Like = logged or understood; Question = not sure, a question follows.

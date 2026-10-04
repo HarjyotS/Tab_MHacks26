@@ -83,7 +83,7 @@ describe("several open questions at once", () => {
     const ride = await sayIn(w, "trip", PEOPLE.Joe, "venmo me for the uber");
     expect(w.db.outbox().map((o) => o.text)).toContain("how much was the uber?");
     await sayIn(w, "trip", PEOPLE.Kian, LEDGER);
-    expect(settleModeReply(w)).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
+    expect(settleModeReply(w)).toBe('bet, running tab it is\nsay "settle up" whenever');
     expect(w.db.settleMode("trip")).toBe("ledger");
     await sayIn(w, "trip", PEOPLE.Joe, "22");
     expect(w.db.expense(`exp_${ride.message_id}`)).toMatchObject({ status: "proposed", total_cents: 2200 });
@@ -217,9 +217,9 @@ describe("free-form answers (Grok resolves them)", () => {
     });
     gateSays(w, { [text]: ["answer", 0.9] });
     const pizza = await w.say("Priya", "pizza was $48 lol");
-    expect(w.said("clarifying_question")).toEqual(["Want me to split that?"]);
+    expect(w.said("clarifying_question")).toEqual(["want me to split that?"]);
     const both = await w.say("Priya", text);
-    expect(w.said("clarifying_question").slice(1)).toEqual(["Who paid for the Pizza?", "Want me to split that?"]);
+    expect(w.said("clarifying_question").slice(1)).toEqual(["who paid for the pizza?", "want me to split that?"]);
     expect(w.db.expense(`exp_${pizza.message_id}`)!.status).toBe("needs_info");
     // The rest of an `answer` asks before acting (Joe's review on #35).
     expect(w.db.expense(`exp_${both.message_id}`)).toBeUndefined();
@@ -371,7 +371,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
     math_problem: null,
     currency: "USD",
   };
-  const adjust = (exclusion_names: string[], fixed: { name: string; amount_cents: number | null; item: string | null }[]) =>
+  const adjust = (exclusion_names: string[], fixed: { name: string; amount_cents: number | null; item: string | null; only?: boolean }[]) =>
     raw(null, null, { payer: "unknown", exclusion_names, fixed });
 
   // The receipt, the tip question, and "5 bucks": an even split, proposed.
@@ -387,7 +387,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
     ]);
     gateSays(w, verdicts);
     await sayIn(w, "bistro", PEOPLE.Priya, "", { kind: "image", image_url: "bistro" });
-    expect(w.db.outbox().some((o) => o.text?.toLowerCase() === "what tip did you leave?")).toBe(true);
+    expect(w.db.outbox().some((o) => o.text?.toLowerCase() === "what'd you tip?")).toBe(true);
     await sayIn(w, "bistro", PEOPLE.Priya, "5 bucks");
     const e = w.db.expenses().find((x) => x.group_id === "bistro")!;
     expect(e).toMatchObject({ status: "proposed", tip_cents: 500, total_cents: 4707 });
@@ -397,18 +397,45 @@ describe("THE BISTRO (never silent on money talk)", () => {
     return { w, e, shares, asked, logged };
   }
 
-  it('prices "alex had both drinks" from the receipt instead of asking for "both drinks"', async () => {
+  it('reads "alex had both drinks" as the drinks being Alex\'s, with the rest shared by Sam and Alex (§7.5 item ownership)', async () => {
+    // Playground: this pinned Alex to only the drinks (Alex $7.23, Sam $39.84).
     const text = "it was just sam and alex, and alex had both drinks";
-    const { w, shares, asked } = await bistro(
-      { expense: { [`adjustment|${text}`]: adjust(["jordan"], [{ name: "alex", amount_cents: null, item: "both drinks" }]) } },
+    const { w, e, shares, asked } = await bistro(
+      {
+        expense: {
+          [`adjustment|${text}`]: adjust(["priya", "jordan"], [{ name: "alex", amount_cents: null, item: "both drinks", only: false }]),
+        },
+      },
       { [text]: ["split_adjustment", 0.81] },
     );
     await sayIn(w, "bistro", PEOPLE.Priya, text);
     expect(asked().at(-1)).toBe("change the split on the bistro?"); // unsure gate: confirm first
     await sayIn(w, "bistro", PEOPLE.Priya, "yes");
-    expect(shares()[ALEX]!.fixed_cents).toBe(598);
+    expect(w.db.expense(e.expense_id)).toMatchObject({ status: "proposed", split_mode: "itemized" });
+    // Alex: drinks $5.98 + half of the other $32.97; Sam: the other half.
+    // Then $8.12 of tax and tip in proportion to $22.465 and $16.485 (§8).
+    expect(shares()[ALEX]!.amount_cents).toBe(2715);
+    expect(shares()[SAM]!.amount_cents).toBe(1992);
+    expect(shares()[PEOPLE.Priya]!.status).toBe("opted_out");
     expect(shares()[JORDAN]!.status).toBe("opted_out");
     expect(asked().some((q) => q.includes("both drinks"))).toBe(false);
+  });
+
+  it('still pins "alex only had both drinks": only those (custom split)', async () => {
+    const text = "it was just sam and alex, and alex only had both drinks";
+    const { w, e, shares } = await bistro(
+      {
+        expense: {
+          [`adjustment|${text}`]: adjust(["priya", "jordan"], [{ name: "alex", amount_cents: null, item: "both drinks", only: true }]),
+        },
+      },
+      { [text]: ["split_adjustment", 0.9] },
+    );
+    await sayIn(w, "bistro", PEOPLE.Priya, text);
+    expect(w.db.expense(e.expense_id)!.split_mode).toBe("custom");
+    expect(shares()[ALEX]!.fixed_cents).toBe(598);
+    expect(shares()[ALEX]!.amount_cents).toBe(723);
+    expect(shares()[SAM]!.amount_cents).toBe(3984);
   });
 
   it('follows up on "its on the receipt" when the item isn\'t there, then takes the amount', async () => {
@@ -428,7 +455,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
     await sayIn(w, "bistro", PEOPLE.Priya, text);
     expect(asked().at(-1)).toBe("how much were alex's cocktails?");
     const reply = await sayIn(w, "bistro", PEOPLE.Priya, answerText);
-    expect(asked().at(-1)).toBe("couldn't find that on the receipt. how much were alex's cocktails?");
+    expect(asked().at(-1)).toBe("hm can't find that on the receipt, how much were alex's cocktails?");
     expect(reply).toMatchObject({ intent: "answer", text: answerText }); // kept, not cleared
     expect(logged.some((l) => l.startsWith("answer_unresolved") && l.includes('"kind":"adjustment"'))).toBe(true);
     await sayIn(w, "bistro", PEOPLE.Priya, "12");
@@ -442,7 +469,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
       { [text]: ["name_reply", 0.41] },
     );
     await sayIn(w, "bistro", SAM, text);
-    expect(asked().at(-1)).toBe("change the split on the bistro?");
+    expect(asked().at(-1)).toBe("just you and priya on the bistro then?");
     await sayIn(w, "bistro", SAM, "yes");
     expect(shares()[ALEX]!.status).toBe("opted_out");
     expect(shares()[JORDAN]!.status).toBe("opted_out");

@@ -1,8 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   checkReceiptMath,
+  extractReceipt,
   type ReceiptRead,
 } from "../src/extraction/receipt.js";
+import type { ChatClient } from "../src/grok/structured.js";
 import { receiptPrice } from "../src/brain/expense.js";
 import type { LineItem } from "../src/store/types.js";
 import { tick } from "../src/brain/process.js";
@@ -121,7 +123,7 @@ describe("receipts (SPEC 7.4)", () => {
     const w = world({ receipt: { meijer: MEIJER } });
     await w.photo("Joe", "meijer");
     expect(w.said("split_proposal")[0]).toMatch(
-      /^Meijer, \$17\.00\. Split 4 ways, that's \$4\.25 each\./,
+      /^meijer \$17\.00 split 4 ways, so \$4\.25 each\n/,
     );
     expect(w.db.lineItems(w.db.expenses()[0]!.expense_id)).toHaveLength(4);
   });
@@ -135,7 +137,7 @@ describe("receipts (SPEC 7.4)", () => {
       total_cents: 10200,
     });
     expect(w.said("item_list")[0]).toBe(
-      'Frita Batidos, $102.00 total\n1. Ribeye $45.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido $12.00\nReply with what you had, or "even" for an even share of whatever\'s left.',
+      'frita batidos, $102.00 total\n1. ribeye $45.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido $12.00\nreply w what you had (numbers work), or "even" for a share of whatever\'s left',
     );
   });
 
@@ -146,7 +148,7 @@ describe("receipts (SPEC 7.4)", () => {
     );
     const w = world({ receipt: { zing: blank } });
     await w.photo("Joe", "zing");
-    expect(w.said("clarifying_question")).toEqual(["What tip did you leave?"]);
+    expect(w.said("clarifying_question")).toEqual(["what'd you tip?"]);
     await w.say("Kian", "10"); // not the payer: ignored as an answer
     expect(w.db.expenses()).toHaveLength(0);
     await w.say("Joe", "3");
@@ -165,7 +167,7 @@ describe("receipts (SPEC 7.4)", () => {
     const w = world({ receipt: { bad } });
     await w.photo("Joe", "bad");
     expect(w.said("clarifying_question")).toEqual([
-      "I read the total as $102.00. Is that right?",
+      "total looks like $102.00 to me, right?",
     ]);
     await w.say("Joe", "yes");
     expect(w.db.expenses()[0]).toMatchObject({
@@ -180,7 +182,7 @@ describe("receipts (SPEC 7.4)", () => {
     const w = world({ receipt: { chf } });
     await w.photo("Joe", "chf");
     expect(w.said("clarifying_question")).toEqual([
-      "What was that in dollars?",
+      "how much was that in dollars?",
     ]);
     await w.say("Joe", "about $60");
     expect(w.db.expenses()[0]).toMatchObject({
@@ -212,6 +214,26 @@ describe("receipts (SPEC 7.4)", () => {
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
     expect(w.said("item_list")).toHaveLength(1);
   });
+
+  it('still itemizes when Grok restates the proposal as amounts the message never said (#44)', async () => {
+    // Live: Grok copied "$4.25 each" from Tab's proposal into fixed. None of it
+    // is in "thats not even", so grounding drops the amounts; the empty entries
+    // must not make the message look specific.
+    const w = world({
+      receipt: { meijer: MEIJER },
+      expense: {
+        "adjustment|thats not even": {
+          is_expense: true, amount_cents: null, amount_is_per_person: false, description: null,
+          payer: "unknown", payer_name: null, participants: "everyone", participant_names: [], exclusion_names: [],
+          fixed: [{ name: "Joe", amount_cents: 425, item: null }, { name: "Kian", amount_cents: 425, item: null }],
+        },
+      },
+    });
+    await w.photo("Joe", "meijer");
+    await w.say("Priya", "thats not even");
+    expect(w.db.expenses()[0]).toMatchObject({ status: "itemizing", split_mode: "itemized" });
+    expect(w.said("item_list")).toHaveLength(1);
+  });
 });
 
 describe("settling while a receipt is open", () => {
@@ -221,7 +243,7 @@ describe("settling while a receipt is open", () => {
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
     await w.say("Kian", "let's settle up");
     expect(w.said("clarifying_question")).toEqual([
-      "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?",
+      "still waiting on claims for frita batidos ($102.00)\nsplit what's unclaimed evenly and settle now?",
     ]);
     expect(w.said("balance_reply")).toEqual([]);
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
@@ -377,7 +399,7 @@ describe("claims and finalizing (SPEC 7.5)", () => {
       [PEOPLE.Jake]: 637,
     });
     expect(w.said("settle_request")[0]).toContain(
-      "Cool, here's what's owed to Joe for Frita Batidos:\nKian $63.75, Priya $25.50, Jake $6.37.",
+      "cool, here's what's owed to Joe for frita batidos:\nKian $63.75, Priya $25.50, Jake $6.37\n",
     );
   });
 
@@ -405,16 +427,55 @@ describe("claims and finalizing (SPEC 7.5)", () => {
     await w.wait(21_000); // demo: 2h → 20s
     expect(nudges()).toHaveLength(1);
     expect(nudges()[0]).toMatchObject({ kind: "group_message", group_id: "house" });
-    expect(nudges()[0]!.text).toMatch(/^Jake, what (did you have|was yours) at Frita Batidos\?/);
+    expect(nudges()[0]!.text).toMatch(/^Jake,? what('d you get| was yours) at frita batidos\? numbers.*"even"/);
 
     await w.wait(121_000); // +12h → +120s
-    expect(nudges()[1]!.text).toBe('Jake, still need yours for Frita Batidos. Numbers, or "even".');
+    expect(nudges()[1]!.text).toMatch(/^Jake,? (still|no rush, just) need yours for frita batidos.*numbers or "even"$/);
 
     await w.wait(300_000); // 44h → 440s
-    expect(nudges()[2]!.text).toMatch(/^Last call, Jake: in \d+ seconds I'll put you down for \$\d+\.\d{2} for Frita Batidos/);
+    expect(nudges()[2]!.text).toMatch(/^last call Jake: in \d+ seconds i'll put you down for \$\d+\.\d{2} for frita batidos/);
     expect(w.db.outbox().filter((o) => o.kind === "dm")).toEqual([]); // no DMs at all
 
     await w.wait(41_000); // 48h → 480s: deadline
     expect(w.db.expenses()[0]!.status).toBe("finalized");
+  });
+});
+
+// Joe's real receipts (kept out of the repo: they show a name and card digits).
+describe("reading real receipts", () => {
+  const fake = (out: object): ChatClient =>
+    ({ chat: { completions: { create: vi.fn().mockResolvedValue({ choices: [{ message: { content: JSON.stringify(out) } }] }) } } }) as unknown as ChatClient;
+  const raw = {
+    is_receipt: true, merchant: "Ambar", tip_line_blank: false, tax_included: false, currency: "USD",
+    fees_cents: null, discount_cents: null, notes: null,
+    items: [
+      { description: "Dinner Ambar Experience", quantity: 4, amount_cents: 19996 },
+      { description: "Restaurant Surcharge 3.5%", quantity: 1, amount_cents: 700 },
+    ],
+    subtotal_cents: 20696, tax_cents: 2070,
+  };
+
+  it("counts a tip printed after the total, so the split covers what was paid", async () => {
+    const r = await extractReceipt(fake({ ...raw, tip_cents: 3999, total_cents: 22766 }), "m", "data:,");
+    expect(r.math_problem).toBeNull();
+    expect(r.receipt.total_cents).toBe(26765);
+  });
+
+  it("reads a card payment mistaken for a discount as the payment it is", async () => {
+    const r = await extractReceipt(fake({ ...raw, tip_cents: null, discount_cents: 22766, total_cents: 0 }), "m", "data:,");
+    expect(r.receipt).toMatchObject({ discount_cents: undefined, total_cents: 22766 });
+    expect(r.math_problem).toBeNull();
+  });
+
+  it("asks for the total instead of confirming $0", async () => {
+    const w = world({
+      receipt: { zero: { receipt: { ...FRITA.receipt, discount_cents: undefined, total_cents: 0 }, tip_line_blank: false, math_problem: "no total", currency: "USD" } },
+    });
+    await w.photo("Joe", "zero");
+    expect(w.said("clarifying_question")).toEqual(["ok what was the total?"]);
+  });
+
+  it("never accepts a $0 total (\"Amount Due $0.00\" read as the total)", () => {
+    expect(checkReceiptMath({ ...FRITA.receipt, discount_cents: 10200, total_cents: 0 })).toBe("no total");
   });
 });

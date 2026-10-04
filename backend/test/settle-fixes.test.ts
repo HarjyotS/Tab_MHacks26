@@ -71,7 +71,7 @@ describe("settle mode is stored in the module (set_settle_mode)", () => {
     await w.wait(31_000);
     const requests = w.said("settle_request");
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toContain("Cool, here's what's owed to Priya for Groceries:\nJoe $15.00, Kian $15.00, Jake $15.00.");
+    expect(requests[0]).toContain("cool, here's what's owed to Priya for groceries:\nJoe $15.00, Kian $15.00, Jake $15.00\n");
   });
 
   it("rejects an unknown group or mode, like the module", async () => {
@@ -103,8 +103,99 @@ describe("one 👍 pays every share the request covers", () => {
     w.db.completeTransfers();
     await w.wait(1000);
     expect(w.said("payment_receipt")).toEqual([
-      "Simulated settlement complete: you paid Joe $10.00 and Priya $15.00. All square.",
+      "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries (simulated, no real money moved)\nyou're all square",
     ]);
+  });
+});
+
+// Harjyot's report: "confirmation messages are only sent to the first person
+// who likes it, not the next few." Each 👍 is its own reaction message, so
+// each approver gets their own DM (payment_receipt:<their reaction>).
+describe("every approver gets their own payment DM (SPEC #15)", () => {
+  const receipts = (w: ReturnType<typeof world>) =>
+    w.db
+      .outbox()
+      .filter((o) => o.purpose === "payment_receipt")
+      .map((o) => [o.to_phone, o.text]);
+  const paid = (to: string, label: string) =>
+    `done, you paid ${to} for ${label} (simulated, no real money moved)\nyou're all square`;
+
+  it("per expense: three debtors tap in turn, and each gets one DM with their own amount", async () => {
+    const w = world(script);
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
+    const p = await pizza(w);
+    const expected: [string, string][] = [];
+    for (const who of ["Kian", "Priya", "Jake"] as const) {
+      await w.react(who, `settle_request:${p}`);
+      w.db.completeTransfers();
+      await w.wait(1000);
+      expected.push([PEOPLE[who], paid("Joe $10.00", "pizza")]);
+      expect(receipts(w)).toEqual(expected);
+      // "everyone's square" only once the last share is paid.
+      expect(w.said("all_square")).toHaveLength(who === "Jake" ? 1 : 0);
+    }
+    await w.wait(1000);
+    expect(receipts(w)).toHaveLength(3);
+    expect(w.said("all_square")).toEqual(["pizza is all settled, everyone's square"]);
+  });
+
+  it("per expense: three 👍s before any transfer completes still get three DMs", async () => {
+    const w = world(script);
+    await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
+    const p = await pizza(w);
+    for (const who of ["Kian", "Priya", "Jake"] as const) await w.react(who, `settle_request:${p}`);
+    await w.wait(1000);
+    expect(receipts(w)).toEqual([]); // nothing until the transfers are done
+    w.db.completeTransfers();
+    await w.wait(1000);
+    expect(receipts(w)).toEqual((["Kian", "Priya", "Jake"] as const).map((who) => [PEOPLE[who], paid("Joe $10.00", "pizza")]));
+    expect(w.said("all_square")).toHaveLength(1);
+  });
+
+  it("ledger: each 👍 on a combined request gets one DM summarizing every share it paid", async () => {
+    const w = world(script);
+    const { request } = await ledgerRequest(w);
+    for (const who of ["Kian", "Jake", "Priya", "Joe"] as const) {
+      await w.react(who, request);
+      w.db.completeTransfers();
+      await w.wait(1000);
+    }
+    const both = "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries (simulated, no real money moved)\nyou're all square";
+    expect(receipts(w)).toEqual([
+      [PEOPLE.Kian, both],
+      [PEOPLE.Jake, both],
+      [PEOPLE.Priya, paid("Joe $10.00", "pizza")],
+      [PEOPLE.Joe, paid("Priya $15.00", "groceries")],
+    ]);
+    expect(w.said("all_square")).toHaveLength(1);
+  });
+
+  // The playground run behind the report: the payee tapped 👍 before and
+  // after the first debtor. Their taps pay nothing and send nothing (SPEC
+  // 7.6: "the payer's own reaction means nothing"), and don't stop the
+  // debtors who tap later from getting their DMs.
+  it("the payee's 👍s, before and after, don't block the debtors' DMs", async () => {
+    const w = world(script);
+    const p = await pizza(w);
+    const settle = await w.say("Kian", "let's settle up");
+    const request = `settle_request:${GROUP}:${settle.message_id}`;
+    await w.react("Joe", request);
+    await w.react("Kian", request);
+    w.db.completeTransfers();
+    await w.wait(1000);
+    for (let i = 0; i < 3; i++) await w.react("Joe", request);
+    await w.wait(1000);
+    expect(receipts(w)).toEqual([[PEOPLE.Kian, paid("Joe $10.00", "pizza")]]);
+
+    for (const who of ["Priya", "Jake"] as const) {
+      await w.react(who, request);
+      w.db.completeTransfers();
+      await w.wait(1000);
+    }
+    expect(w.db.transfers().map((t) => t.from_phone)).toEqual([PEOPLE.Kian, PEOPLE.Priya, PEOPLE.Jake]);
+    expect(receipts(w)).toEqual((["Kian", "Priya", "Jake"] as const).map((who) => [PEOPLE[who], paid("Joe $10.00", "pizza")]));
+    expect(w.db.expense(p)!.status).toBe("settled");
+    expect(w.said("all_square")).toHaveLength(1);
   });
 });
 
@@ -130,12 +221,12 @@ describe("disputes are resolved with resolve_dispute (SPEC 7.6)", () => {
     });
     const fresh = w.db.outbox().filter((o) => o.purpose === "settle_request").at(-1)!;
     expect(fresh.action_id).not.toBe(`settle_request:${p}`);
-    expect(fresh.text).toContain("Kian $4.00, Jake $10.00.");
+    expect(fresh.text).toContain("cool, here's what's owed to Joe for pizza:\nKian $4.00, Jake $10.00\n");
     expect(w.db.expense(p)!.settle_message_id).toBe(fresh.action_id);
     expect(w.db.outbox().find((o) => o.action_id.startsWith("dispute_resolved:"))).toMatchObject({
       kind: "dm",
       to_phone: PEOPLE.Kian,
-      text: "Fixed: you're down for $4.00 for Pizza. Tap 👍 on the new settle request to pay.",
+      text: "fixed, you're down for $4.00 for pizza\ntap 👍 on the new settle msg to pay",
     });
 
     await w.react("Kian", fresh.action_id);
@@ -150,7 +241,7 @@ describe("disputes are resolved with resolve_dispute (SPEC 7.6)", () => {
 
     await w.dm("Kian", "I had $5");
     expect(resolve).not.toHaveBeenCalled();
-    expect(w.db.outbox().at(-1)!.text).toBe("Which one?\n1. Pizza ($10.00)\n2. Groceries ($15.00)");
+    expect(w.db.outbox().at(-1)!.text).toBe("which one?\n1. pizza ($10.00)\n2. groceries ($15.00)");
 
     await w.dm("Kian", "2");
     expect(resolve).toHaveBeenCalledWith({ expense_id: g, phone: PEOPLE.Kian, amount_cents: 500 });
@@ -170,7 +261,7 @@ describe("disputes are resolved with resolve_dispute (SPEC 7.6)", () => {
 
     await w.dm("Kian", "it was $25");
     expect(resolve).not.toHaveBeenCalled();
-    expect(w.db.outbox().at(-1)!.text).toBe("Your part of Pizza can be at most $20.00. What did you actually have?");
+    expect(w.db.outbox().at(-1)!.text).toBe("hm your part of pizza can't be more than $20.00, what'd you actually have?");
     expect(share(w, p, "Kian")).toMatchObject({ status: "disputed", amount_cents: 1000 });
 
     await w.dm("Kian", "ok $12");
@@ -185,7 +276,7 @@ describe("disputes are resolved with resolve_dispute (SPEC 7.6)", () => {
     await w.say("Kian", "mine was 6 bucks");
     expect(share(w, p, "Kian")).toMatchObject({ status: "locked", amount_cents: 600 });
     expect(w.said("settle_request")).toEqual([]);
-    expect(w.said("dispute_followup").at(-1)).toBe("fixed: you're down for $6.00 for pizza");
+    expect(w.said("dispute_followup").at(-1)).toBe("fixed, you're down for $6.00 for pizza");
   });
 
   // Joe's review on #29: a count is not a price.

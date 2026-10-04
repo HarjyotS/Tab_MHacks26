@@ -37,3 +37,30 @@ export async function imageAsDataUrl(
     );
   return `data:${type};base64,${bytes.toString("base64")}`;
 }
+
+// The last few images as data URLs, so the receipt read reuses the download
+// the photo description just made instead of fetching it again (Joe's
+// review on #41). In-flight fetches are shared; failures aren't kept, so a
+// later call can try again. Bounded in count and age, memory only.
+export class ImageCache {
+  private entries = new Map<string, { at: number; data: Promise<string> }>();
+
+  constructor(
+    private readonly opts: { max?: number; ttlMs?: number; fetchImpl?: typeof fetch; now?: () => number } = {},
+  ) {}
+
+  get(url: string): Promise<string> {
+    const now = (this.opts.now ?? Date.now)();
+    const ttl = this.opts.ttlMs ?? 5 * 60_000;
+    for (const [key, e] of this.entries) if (now - e.at > ttl) this.entries.delete(key);
+    const hit = this.entries.get(url);
+    if (hit) return hit.data;
+    const data = imageAsDataUrl(url, this.opts.fetchImpl ?? fetch);
+    this.entries.set(url, { at: now, data });
+    data.catch(() => {
+      if (this.entries.get(url)?.data === data) this.entries.delete(url);
+    });
+    while (this.entries.size > (this.opts.max ?? 4)) this.entries.delete(this.entries.keys().next().value!);
+    return data;
+  }
+}

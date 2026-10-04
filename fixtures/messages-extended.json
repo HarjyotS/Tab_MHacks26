@@ -143,7 +143,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -171,7 +171,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -199,7 +199,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -227,7 +227,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -251,7 +251,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -275,7 +275,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -299,7 +299,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -323,7 +323,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -347,7 +347,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -371,7 +371,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -395,7 +395,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -423,7 +423,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each."
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each"
         }
       ],
       "open_items": [],
@@ -445,7 +445,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each."
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each"
         }
       ],
       "open_items": [],
@@ -463,7 +463,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -487,7 +487,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -511,7 +511,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -535,7 +535,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -559,7 +559,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -583,7 +583,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -607,7 +607,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -631,7 +631,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -811,7 +811,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Hi, I'm Tab. I keep track of shared costs here so nobody has to.\nReply with your first name so I know who's who."
+          "text": "hey i'm tab\ni keep track of who paid for what so nobody has to be the spreadsheet friend\nwhat should i call everyone? reply w your first name"
         }
       ],
       "open_items": [],
@@ -829,7 +829,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Hi, I'm Tab. I keep track of shared costs here so nobody has to.\nReply with your first name so I know who's who."
+          "text": "hey i'm tab\ni keep track of who paid for what so nobody has to be the spreadsheet friend\nwhat should i call everyone? reply w your first name"
         }
       ],
       "open_items": [],
@@ -847,7 +847,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Hi, I'm Tab. I keep track of shared costs here so nobody has to.\nReply with your first name so I know who's who."
+          "text": "hey i'm tab\ni keep track of who paid for what so nobody has to be the spreadsheet friend\nwhat should i call everyone? reply w your first name"
         }
       ],
       "open_items": [],
@@ -1007,7 +1007,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -1035,7 +1035,7 @@
         },
         {
           "from": "Tab",
-          "text": "How much was the Uber?"
+          "text": "how much was the uber?"
         }
       ],
       "open_items": [
@@ -1064,7 +1064,7 @@
         },
         {
           "from": "Tab",
-          "text": "How much was the Uber?"
+          "text": "how much was the uber?"
         }
       ],
       "open_items": [
@@ -1088,7 +1088,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -1113,7 +1113,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -1138,7 +1138,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos is final. Owed to Joe:\nJake $38.25, Priya $25.50, Kian $38.25.\nTap 👍 on this message to pay your part, or reply if something's off."
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -1168,7 +1168,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -1198,7 +1198,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -1227,7 +1227,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza House, $48.00. Split 4 ways, that's $12.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza house $48.00 split 4 ways, so $12.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -1253,7 +1253,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -1278,7 +1278,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00\nReply with what you had, or \"even\" for an even share of whatever's left."
+          "text": "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00\nreply w what you had (numbers work), or \"even\" for a share of whatever's left"
         }
       ],
       "open_items": [
@@ -1443,14 +1443,14 @@
         },
         {
           "from": "Tab",
-          "text": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+          "text": "i keep the group's tab. just say what you paid (\"got groceries 63\") or drop the receipt and i'll split it"
         }
       ],
       "open_items": [],
       "message": {
         "from": "Priya",
         "text": "how do we settle the bil or see the ledger?",
-        "reply_to_tab": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+        "reply_to_tab": "i keep the group's tab. just say what you paid (\"got groceries 63\") or drop the receipt and i'll split it"
       },
       "expect": {
         "intent": "help"
@@ -1475,14 +1475,14 @@
       "context": [
         {
           "from": "Tab",
-          "text": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+          "text": "i keep the group's tab. just say what you paid (\"got groceries 63\") or drop the receipt and i'll split it"
         }
       ],
       "open_items": [],
       "message": {
         "from": "John",
         "text": "where do i see what everyone owes",
-        "reply_to_tab": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+        "reply_to_tab": "i keep the group's tab. just say what you paid (\"got groceries 63\") or drop the receipt and i'll split it"
       },
       "expect": {
         "intent": "balance_query"
@@ -1494,14 +1494,14 @@
       "context": [
         {
           "from": "Tab",
-          "text": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+          "text": "i keep the group's tab. just say what you paid (\"got groceries 63\") or drop the receipt and i'll split it"
         }
       ],
       "open_items": [],
       "message": {
         "from": "Kian",
         "text": "lol ok thanks",
-        "reply_to_tab": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+        "reply_to_tab": "i keep the group's tab. just say what you paid (\"got groceries 63\") or drop the receipt and i'll split it"
       },
       "expect": {
         "intent": "ignore"
@@ -1540,13 +1540,13 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense."
+          "text": "trip coming up? i'll keep a running tab and square everyone up at the end\nsay \"each\" if you'd rather settle as you go"
         }
       ],
       "open_items": [],
       "open_questions": [
         {
-          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense.",
+          "text": "trip coming up? i'll keep a running tab and square everyone up at the end\nsay \"each\" if you'd rather settle as you go",
           "who": "anyone"
         }
       ],
@@ -1568,7 +1568,7 @@
         },
         {
           "from": "Tab",
-          "text": "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?"
+          "text": "still waiting on claims for frita batidos ($102.00)\nsplit what's unclaimed evenly and settle now?"
         }
       ],
       "open_items": [
@@ -1581,7 +1581,7 @@
       ],
       "open_questions": [
         {
-          "text": "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?",
+          "text": "still waiting on claims for frita batidos ($102.00)\nsplit what's unclaimed evenly and settle now?",
           "who": "anyone"
         }
       ],
@@ -1603,7 +1603,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -1616,7 +1616,7 @@
       ],
       "open_questions": [
         {
-          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?",
+          "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped",
           "who": "anyone"
         }
       ],
@@ -1641,13 +1641,13 @@
         },
         {
           "from": "Tab",
-          "text": "How much was the Uber?"
+          "text": "how much was the uber?"
         }
       ],
       "open_items": [],
       "open_questions": [
         {
-          "text": "How much was the Uber?",
+          "text": "how much was the uber?",
           "who": "Kian"
         }
       ],
@@ -1669,13 +1669,13 @@
         },
         {
           "from": "Tab",
-          "text": "Who paid for the Pizza?"
+          "text": "who paid for the pizza?"
         }
       ],
       "open_items": [],
       "open_questions": [
         {
-          "text": "Who paid for the Pizza?",
+          "text": "who paid for the pizza?",
           "who": "anyone"
         }
       ],
@@ -1697,13 +1697,13 @@
         },
         {
           "from": "Tab",
-          "text": "Who paid for the Pizza?"
+          "text": "who paid for the pizza?"
         }
       ],
       "open_items": [],
       "open_questions": [
         {
-          "text": "Who paid for the Pizza?",
+          "text": "who paid for the pizza?",
           "who": "anyone"
         }
       ],
@@ -1721,20 +1721,20 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense."
+          "text": "trip coming up? i'll keep a running tab and square everyone up at the end\nsay \"each\" if you'd rather settle as you go"
         }
       ],
       "open_items": [],
       "open_questions": [
         {
-          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense.",
+          "text": "trip coming up? i'll keep a running tab and square everyone up at the end\nsay \"each\" if you'd rather settle as you go",
           "who": "anyone"
         }
       ],
       "message": {
         "from": "Jake",
         "text": "how do we settle the bil or see the ledger?",
-        "reply_to_tab": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense."
+        "reply_to_tab": "trip coming up? i'll keep a running tab and square everyone up at the end\nsay \"each\" if you'd rather settle as you go"
       },
       "expect": {
         "intent": "help"
@@ -1746,13 +1746,13 @@
       "context": [
         {
           "from": "Tab",
-          "text": "What tip did you leave?"
+          "text": "what'd you tip?"
         }
       ],
       "open_items": [],
       "open_questions": [
         {
-          "text": "What tip did you leave?",
+          "text": "what'd you tip?",
           "who": "Joe"
         }
       ],
@@ -1774,7 +1774,7 @@
         },
         {
           "from": "Tab",
-          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -1787,7 +1787,7 @@
       ],
       "open_questions": [
         {
-          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?",
+          "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped",
           "who": "anyone"
         }
       ],
@@ -1809,7 +1809,7 @@
         },
         {
           "from": "Tab",
-          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it."
+          "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there"
         }
       ],
       "open_items": [
@@ -1822,7 +1822,7 @@
       ],
       "open_questions": [
         {
-          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it.",
+          "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there",
           "who": "anyone"
         }
       ],
@@ -1847,7 +1847,7 @@
         },
         {
           "from": "Tab",
-          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it."
+          "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there"
         }
       ],
       "open_items": [
@@ -1860,7 +1860,7 @@
       ],
       "open_questions": [
         {
-          "text": "THE BISTRO, $47.07. Split 4 ways, that's $11.77 each.\nShout if it's not even or someone skipped it.",
+          "text": "the bistro $47.07 split 4 ways, so $11.77 each\nshout if it wasn't even or someone wasn't there",
           "who": "anyone"
         }
       ],
@@ -1882,7 +1882,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?"
+          "text": "pizza $40.00 split 4 ways, so $10.00 each\nlmk if it wasn't even or someone skipped"
         }
       ],
       "open_items": [
@@ -1900,6 +1900,123 @@
       "expect": {
         "intent": "split_adjustment"
       }
+    },
+    {
+      "id": 185,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "what was on the bistro receipt?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: a receipt's items"
+    },
+    {
+      "id": 186,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "how much did we spend on food?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: a code-computed total"
+    },
+    {
+      "id": 187,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "who paid for the uber?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: who paid"
+    },
+    {
+      "id": 188,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "who still hasn't paid?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: settle status"
+    },
+    {
+      "id": 189,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "how much has priya spent this trip"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: one person's spending"
+    },
+    {
+      "id": 190,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "what's left to settle"
+      },
+      "expect": {
+        "intent": "balance_query"
+      },
+      "note": "What's left to settle is a balance question; the money brain answers every question intent"
+    },
+    {
+      "id": 191,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "how was the pizza split"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: how a split was worked out"
+    },
+    {
+      "id": 192,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "did my payment to jake go through?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: payment status"
+    },
+    {
+      "id": 193,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "why do i owe jake 12"
+      },
+      "expect": {
+        "intent": "breakdown_request"
+      },
+      "note": "Money brain: why a debt is what it is"
     }
   ]
 }

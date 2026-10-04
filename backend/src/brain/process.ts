@@ -1,14 +1,15 @@
 // SPEC §11.1 processing loop and §11.2 scheduler.
-import type { ClassifyResult, Intent } from "@tab/gate";
+import type { ClassifyInput, ClassifyResult, Intent } from "@tab/gate";
 import { thresholds } from "../config.js";
 import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
-import { extractInput } from "./inputs.js";
+import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
+import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
+  acceptSplit,
   announceSettlements,
   approvalFollowups,
   dispute,
@@ -21,15 +22,16 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
-import { handleCorrection } from "./correction.js";
+import { clearlyCorrects, handleCorrection, namedCorrectionTarget } from "./correction.js";
 import { handleLedger } from "./ledger.js";
+import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
-  handleBalanceQuery,
-  handleBreakdown,
   handleHelp,
   handleNameReply,
   onboardNewGroups,
 } from "./talk.js";
+import { answerQuestion } from "./ask.js";
+import { answerWhatItWas, handleBalance, handleBreakdownQuestion, historyFallback, referentExpense } from "./history.js";
 import { addInvite, addThread, closeThread, holdsLockIn, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
 
@@ -39,13 +41,15 @@ import * as T from "../copy/templates.js";
 const MONEY_INTENTS = new Set<Intent>([
   "expense", "receipt", "split_adjustment", "claim", "correction",
   "approval", "dispute", "payment_reported", "balance_query", "breakdown_request",
-  "answer",
+  "answer", "money_question",
 ]);
 
+// A question about an amount that already exists, not a new expense.
+const AMOUNT_QUESTION = /^(why|what'?s|whats|how|where)\b.*\d|\b(from|for)\?\s*$/i;
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
 
 // Intents that ask Tab something rather than tell it.
-const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
 
 const YES =
   /^(yes|yep|yeah|ya|yup|sure|ok|okay|correct|right|do it|go ahead|that's right)\b/i;
@@ -56,27 +60,72 @@ const NO = /^(no|nope|nah|wrong|not right)\b/i;
 // Never silence on money talk (Harjyot's playground on #35): every money
 // intent Tab can act on has a question here or its own handler in clarify().
 const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
-  expense: "Want me to split that?",
-  correction: "Want me to change that expense?",
-  dispute: "Is something off with what you owe?",
-  settle_up: "Want me to settle everyone up now?",
+  expense: T.confirmExpense(),
+  correction: T.confirmCorrection(),
+  dispute: T.confirmDispute(),
+  settle_up: T.confirmSettleUp(),
+  // An unsure photo: ask before the receipt read, never go quiet (§6.4).
+  receipt: T.confirmReceipt(),
 };
 
 // Intents that only read data or point to the 👍: answered even when unsure.
-// Not `receipt`: an unsure photo stays with Tab, never Grok's vision (§19).
-const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval"]);
-
-// "just me and priya", "only sam and alex went", "priya and I went, no one
-// else", "jordan didn't come": who was there, said to an open split.
-const PRESENCE =
-  /\b(just|only)\s+\w+\s+(and|&)\s+\w+|\b(no ?one|nobody) else\b|\b(didn'?t|did not|wasn'?t|weren'?t)\s+(go|come|there|in)\b|\bskipped\b/i;
+// Not `receipt`: an unsure photo gets a question, not the receipt read (§19).
+const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question", "approval"]);
 
 // iPhones type curly quotes ("I’m", "didn’t"); every parser expects ASCII.
 export function normalizeText(text: string | undefined): string | undefined {
   return text?.replace(/[‘’ʼ]/g, "'").replace(/[“”]/g, '"');
 }
 
-export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void> {
+// Counts what handlers write (outbox rows and money state), so the last
+// resort below knows when a message got neither a reply nor a change.
+function trackWrites(base: BrainCtx): { ctx: BrainCtx; wrote: () => boolean } {
+  let writes = 0;
+  const db = new Proxy(base.db, {
+    get(target, key, receiver) {
+      const v = Reflect.get(target, key, receiver) as unknown;
+      if (typeof v !== "function" || key === "set_message_result") return v;
+      return (...args: unknown[]) => {
+        writes++;
+        return (v as (...a: unknown[]) => unknown).apply(target, args);
+      };
+    },
+  });
+  return { ctx: { ...base, db }, wrote: () => writes > 0 };
+}
+
+// Intents that make an unanswered message worth a last-resort look by the
+// money brain. "answer" is the open-threads intent (#35).
+const FALLBACK_INTENTS = new Set<string>([...MONEY_INTENTS, "answer"]);
+const FALLBACK_MIN_CONFIDENCE = 0.3;
+
+// Why a message that got no reply and changed nothing should still get one
+// (Harjyot: "it just gives up"), or undefined to stay quiet (P1). Chatter
+// never qualifies: an ignore, or a non-money guess with nothing open.
+// A message the gate decided to ignore (below the clarify bar) only gets
+// here with open money context in the chat: one of Tab's questions open, or
+// an inline reply to Tab (Joe's review on #38, §19).
+export function fallbackReason(
+  m: Message,
+  result: { intent: Intent; confidence: number; prefiltered?: boolean },
+  decision: Decision,
+  input: ClassifyInput,
+  threadsOpen: boolean,
+): string | undefined {
+  if (m.kind !== "text" || !m.text?.trim() || result.prefiltered || result.intent === "ignore") return undefined;
+  if (result.confidence < FALLBACK_MIN_CONFIDENCE) return undefined;
+  if (decision === "ignore" && !threadsOpen && !input.message.reply_to_tab) return undefined;
+  if (FALLBACK_INTENTS.has(result.intent)) return `unsure_${result.intent}`;
+  if (input.message.reply_to_tab) return "reply_to_tab";
+  if (input.tab_question_open) return "open_question";
+  const open = input.open_items.some(
+    (o) => o.expense_status === "proposed" || o.expense_status === "itemizing" || (o.expense_status === "finalized" && o.my_share_status === "locked"),
+  );
+  return open ? "open_split" : undefined;
+}
+
+export async function processMessage(base: BrainCtx, raw: Message): Promise<void> {
+  const { ctx, wrote } = trackWrites(base);
   const m: Message = { ...raw, text: normalizeText(raw.text) };
   await ctx.db.set_message_result({
     message_id: m.message_id,
@@ -98,7 +147,11 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       // the module clears its text and later context never includes it.
       // An open question tells the pre-filter to pass even "the 2nd one",
       // since a bystander's inline answer only counts if the gate passes it.
-      const input = { ...extractInput(ctx, m), tab_question_open: openThreads(ctx, chatOf(m)).length > 0 };
+      // Photos are described by Grok vision first (§7.4, user-authorized),
+      // so the gate can tell a receipt from a meme.
+      await describePhotos(ctx, m);
+      const input = { ...gateInput(ctx, m), tab_question_open: openThreads(ctx, chatOf(m)).length > 0 };
+      remember(ctx, m); // the gate's 15-minute raw transcript, memory only
       const result = await ctx.classify(input);
       intent = result.intent;
       confidence = result.confidence;
@@ -109,26 +162,77 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
         prefiltered: result.prefiltered === true,
       });
 
-      const reply = await answerThreads(ctx, m, result, decision);
+      // "@Tab breakdown" (§7.8): the full trace of where amounts come from,
+      // checked before anything else so an open question can't swallow it.
+      // "why do I owe Priya" is the same thing for one person.
+      const whyOwe = whyOweTarget(m);
+      const breakdown = BREAKDOWN_COMMAND.test((m.text ?? "").trim()) || whyOwe !== undefined;
+      if (breakdown) await handleBreakdownCommand(ctx, whyOwe ? { ...m, text: `@tab breakdown ${whyOwe}` } : m);
+      const reply: Reply = breakdown ? { answered: false } : await answerThreads(ctx, m, result, decision);
       const answered = reply.answered;
-      // "why?" right after Tab's balance reply: the short explanation.
-      const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
-      if (why) await handleBreakdown(ctx, m);
+      // "why?" right after Tab's balance reply: the short answer (Joe's rule).
+      // A full question the gate passed ("how much did we spend on food?")
+      // is answered as itself.
+      const why =
+        !breakdown && !answered && !(decision !== "ignore" && intent === "money_question") &&
+        WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
+      // With nothing open, "why?" says what "it" was or their last payment (§7.8 History).
+      if (why) await handleShortWhy(ctx, m, () => historyFallback(ctx, m));
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
-      const ledger = !answered && !why && wantsLedger(m, intent, decision);
+      const ledger = !breakdown && !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);
-      keep = answered || moneyRelated || why || ledger;
+      keep = breakdown || answered || moneyRelated || why || ledger;
       // Stored as an answer, so it stays in later context (§19 keeps it).
       if (answered) intent = "answer";
       if (!keep) intent = "ignore";
-      if (!answered && !why && !ledger) {
-        if (decision === "act") await act(ctx, m, result.intent);
-        else if (decision === "clarify") await clarify(ctx, m, result.intent);
+      let failed: unknown;
+      if (!breakdown && !answered && !why && !ledger) {
+        try {
+          if (decision === "act") await act(ctx, m, result.intent);
+          else if (decision === "clarify") await clarify(ctx, m, result.intent, undefined, result.confidence);
+        } catch (err) {
+          failed = err; // still worth a last-resort answer below
+        }
       } else if (reply.rest) {
         // The same message also said something else ("yep, and I got gas $30").
         if (reply.rest.decision === "act") await act(ctx, m, reply.rest.intent);
         else await clarify(ctx, m, reply.rest.intent, `clarify:${m.message_id}:rest`);
       }
+      // Last resort: a money-ish message that got no reply and changed
+      // nothing goes to the money brain, which answers or asks one specific
+      // question. It only writes text. Anything that already replied
+      // (including another fallback) wins.
+      // #35's own fallbacks (a clarify question, a follow-up) write, so
+      // they win; a reply already queued for this message wins too.
+      const replied = ctx.store.outbox().some((o) => o.target_message_id === m.message_id);
+      const reason = !wrote() && !replied
+        ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0)
+        : undefined;
+      // A bare "yeah" / "ok" / "bet" right after a split is agreement, not a
+      // question for the money brain (playground: "yeah" after the payer's 👍
+      // got the proposal posted again). Tab likes it; an open split counts it.
+      const agreed = reason && ctx.ask && !m.is_dm ? recentSplit(ctx, m) : undefined;
+      if (agreed) {
+        await tapback(ctx, m, "like", agreed.expense_id);
+        if (agreed.status === "proposed") await acceptSplit(ctx, agreed, m.sender_phone);
+        keep = true;
+        ctx.log("agreement_liked", { message_id: m.message_id, group_id: m.group_id, expense_id: agreed.expense_id });
+      } else if (reason && (await answerWhatItWas(ctx, m))) {
+        // "what was it for" right after one of Tab's messages is answered
+        // from that message's records, no Grok needed (§7.8 History).
+        ctx.log("fallback_history", { message_id: m.message_id, group_id: m.group_id, reason });
+        keep = true;
+        intent = result.intent;
+      } else if (reason && ctx.ask) {
+        ctx.log("fallback_ask", { message_id: m.message_id, group_id: m.group_id, reason, intent: result.intent, confidence: result.confidence });
+        const about = repliedExpense(ctx, m) ?? latestOpen(ctx, groupFor(ctx, m), ["proposed", "itemizing"]);
+        // Kept (§19) only if Tab actually answered it.
+        if (await answerQuestion(ctx, m, "fallback", about, result.intent)) {
+          keep = true;
+          intent = result.intent;
+        }
+      }
+      if (failed) throw failed;
     }
     await ctx.db.set_message_result({
       message_id: m.message_id,
@@ -154,7 +258,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
 
 const LEDGER_ASK = /\bledger\b/i;
 const TO_TAB = /^@?tab\b/i;
-const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
 
 function wantsLedger(m: Message, intent: Intent, decision: string): boolean {
   const text = (m.text ?? "").trim();
@@ -162,23 +266,21 @@ function wantsLedger(m: Message, intent: Intent, decision: string): boolean {
   return TO_TAB.test(text) || m.group_id === undefined || (decision !== "ignore" && READ_INTENTS.has(intent));
 }
 
-// An inline reply binds a message to one expense (Harjyot's review on #14,
-// like §6.2 for tapbacks): a reply to Tab's message about an expense, or to
-// the message that created it. Used to pick the target, never to lower a bar.
-export function repliedExpense(ctx: BrainCtx, m: Message): Expense | undefined {
-  if (!m.reply_to_id) return undefined;
-  const tab = ctx.store.outbox().find((o) => o.sent_photon_id === m.reply_to_id && o.expense_id);
-  const id = tab?.expense_id ?? ctx.store.expenses().find((e) => e.source_message_id === m.reply_to_id)?.expense_id;
-  return id ? ctx.store.expense(id) : undefined;
-}
+// Lives in inputs.ts now, which also shows the gate the bound expense.
+export { repliedExpense };
 
 async function act(ctx: BrainCtx, m: Message, intent: Intent) {
   const bound = repliedExpense(ctx, m);
   const boundIf = (...statuses: Expense["status"][]) => (bound && statuses.includes(bound.status) ? bound : undefined);
   switch (intent) {
-    case "expense":
+    case "expense": {
       // A captioned photo ("dinner, i paid") is still a receipt.
-      return m.kind === "image" ? handleReceipt(ctx, m) : handleExpense(ctx, m);
+      if (m.kind === "image") return handleReceipt(ctx, m);
+      // "actually the uber was $30 not $24": a correction to the open Uber, not
+      // a second one. The gate said new expense, so only when it clearly is one.
+      const corrected = clearlyCorrects(m.text ?? "") ? namedCorrectionTarget(ctx, m) : undefined;
+      return corrected ? handleCorrection(ctx, m, corrected) : handleExpense(ctx, m);
+    }
     case "split_adjustment":
       return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed", "finalized"));
     case "name_reply":
@@ -192,10 +294,20 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       const e = boundIf("finalized");
       return dispute(ctx, m, e ? [e] : disputeTargets(ctx, m));
     }
+    // Balances and breakdowns are templates: deterministic, and instant
+    // (Joe's review on #38), with the sender's history when nothing is open
+    // (§7.8 History). Anything else about money goes to the money brain
+    // (§7.8 Questions), with the expense an inline reply points at, or the
+    // one "that" points back to in Tab's recent messages.
     case "balance_query":
-      return handleBalanceQuery(ctx, m);
+      return handleBalance(ctx, m);
     case "breakdown_request":
-      return handleBreakdown(ctx, m);
+      // Free-form ("what's the $90.70 from?"): the command answers, unless
+      // it's "what was it for" or the sender has nothing open (history.ts).
+      return handleBreakdownQuestion(ctx, m);
+    case "money_question":
+      if (await answerWhatItWas(ctx, m)) return;
+      return void (await answerQuestion(ctx, m, "money_question", bound ?? referentExpense(ctx, m)));
     case "help":
       return handleHelp(ctx, m);
     case "receipt":
@@ -207,7 +319,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return receipt ? handleAdjustment(ctx, m, m.text ?? "", receipt) : handleClaim(ctx, m, boundIf("itemizing"));
     }
     case "correction":
-      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : undefined);
+      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m));
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
     // payment_reported is ignored in the MVP; ignore needs nothing.
@@ -218,7 +330,11 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
 
 // `id` differs when the same message also answered one of Tab's questions,
 // which may have asked something already.
-async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`) {
+// Fairly sure it's an expense, just short of the act bar: after "yes" the
+// sender is the payer, so Tab asks one question, not two.
+const FAIRLY_SURE = 0.75;
+
+async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`, confidence = 0) {
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
@@ -232,6 +348,14 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     if (receipt) return handleAdjustment(ctx, m, m.text ?? "", receipt, { confirmOnly: true });
     return ctx.log("no_handler", { message_id: m.message_id, intent });
   }
+  // Unsure, but it reads as a correction to an open expense it names: ask
+  // "change uber to $30?" and apply only on yes (Joe's review on #44), never
+  // "want me to split that?" about a duplicate.
+  const correcting = intent === "expense" || intent === "correction" ? namedCorrectionTarget(ctx, m) : undefined;
+  if (correcting) return confirmCorrectionOf(ctx, m, correcting, id);
+  // "whats the $90.70 from?" asks about a balance; offering to split it as a
+  // new expense would be wrong. Point to the command instead (live run).
+  if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
   // §6.4: an unsure adjustment is about an open expense, so ask rather than
   // stay silent: explain what's wrong, or confirm before applying.
   if (intent === "split_adjustment") {
@@ -254,8 +378,19 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     who: "asker",
     asker: m.sender_phone,
     data: intent === "expense"
-      ? { kind: "confirm", then: "expense", source: m, asked_at: ctx.now() }
+      ? { kind: "confirm", then: "expense", source: m, sender_paid: confidence >= FAIRLY_SURE, asked_at: ctx.now() }
       : { kind: "confirm", then: "act", intent, source: m, asked_at: ctx.now() },
+  });
+}
+
+async function confirmCorrectionOf(ctx: BrainCtx, m: Message, e: Expense, id: string) {
+  const { result } = await ctx.extract.correction(extractInput(ctx, m));
+  const text = T.confirmCorrectionTo(e.description, result.new_amount_cents);
+  await tapback(ctx, m, "question", e.expense_id);
+  await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text, expense_id: e.expense_id });
+  addThread(ctx, chatOf(m), {
+    id, text, who: "asker", asker: m.sender_phone, expense_id: e.expense_id,
+    data: { kind: "confirm", then: "act", intent: "correction", source: m, asked_at: ctx.now() },
   });
 }
 
@@ -502,7 +637,10 @@ async function applyAnswer(
     case "split_open": {
       const e = threadExpense(ctx, t, "proposed");
       if (!e) return false;
-      if (r.yes_no === "no") return splitLooksRight(ctx, m, t, e);
+      // Agreement is never an objection: "yeah", "nope, looks right" and
+      // "split 4 ways" change nothing, whatever yes_no Grok read (Harjyot's
+      // playground: "yeah" got "ok what was uneven?"). Only a change goes on.
+      if (agreesWithSplit(ctx, m.text ?? "", e)) return splitLooksRight(ctx, m, t, e);
       // The proposal stays open to everyone else's changes.
       await handleAdjustment(ctx, m, m.text ?? "", e, { confirmOnly });
       return true;
@@ -526,6 +664,12 @@ async function applyAnswer(
     case "adjust_open": {
       const e = threadExpense(ctx, t, "proposed", "finalized");
       if (!e) return false;
+      // "split 4 ways", "nvm it's even": even after all, so the split stands
+      // and the question is answered (playground: Tab asked it again).
+      if (agreesWithSplit(ctx, m.text ?? "", e)) {
+        await keepSplit(ctx, m, e, true);
+        return true;
+      }
       // "oh just $10" after "What did Jake actually have?" needs the name.
       await handleAdjustment(ctx, m, r.restated ?? m.text ?? "", e, { confirmOnly });
       closeThread(ctx, chatOf(m), t);
@@ -557,17 +701,15 @@ function threadExpense(ctx: BrainCtx, t: Thread, ...statuses: Expense["status"][
   return open.length === 1 ? open[0] : undefined;
 }
 
-// "nope, looks right" to "Anything uneven?": the same as a 👍 on the
-// proposal from them (§6.2), which locks it in once everyone has.
+// "nope, looks right" to "Anything uneven?": that person is fine with it,
+// as with their 👍 on the proposal (§6.2), and it locks in once everyone
+// is. Unlike the payer's 👍, the payer's typed "yeah" doesn't lock it in.
 async function splitLooksRight(ctx: BrainCtx, m: Message, t: Thread, e: Expense): Promise<boolean> {
   const share = ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
   if (!share || share.status === "opted_out") return false;
   await tapback(ctx, m, "like", e.expense_id);
-  if (!share.responded) await ctx.db.set_share({ ...share, responded: true });
-  if (liveShares(ctx, e.expense_id).every((s) => s.responded)) {
-    closeThread(ctx, chatOf(m), t);
-    await finalize(ctx, ctx.store.expense(e.expense_id)!);
-  }
+  await acceptSplit(ctx, e, m.sender_phone);
+  if (ctx.store.expense(e.expense_id)?.status !== "proposed") closeThread(ctx, chatOf(m), t);
   return true;
 }
 
@@ -661,12 +803,13 @@ async function answerExpense(ctx: BrainCtx, m: Message, t: Thread, answer: strin
     mode,
   );
   // "it's the cheesecake on the receipt": an item named in the answer is
-  // priced from the receipt, as in the first message (§7.5).
-  const retry = p.kind === "adjustment" ? priceFromReceipt(extracted, ctx.store.lineItems(p.expense_id)) : extracted;
+  // priced from the receipt, and "half of the cost" from the total, as in
+  // the first message (§7.5).
+  const expense = p.kind === "adjustment" ? ctx.store.expense(p.expense_id) : undefined;
+  const retry = expense ? priceChange(ctx, expense, extracted, { text: answer, problem: p.problems[0] }) : extracted;
   if (retry.problems.length >= p.problems.length) return false; // didn't help
   closeThread(ctx, chatOf(m), t);
   if (p.kind === "adjustment") {
-    const expense = ctx.store.expense(p.expense_id);
     if (!expense) return true;
     if (retry.problems.length > 0) {
       const id = `clarify:${m.message_id}`;
@@ -709,7 +852,7 @@ async function answerConfirm(
     await tapback(ctx, m, "like");
     return;
   }
-  if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source);
+  if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source, { senderPaid: p.sender_paid && m.sender_phone === p.source.sender_phone });
   else if (p.then === "adjustment" && p.extraction && p.expense_id) {
     const expense = ctx.store.expense(p.expense_id);
     if (expense?.status === "proposed" || expense?.status === "finalized") {
@@ -793,7 +936,7 @@ export async function tick(ctx: BrainCtx): Promise<void> {
         text: T.objectionReminder(),
         expense_id: e.expense_id,
       });
-      // "Anything else?" reopens the split for replies.
+      // "anything else?" reopens the split for replies.
       addInvite(ctx, { group_id: e.group_id }, { id, text: `${e.description}: ${T.objectionReminder()}`, kind: "split_open", expense_id: e.expense_id });
     }
   });
@@ -842,7 +985,7 @@ async function answerReceipt(
       return;
     }
     const id = `clarify:${m.message_id}`;
-    const question = "What was the total?";
+    const question = T.whatWasTotal();
     await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question });
     askReceipt(ctx, p.source, { id, text: question, read: p.read, stage: "total" });
     return;
@@ -966,3 +1109,14 @@ async function answerSettleMode(ctx: BrainCtx, m: Message, t: Thread, mode: "led
     text: T.settleModeSet(mode),
   });
 }
+
+// "yeah", "ok", "bet", "sounds good", 👍: a short message that only agrees.
+const BARE_AGREEMENT = /^(?:y(?:ea+h?|es+|ep|up|a)|ok(?:ay)?|k+|kk|cool|bet|word|facts|perfect|sounds? good|looks? (?:good|right)|all good|that'?s right|correct|true|fair|for sure|fs|deal|done|👍|👌|💯)[\s!.]*$/iu;
+
+// The split a bare agreement is about: the newest one in this chat that's
+// proposed or just locked in.
+function recentSplit(ctx: BrainCtx, m: Message): Expense | undefined {
+  if (!BARE_AGREEMENT.test((m.text ?? "").trim())) return undefined;
+  return latestOpen(ctx, groupFor(ctx, m), ["proposed", "finalized"]);
+}
+
