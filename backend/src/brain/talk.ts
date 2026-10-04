@@ -180,7 +180,7 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
         owed: all.filter((d) => d.to.phone === m.sender_phone),
       })
     : T.balanceReply({ debts: all });
-  await say(ctx, { chat: chatOf(m), purpose: "balance_reply", id: `balance_reply:${m.message_id}`, text });
+  await say(ctx, { chat: chatOf(m), purpose: "balance_reply", id: `balance_reply:${m.message_id}`, reply_to: m.message_id, text });
 }
 
 export async function handleBreakdown(ctx: BrainCtx, m: Message) {
@@ -189,7 +189,7 @@ export async function handleBreakdown(ctx: BrainCtx, m: Message) {
   await say(ctx, {
     chat: chatOf(m),
     purpose: "breakdown_reply",
-    id: `breakdown_reply:${m.message_id}`,
+    id: `breakdown_reply:${m.message_id}`, reply_to: m.message_id,
     text: T.breakdownReply({ lines: myLines(ctx, group_id, m.sender_phone) }),
   });
 }
@@ -198,7 +198,7 @@ export async function handleHelp(ctx: BrainCtx, m: Message) {
   await say(ctx, {
     chat: chatOf(m),
     purpose: "help_reply",
-    id: `help_reply:${m.message_id}`,
+    id: `help_reply:${m.message_id}`, reply_to: m.message_id,
     text: T.helpReply(m.message_id),
   });
 }

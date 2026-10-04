@@ -62,4 +62,22 @@ describe("inline replies", () => {
     expect(w.db.transfers()).toEqual([]);
     expect(w.said("clarifying_question")).toEqual(["Tap 👍 on the settle request to pay your part."]);
   });
+
+  it("threads Tab's answers to the message they answer, and nothing unprompted (#19)", async () => {
+    const w = world({
+      expense: {
+        "new|got pizza, $40": raw(4000, "Pizza"),
+        "new|venmo me for the uber": { ...raw(0, "Uber"), amount_cents: null },
+      },
+    });
+    const pizza = await w.say("Joe", "got pizza, $40");
+    const uber = await w.say("Kian", "venmo me for the uber");
+    const ask = await w.say("Priya", "what do i owe");
+    await w.wait(21_000); // the reminder: unprompted
+    const by = (purpose: string) => w.db.outbox().find((o) => o.purpose === purpose)!;
+    expect(by("split_proposal").target_message_id).toBe(pizza.message_id);
+    expect(by("clarifying_question").target_message_id).toBe(uber.message_id);
+    expect(by("balance_reply").target_message_id).toBe(ask.message_id);
+    expect(by("objection_reminder").target_message_id).toBeUndefined();
+  });
 });

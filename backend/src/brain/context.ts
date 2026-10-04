@@ -181,6 +181,10 @@ export async function say(
     expense_id?: string;
     send_after?: Date;
     wit?: string | null;
+    // The message this answers: sent as an inline reply when it's still the
+    // newest in its chat (§5.2 target_message_id; Harjyot's #19). Only for
+    // answers, never unprompted messages.
+    reply_to?: string;
   },
 ) {
   const text = compose({
@@ -196,6 +200,7 @@ export async function say(
     kind: a.chat.group_id ? "group_message" : "dm",
     group_id: a.chat.group_id,
     to_phone: a.chat.dm_phone,
+    target_message_id: a.reply_to,
     text,
     expense_id: a.expense_id,
     purpose: a.purpose,

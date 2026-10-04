@@ -73,7 +73,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent);
       ctx.log("classified", { message_id: m.message_id, group_id: m.group_id, intent, confidence, decision });
 
-      const answered = (await mayAnswerPending(ctx, m, moneyRelated)) && (await answerPending(ctx, m));
+      const answered = (await mayAnswerPending(ctx, m, moneyRelated, result.intent)) && (await answerPending(ctx, m));
       // "why?" right after Tab's balance reply: the short explanation.
       const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleBreakdown(ctx, m);
@@ -166,7 +166,7 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`,
+    id: `clarify:${m.message_id}`, reply_to: m.message_id,
     text: question,
   });
   ctx.memory.pending.set(chatKey(chatOf(m)), {
@@ -182,10 +182,16 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
 // message is classified normally.
 // An open question is answered by the person Tab asked, or by anyone whose
 // message the gate itself judged money-related.
-async function mayAnswerPending(ctx: BrainCtx, m: Message, moneyRelated: boolean): Promise<boolean> {
+// Intents that could be someone else's answer to Tab's money question
+// ("who paid?" → "joe did"). A balance question or a claim never is.
+const ANSWER_INTENTS = new Set<Intent>(["expense", "correction", "split_adjustment"]);
+
+async function mayAnswerPending(ctx: BrainCtx, m: Message, moneyRelated: boolean, intent: Intent): Promise<boolean> {
   const p = ctx.memory.pending.get(chatKey(chatOf(m)));
+  if (!p) return false;
   // The settle-mode question is answered by anyone, by regex only (no Grok).
-  return Boolean(p) && (p!.kind === "settle_mode" || m.sender_phone === p!.source.sender_phone || moneyRelated);
+  if (p.kind === "settle_mode" || m.sender_phone === p.source.sender_phone) return true;
+  return moneyRelated && ANSWER_INTENTS.has(intent);
 }
 
 async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
@@ -229,7 +235,7 @@ async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
       await say(ctx, {
         chat: chatOf(m),
         purpose: "clarifying_question",
-        id: `clarify:${m.message_id}`,
+        id: `clarify:${m.message_id}`, reply_to: m.message_id,
         text: T.clarifyingQuestion(retry.problems[0]!, {
           description: expense.description,
           people: [],
@@ -359,7 +365,7 @@ async function answerReceipt(ctx: BrainCtx, m: Message, p: Extract<Pending, { ki
     }
     if (!NO.test(text)) return false;
     ctx.memory.pending.set(key, { ...p, stage: "total", asked_at: ctx.now() });
-    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, text: "What was the total?" });
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: "What was the total?" });
     return true;
   }
   if (p.stage === "total") {

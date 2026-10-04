@@ -32,7 +32,7 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`,
+      id: `clarify:${m.message_id}`, reply_to: m.message_id,
       text: "Post that in the group chat and I'll split it.",
     });
     return;
@@ -100,7 +100,7 @@ async function askAbout(ctx: BrainCtx, m: Message, question: string) {
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`,
+    id: `clarify:${m.message_id}`, reply_to: m.message_id,
     text: question,
   });
 }
@@ -197,6 +197,7 @@ async function postItemList(ctx: BrainCtx, expense_id: string) {
       items: ctx.store.lineItems(expense_id),
     }),
     expense_id,
+    reply_to: e.source_message_id, // answers the receipt photo
   });
 }
 
@@ -255,7 +256,7 @@ export async function handleClaim(
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`,
+      id: `clarify:${m.message_id}`, reply_to: m.message_id,
       text: `Which one?\n${targets.map((e, i) => `${i + 1}. ${e.description}`).join("\n")}`,
     });
     ctx.memory.pending.set(chatKey(chatOf(m)), {
@@ -274,7 +275,7 @@ export async function handleClaim(
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`,
+      id: `clarify:${m.message_id}`, reply_to: m.message_id,
       text: 'Which ones? Reply with the numbers, or "even".',
       expense_id: e.expense_id,
     });

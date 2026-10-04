@@ -133,7 +133,7 @@ export async function settleUp(ctx: BrainCtx, m: Message) {
     await say(ctx, {
       chat: chatOf(m),
       purpose: "balance_reply",
-      id: `settle_up:${m.message_id}`,
+      id: `settle_up:${m.message_id}`, reply_to: m.message_id,
       text: T.nothingToSettle(),
     });
 }
@@ -193,6 +193,7 @@ export async function textApproval(ctx: BrainCtx, m: Message) {
     chat: chatOf(m),
     purpose: "clarifying_question",
     id: `tap_hint:${request_id}:${m.sender_phone}`,
+    reply_to: m.message_id,
     text: T.tapToPay(),
   });
 }
@@ -207,6 +208,8 @@ export async function dispute(ctx: BrainCtx, m: Message, expense: Expense) {
     chat: chatOf(m),
     purpose: "dispute_followup",
     id: `dispute_followup:${m.message_id}`,
+    // A tapback can trigger this; only a text message can be replied to.
+    reply_to: m.kind === "reaction" ? undefined : m.message_id,
     text: T.disputeFollowup({ seed: m.message_id, description: expense.description, amount_cents: share.amount_cents }),
     expense_id: expense.expense_id,
   });
@@ -261,7 +264,7 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`,
+      id: `clarify:${m.message_id}`, // answers a tapback: no thread
       text: "What's off?",
       expense_id: expense.expense_id,
     });

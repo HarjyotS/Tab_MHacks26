@@ -54,7 +54,7 @@ async function ask(
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`,
+    id: `clarify:${m.message_id}`, reply_to: m.message_id,
     text: q,
     expense_id: "expense_id" in pending ? pending.expense_id : undefined,
   });
@@ -76,7 +76,7 @@ export async function handleExpense(
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`,
+      id: `clarify:${m.message_id}`, reply_to: m.message_id,
       text: "Post that in the group chat and I'll split it.",
     });
     return;
@@ -256,6 +256,8 @@ export async function postProposal(
       updated,
     }),
     expense_id,
+    // The first proposal answers the expense message; updates aren't answers.
+    reply_to: updated ? undefined : e.source_message_id,
   });
 }
 
@@ -307,7 +309,7 @@ export async function handleAdjustment(
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`,
+      id: `clarify:${m.message_id}`, reply_to: m.message_id,
       text: "What's uneven?",
       expense_id: expense.expense_id,
     });
@@ -323,7 +325,7 @@ export async function handleAdjustment(
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`,
+      id: `clarify:${m.message_id}`, reply_to: m.message_id,
       text: `That's more than the ${money(base)} total. What did ${name} actually have?`,
       expense_id: expense.expense_id,
     });
@@ -331,7 +333,7 @@ export async function handleAdjustment(
   }
   if (opts.confirmOnly) {
     await tapback(ctx, m, "question", expense.expense_id);
-    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, text: `Change the split on ${expense.description}?`, expense_id: expense.expense_id });
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: `Change the split on ${expense.description}?`, expense_id: expense.expense_id });
     ctx.memory.pending.set(chatKey(chatOf(m)), { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() });
     return;
   }
