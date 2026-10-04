@@ -281,6 +281,25 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
     expect(said("all_square")).toEqual(["everyone's square"]);
   });
 
+  it("locks in a split still open for changes when someone asks to settle now", async () => {
+    db.transferKey = "approval_expense";
+    const groceries = await send(JOE, "got groceries, $63");
+    expect(db.expense(expenseId(groceries))!.status).toBe("proposed");
+    const settle = await send(KIAN, "let's settle up");
+    expect(db.expense(expenseId(groceries))!.status).toBe("finalized");
+    expect(said("balance_reply")).toEqual([]);
+    expect(said("settle_request")).toHaveLength(1);
+    expect(db.expense(expenseId(groceries))!.settle_message_id).toBe(`settle_request:${G}:${settle.message_id}`);
+  });
+
+  it("posts one request, not two, in per-expense mode", async () => {
+    db.transferKey = "approval_expense";
+    ctx.memory.settleMode.set(G, "per_expense");
+    await send(JOE, "got groceries, $63");
+    await send(KIAN, "let's settle up");
+    expect(said("settle_request")).toHaveLength(1);
+  });
+
   it("says there's nothing to settle when nobody owes anything", async () => {
     await send(KIAN, "let's settle up");
     expect(said("balance_reply")).toEqual(["Nothing to settle. Everyone's square."]);
