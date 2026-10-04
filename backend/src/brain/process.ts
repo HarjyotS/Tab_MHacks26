@@ -23,7 +23,7 @@ import {
 } from "./settle.js";
 import { handleCorrection } from "./correction.js";
 import { handleLedger } from "./ledger.js";
-import { handleHelp, handleNameReply, onboardNewGroups } from "./talk.js";
+import { handleBalanceQuery, handleBreakdown, handleHelp, handleNameReply, onboardNewGroups } from "./talk.js";
 import { answerQuestion } from "./ask.js";
 import { addInvite, addThread, closeThread, holdsLockIn, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
@@ -40,7 +40,7 @@ const MONEY_INTENTS = new Set<Intent>([
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
 
 // Intents that ask Tab something rather than tell it.
-const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
 
 const YES =
   /^(yes|yep|yeah|ya|yup|sure|ok|okay|correct|right|do it|go ahead|that's right)\b/i;
@@ -59,7 +59,7 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
 
 // Intents that only read data or point to the 👍: answered even when unsure.
 // Not `receipt`: an unsure photo stays with Tab, never Grok's vision (§19).
-const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval"]);
+const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question", "approval"]);
 
 // "just me and priya", "only sam and alex went", "priya and I went, no one
 // else", "jordan didn't come": who was there, said to an open split.
@@ -96,13 +96,19 @@ const FALLBACK_MIN_CONFIDENCE = 0.3;
 // Why a message that got no reply and changed nothing should still get one
 // (Harjyot: "it just gives up"), or undefined to stay quiet (P1). Chatter
 // never qualifies: an ignore, or a non-money guess with nothing open.
+// A message the gate decided to ignore (below the clarify bar) only gets
+// here with open money context in the chat: one of Tab's questions open, or
+// an inline reply to Tab (Joe's review on #38, §19).
 export function fallbackReason(
   m: Message,
   result: { intent: Intent; confidence: number; prefiltered?: boolean },
+  decision: Decision,
   input: ClassifyInput,
+  threadsOpen: boolean,
 ): string | undefined {
   if (m.kind !== "text" || !m.text?.trim() || result.prefiltered || result.intent === "ignore") return undefined;
   if (result.confidence < FALLBACK_MIN_CONFIDENCE) return undefined;
+  if (decision === "ignore" && !threadsOpen && !input.message.reply_to_tab) return undefined;
   if (FALLBACK_INTENTS.has(result.intent)) return `unsure_${result.intent}`;
   if (input.message.reply_to_tab) return "reply_to_tab";
   if (input.tab_question_open) return "open_question";
@@ -154,7 +160,7 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       const why =
         !answered && !(decision !== "ignore" && intent === "money_question") &&
         WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
-      if (why) await answerQuestion(ctx, m, "why", repliedExpense(ctx, m));
+      if (why) await handleBreakdown(ctx, m);
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
       const ledger = !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);
@@ -179,12 +185,20 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       // nothing goes to the money brain, which answers or asks one specific
       // question. It only writes text. Anything that already replied
       // (including another fallback) wins.
-      const reason = ctx.ask && !wrote() ? fallbackReason(m, result, input) : undefined;
+      // #35's own fallbacks (a clarify question, a follow-up) write, so
+      // they win; a reply already queued for this message wins too.
+      const replied = ctx.store.outbox().some((o) => o.target_message_id === m.message_id);
+      const reason = ctx.ask && !wrote() && !replied
+        ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0)
+        : undefined;
       if (reason) {
         ctx.log("fallback_ask", { message_id: m.message_id, group_id: m.group_id, reason, intent: result.intent, confidence: result.confidence });
-        keep = true;
-        intent = result.intent;
-        await answerQuestion(ctx, m, "fallback", repliedExpense(ctx, m) ?? latestOpen(ctx, groupFor(ctx, m), ["proposed", "itemizing"]));
+        const about = repliedExpense(ctx, m) ?? latestOpen(ctx, groupFor(ctx, m), ["proposed", "itemizing"]);
+        // Kept (§19) only if Tab actually answered it.
+        if (await answerQuestion(ctx, m, "fallback", about, result.intent)) {
+          keep = true;
+          intent = result.intent;
+        }
       }
       if (failed) throw failed;
     }
@@ -250,12 +264,15 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       const e = boundIf("finalized");
       return dispute(ctx, m, e ? [e] : disputeTargets(ctx, m));
     }
-    // Questions go to the money brain, which falls back to the templates
-    // (§7.8 Questions). An inline reply to an expense is handed to it.
+    // Balances and breakdowns are templates: deterministic, and instant
+    // (Joe's review on #38). Anything else about money goes to the money
+    // brain (§7.8 Questions), with the expense an inline reply points at.
     case "balance_query":
+      return handleBalanceQuery(ctx, m);
     case "breakdown_request":
+      return handleBreakdown(ctx, m);
     case "money_question":
-      return answerQuestion(ctx, m, intent, bound);
+      return void (await answerQuestion(ctx, m, "money_question", bound));
     case "help":
       return handleHelp(ctx, m);
     case "receipt":

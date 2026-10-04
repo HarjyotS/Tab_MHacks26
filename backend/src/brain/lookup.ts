@@ -43,6 +43,8 @@ const TRANSFER_STATUS: Record<Transfer["status"], string> = { pending: "in progr
 // Expenses that count as spending: anything logged except a cancelled one
 // or one still missing details.
 const COUNTED: Expense["status"][] = ["proposed", "itemizing", "finalized", "settled"];
+// Shares that count toward a debt (same as `debts`).
+const STILL_OWED: Share["status"][] = ["locked", "approved", "disputed"];
 
 // ── Text matching ────────────────────────────────────────────────────────
 // Structured search over a small database: ranked word matches over the
@@ -453,6 +455,21 @@ export function createLookup(ctx: BrainCtx, scope: Scope) {
       return {
         messages: found.map(({ x }) => ({ from: x.from, date: dateOf(x.at, x.group_id), text: x.text })),
       };
+    },
+
+    // Not a tool: who owes whom, for checking the agent's "X owes Y $N" in
+    // code. Netted debts, and each share still owed on an expense.
+    owing() {
+      const net = allDebts().map((d) => ({ from: nameOf(d.from), to: nameOf(d.to), cents: d.cents }));
+      const lines = all
+        .filter((e) => e.payer_phone)
+        .flatMap((e) =>
+          ctx.store
+            .shares(e.expense_id)
+            .filter((s) => s.role === "participant" && STILL_OWED.includes(s.status))
+            .map((s) => ({ from: nameOf(s.phone), to: nameOf(e.payer_phone!), cents: s.amount_cents })),
+        );
+      return { net, lines, asker: nameOf(scope.asker) };
     },
 
     async ledgerLink() {

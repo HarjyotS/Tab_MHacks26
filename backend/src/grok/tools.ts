@@ -115,6 +115,10 @@ export async function runTools(opts: {
 
     const reply = toolCalls.find((c) => c.function.name === REPLY_TOOL);
     if (reply) {
+      // Every tool call needs a result before the conversation can go on
+      // (a retry with feedback): the ones sent alongside reply aren't run.
+      for (const c of toolCalls)
+        if (c !== reply) messages.push({ role: "tool", tool_call_id: c.id, content: JSON.stringify({ error: "Not run: you already replied." }) });
       const text = parseArgs(reply.function.arguments)?.text;
       const ok = typeof text === "string" && text.trim() !== "";
       return done({

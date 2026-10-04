@@ -71,6 +71,15 @@ describe("tool loop", () => {
     expect(results[1]).toMatch(/kaput/);
   });
 
+  it("answers every tool call sent alongside reply, so a retry is a valid conversation", async () => {
+    const { client } = toolClient([{ call: [{ name: "echo", args: { x: "a" } }, { name: "reply", args: { text: "bad" } }] }]);
+    const r = await runTools({ client, model: "m", messages: start, tools: [echo], deadline: Date.now() + 10_000 });
+    const next = withFeedback(r, "fix it");
+    const asked = (next.find((m) => m.role === "assistant") as { tool_calls: { id: string }[] }).tool_calls.map((c) => c.id);
+    const answered = next.filter((m) => m.role === "tool").map((m) => (m as { tool_call_id: string }).tool_call_id);
+    expect(answered.sort()).toEqual(asked.sort());
+  });
+
   it("continues a conversation with feedback on a rejected reply", async () => {
     const { client } = toolClient([{ reply: "bad" }]);
     const r = await runTools({ client, model: "m", messages: start, tools: [], deadline: Date.now() + 10_000 });
