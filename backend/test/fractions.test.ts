@@ -167,7 +167,7 @@ describe('"how much was …?" answered with a fraction', () => {
     ["half", 2400],
     ["50%", 2400],
     ["a third of it", 1600],
-  ])('takes "%s" against the $48 total', async (reply, priya) => {
+  ])('takes "%s" against the 48 dollar total', async (reply, priya) => {
     const { say, shares, asked } = await crew(
       {
         expense: {
