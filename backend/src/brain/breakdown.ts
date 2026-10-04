@@ -160,10 +160,10 @@ export async function handleBreakdownCommand(ctx: BrainCtx, m: Message) {
     !m.group_id && others.length >= 2
       ? others.map((p) => [m.sender_phone, p])
       : phones.length >= 2 && others.length >= 2
-      ? [[phones[0]!, phones[1]!]]
-      : others.length === 1
-        ? [[m.sender_phone, others[0]!]]
-        : activeMembers(ctx, group_id).filter((x) => x.phone !== m.sender_phone).map((x) => [m.sender_phone, x.phone]);
+        ? [[phones[0]!, phones[1]!]]
+        : others.length === 1
+          ? [[m.sender_phone, others[0]!]]
+          : activeMembers(ctx, group_id).filter((x) => x.phone !== m.sender_phone).map((x) => [m.sender_phone, x.phone]);
 
   const sections = buildSections(ctx, group_id, pairs);
   const subject = pairs.length === 1 ? undefined : name(m.sender_phone);
