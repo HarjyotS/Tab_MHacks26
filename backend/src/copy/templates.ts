@@ -207,6 +207,14 @@ export function disputeResolved(a: { description: string; amount_cents: number; 
 export const disputeTooMuch = (a: { description: string; max_cents: number }) =>
   `Your part of ${a.description} can be at most ${money(a.max_cents)}. What did you actually have?`;
 
+// After one disputed expense is fixed, the ones still open (§7.6).
+export const disputeRemaining = (items: { description: string; amount_cents: number }[]) =>
+  `And ${items.map((i) => `${i.description} (${money(i.amount_cents)})`).join(", ")}: is that right? Reply "fine", or tell me what you had.`;
+
+// No answer to "What's off?": one reminder, then the share stays as it was.
+export const disputeReminder = (items: { description: string; amount_cents: number }[]) =>
+  `Still sorting out ${items.map((i) => `${i.description} (${money(i.amount_cents)})`).join(", ")}. Tell me what you actually had, or I'll keep it as it is.`;
+
 // An amount for a dispute that covered several expenses.
 export const whichDispute = (items: { description: string; amount_cents: number }[]) =>
   `Which one?\n${items.map((i, n) => `${n + 1}. ${i.description} (${money(i.amount_cents)})`).join("\n")}`;

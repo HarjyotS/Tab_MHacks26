@@ -18,7 +18,7 @@ import {
   type Pending,
 } from "./context.js";
 import { extractInput } from "./inputs.js";
-import { startItemizing } from "./receipt.js";
+import { claimItems, startItemizing } from "./receipt.js";
 
 export const expenseIdFor = (source_message_id: string) =>
   `exp_${source_message_id}`;
@@ -290,7 +290,17 @@ export async function handleAdjustment(
     extractInput(ctx, { ...m, text }),
     "adjustment",
   );
-  const { result, problems } = priceFromReceipt(extracted, ctx.store.lineItems(expense.expense_id));
+  // "not even, I had 1 and 4" on a receipt: item numbers are a claim, so
+  // switch to itemizing and record it instead of asking what "1 and 4" cost.
+  const lines = ctx.store.lineItems(expense.expense_id);
+  const positions = !opts.confirmOnly ? claimedPositions(extracted.result, m.sender_phone, lines) : undefined;
+  if (positions) {
+    const open = expense.status === "finalized" ? await reopen(ctx, expense) : expense;
+    await startItemizing(ctx, open);
+    await claimItems(ctx, m, ctx.store.expense(open.expense_id)!, positions);
+    return;
+  }
+  const { result, problems } = priceFromReceipt(extracted, lines);
   const unknown = problems.filter(
     (p) => p.kind === "unknown_name" || p.kind === "missing_item_price",
   );
@@ -417,6 +427,25 @@ function words(text: string): string[] {
 
 // "2 soft drinks" against "2 x SOFT DRINK @ $2.99" ($5.98): the whole line.
 // "a soft drink" against the same line: one of two, $2.99.
+// The sender's own fixed items, when every one is a receipt line number
+// ("1 and 4", "#2, 3"). Anything else (prices, other people, opt-outs, item
+// names) goes through the normal adjustment.
+const NUMBERS = /^(?:items?\s+)?#?\d+(?:\s*(?:,|&|\+|and)\s*#?\d+)*$/i;
+export function claimedPositions(
+  r: ExpenseExtraction,
+  sender_phone: string,
+  lines: LineItem[],
+): number[] | undefined {
+  if (lines.length === 0 || r.fixed.length === 0 || r.exclusions.length > 0) return undefined;
+  const positions: number[] = [];
+  for (const f of r.fixed) {
+    if (f.phone !== sender_phone || f.amount_cents !== undefined || !f.item || !NUMBERS.test(f.item.trim())) return undefined;
+    positions.push(...(f.item.match(/\d+/g) ?? []).map(Number));
+  }
+  const unique = [...new Set(positions)];
+  return unique.every((p) => lines.some((l) => l.position === p)) ? unique : undefined;
+}
+
 export function receiptPrice(item: string, items: LineItem[]): number | undefined {
   const want = words(item);
   if (want.length === 0) return undefined;

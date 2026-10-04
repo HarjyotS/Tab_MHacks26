@@ -282,7 +282,17 @@ export async function handleClaim(
     });
     return;
   }
-  await applyClaim(ctx, m, e, result);
+  await claimAndMaybeFinalize(ctx, m, e, result);
+}
+
+// "I had 1 and 4" on a receipt that wasn't itemizing yet: their claim,
+// already numbered from the receipt, so no Grok call is needed.
+export async function claimItems(ctx: BrainCtx, m: Message, e: Expense, item_positions: number[]) {
+  await claimAndMaybeFinalize(ctx, m, e, { kind: "items", item_positions });
+}
+
+async function claimAndMaybeFinalize(ctx: BrainCtx, m: Message, e: Expense, r: ClaimResolution) {
+  await applyClaim(ctx, m, e, r);
   await tapback(ctx, m, "like", e.expense_id);
   // §7.5: as soon as everyone has responded, finalize. Nobody waits.
   const live = ctx.store

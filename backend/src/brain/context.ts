@@ -69,6 +69,7 @@ export type Pending =
       expense_ids: string[]; // the disputed expenses
       amount_cents?: number; // set once they've said an amount but not which expense
       asked_at: Date;
+      reminded?: boolean; // the one reminder before the share is kept as it was
     }
   | {
       kind: "which"; // a DM claim with two open lists (§14)

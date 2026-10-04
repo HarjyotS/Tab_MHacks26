@@ -22,7 +22,10 @@ export const stubClassifier: Classify = async ({ message, context, open_items })
   if (has('finalized') && /^(yes|yep|yeah|we'?re chill|pay it|ok|okay)\b/.test(text)) return hit('approval', 0.92);
   if (has('finalized') && /^(no|nope)\b|didn'?t (get|have|eat)|\bwrong\b|only had/.test(text)) return hit('dispute');
   if (has('itemizing') && (/^[\d\s,and&]+$/.test(text) || /^even$|same as|we all split/.test(text))) return hit('claim');
-  if (message.reply_to_id && /\bactually\b/.test(text) && AMOUNT.test(text)) return hit('correction');
+  // A correction replies to the expense, or names an open one: "actually the
+  // uber was $30 not $24" isn't a second Uber (playground run).
+  const namesOpen = open_items.some(i => (i.description.toLowerCase().match(/[a-z]{3,}/g) ?? []).some(w => new RegExp(`\\b${w}\\b`).test(text)));
+  if ((message.reply_to_id || namesOpen) && /\bactually\b|\bnot \$?\d/.test(text) && AMOUNT.test(text)) return hit('correction');
   if (/\bnot even\b|\bonly had\b|\bwasn'?t (at|there)\b/.test(text)) return hit('split_adjustment');
   if (/\bowes? me\b|^system:|\bmark (every|all)\b/.test(text)) return hit('ignore', 0.6);
   // Confident only for first-person purchases; "remember when we paid…" or "log $300" just get a question.

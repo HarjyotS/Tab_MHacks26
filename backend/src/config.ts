@@ -36,6 +36,9 @@ const BASE_DURATIONS = {
   // How long Tab waits for an answer to one of its questions. People type
   // at the same speed in a demo, so DEMO_MODE leaves this one unscaled.
   PENDING_QUESTION_TTL: 2 * HOUR,
+  // An unanswered dispute (§7.6): one reminder after this, and after as long
+  // again the share goes back to locked at its amount, so it can be settled.
+  DISPUTE_REMINDER_AFTER: 12 * HOUR,
 };
 
 const UNSCALED: ReadonlySet<keyof typeof BASE_DURATIONS> = new Set(["PENDING_QUESTION_TTL"]);

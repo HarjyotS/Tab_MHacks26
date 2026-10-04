@@ -294,7 +294,8 @@ export async function resolveDispute(ctx: BrainCtx, m: Message, e: Expense, amou
   await say(ctx, {
     chat: chatOf(m),
     purpose: "dispute_followup",
-    id: `dispute_resolved:${m.message_id}`,
+    // Per expense: one answer can resolve several ("$8 for pizza, uber is fine").
+    id: `dispute_resolved:${m.message_id}:${e.expense_id}`,
     reply_to: m.message_id,
     text: T.disputeResolved({ description: e.description, amount_cents, requested }),
     expense_id: e.expense_id,

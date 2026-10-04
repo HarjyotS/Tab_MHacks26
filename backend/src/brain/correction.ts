@@ -7,6 +7,24 @@ import { type BrainCtx, chatOf, say, tapback } from "./context.js";
 import { liveShares, moneyMoving, postProposal, reopen } from "./expense.js";
 import { extractInput } from "./inputs.js";
 
+// "actually the uber was $30 not $24", not sent as a reply and read as a new
+// expense: the open expense it names, so it's corrected instead of logged
+// twice (playground run).
+const CORRECTION_CUE = /\bactually\b|\bnot \$?\d/i;
+const OPEN = new Set<Expense["status"]>(["proposed", "finalized"]);
+
+export const namesExpense = (text: string, description: string) =>
+  (description.toLowerCase().match(/[a-z]{3,}/g) ?? []).some((w) => new RegExp(`\\b${w}\\b`, "i").test(text));
+
+export function namedCorrectionTarget(ctx: BrainCtx, m: Message): Expense | undefined {
+  const text = m.text ?? "";
+  if (!m.group_id || m.kind !== "text" || !CORRECTION_CUE.test(text) || !/\d/.test(text)) return undefined;
+  return ctx.store
+    .expenses()
+    .filter((e) => e.group_id === m.group_id && OPEN.has(e.status) && namesExpense(text, e.description))
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+}
+
 export async function handleCorrection(
   ctx: BrainCtx,
   m: Message,

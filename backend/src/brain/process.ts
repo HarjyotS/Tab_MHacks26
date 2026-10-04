@@ -19,7 +19,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
-import { handleCorrection } from "./correction.js";
+import { handleCorrection, namedCorrectionTarget, namesExpense } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import {
   handleBalanceQuery,
@@ -87,7 +87,7 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
         prefiltered: result.prefiltered === true,
       });
 
-      const answered = (await mayAnswerPending(ctx, m, decision !== "ignore")) && (await answerPending(ctx, m));
+      const answered = await answerPending(ctx, m, decision !== "ignore");
       // "why?" right after Tab's balance reply: the short explanation.
       const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleBreakdown(ctx, m);
@@ -147,9 +147,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
   const bound = repliedExpense(ctx, m);
   const boundIf = (...statuses: Expense["status"][]) => (bound && statuses.includes(bound.status) ? bound : undefined);
   switch (intent) {
-    case "expense":
+    case "expense": {
       // A captioned photo ("dinner, i paid") is still a receipt.
-      return m.kind === "image" ? handleReceipt(ctx, m) : handleExpense(ctx, m);
+      if (m.kind === "image") return handleReceipt(ctx, m);
+      const corrected = namedCorrectionTarget(ctx, m);
+      return corrected ? handleCorrection(ctx, m, corrected) : handleExpense(ctx, m);
+    }
     case "split_adjustment":
       return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed", "finalized"));
     case "name_reply":
@@ -174,7 +177,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     case "claim":
       return handleClaim(ctx, m, boundIf("itemizing"));
     case "correction":
-      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : undefined);
+      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m));
     // payment_reported is ignored in the MVP; ignore needs nothing.
     default:
       ctx.log("intent_not_handled", { message_id: m.message_id, intent });
@@ -185,6 +188,10 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
+  // An unsure "expense" that corrects an open one it names: correct it
+  // rather than ask "Want me to split that?" about a duplicate.
+  const corrected = intent === "expense" ? namedCorrectionTarget(ctx, m) : undefined;
+  if (corrected) return handleCorrection(ctx, m, corrected);
   // §6.4: an unsure adjustment is about an open expense, so ask rather than
   // stay silent: explain what's wrong, or confirm before applying.
   if (intent === "split_adjustment") {
@@ -216,9 +223,7 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
 // their reply answers Tab's own money question. Anyone else only by
 // replying inline to that question, and only if the gate passed it; a
 // bystander's "uber was $30, I paid" is their own expense, not an answer.
-async function mayAnswerPending(ctx: BrainCtx, m: Message, passed: boolean): Promise<boolean> {
-  const p = ctx.memory.pending.get(chatKey(chatOf(m)));
-  if (!p) return false;
+function mayAnswer(ctx: BrainCtx, m: Message, p: Pending, passed: boolean): boolean {
   // The settle-mode question is answered by anyone, by regex only (no Grok).
   if (p.kind === "settle_mode" || m.sender_phone === p.source.sender_phone) return true;
   return passed && (p.kind === "expense" || p.kind === "adjustment") && repliesToQuestion(ctx, m);
@@ -245,11 +250,34 @@ export function inThirdPerson(text: string, name: string): string {
     .replace(/\b(I|me|myself)\b/gi, name);
 }
 
-async function answerPending(ctx: BrainCtx, m: Message): Promise<boolean> {
+// Tab's open questions this message may answer: the one in this chat, then
+// the sender's dispute. A 👎 gets "What's off?" by DM, but the disputer often
+// answers in the group (playground run), even with another question open there.
+function pendingFor(ctx: BrainCtx, m: Message): { key: string; p: Pending }[] {
+  const found: { key: string; p: Pending }[] = [];
   const key = chatKey(chatOf(m));
   const p = ctx.memory.pending.get(key);
-  if (!p || m.kind !== "text" || !m.text) return false;
+  if (p) found.push({ key, p });
+  if (!m.group_id) return found;
+  const dmKey = chatKey({ dm_phone: m.sender_phone });
+  const dm = ctx.memory.pending.get(dmKey);
+  if (dm?.kind === "dispute" && dm.expense_ids.some((id) => ctx.store.expense(id)?.group_id === m.group_id))
+    found.push({ key: dmKey, p: dm });
+  return found;
+}
+
+async function answerPending(ctx: BrainCtx, m: Message, passed: boolean): Promise<boolean> {
+  if (m.kind !== "text" || !m.text) return false;
+  for (const { key, p } of pendingFor(ctx, m))
+    if (mayAnswer(ctx, m, p, passed) && (await answerOne(ctx, m, key, p))) return true;
+  return false;
+}
+
+async function answerOne(ctx: BrainCtx, m: Message, key: string, p: Pending): Promise<boolean> {
+  if (!m.text) return false;
+  // Disputes have their own reminder and timeout (disputeReminders).
   if (
+    p.kind !== "dispute" &&
     ctx.now().getTime() - p.asked_at.getTime() >
     ctx.timing.durations.PENDING_QUESTION_TTL
   ) {
@@ -398,6 +426,7 @@ export async function tick(ctx: BrainCtx): Promise<void> {
   });
   await claimFollowups(ctx);
   await approvalFollowups(ctx);
+  await disputeReminders(ctx);
   await announceSettlements(ctx);
 }
 
@@ -475,40 +504,131 @@ async function answerDispute(ctx: BrainCtx, m: Message, p: Extract<Pending, { ki
     return false;
   }
   const text = (m.text ?? "").trim();
-  let amount = p.amount_cents;
-  let target: Expense | undefined;
-  if (amount !== undefined) {
+  if (p.amount_cents !== undefined) {
     // Numbered from the "Which one?" list, which is p.expense_ids.
     const n = Number(text.replace(/^#/, ""));
     const id = Number.isInteger(n) ? p.expense_ids[n - 1] : undefined;
-    target = open.find((e) => e.expense_id === id);
-    if (!target) return false;
-  } else {
-    amount = disputeCents(text);
-    if (amount === undefined || amount <= 0) return false;
-    if (open.length > 1) {
-      ctx.memory.pending.set(key, { ...p, expense_ids: open.map((e) => e.expense_id), amount_cents: amount, asked_at: ctx.now() });
-      await say(ctx, {
-        chat: chatOf(m),
-        purpose: "clarifying_question",
-        id: `clarify:${m.message_id}`,
-        reply_to: m.message_id,
-        text: whichDisputed(ctx, m.sender_phone, open),
-      });
-      return true;
+    const target = open.find((e) => e.expense_id === id);
+    if (target) return settleDisputes(ctx, m, p, key, open, new Map([[target, p.amount_cents]]));
+    if (Number.isInteger(n)) return false;
+  }
+  // "$8 for pizza, uber is fine": an amount or "fine" for each expense named.
+  const answers = readDisputeAnswer(ctx, m.sender_phone, text, open);
+  if (answers.size > 0) return settleDisputes(ctx, m, p, key, open, answers);
+
+  const amount = disputeCents(text);
+  if (amount === undefined || amount <= 0) return false;
+  if (open.length > 1) {
+    ctx.memory.pending.set(key, { ...p, expense_ids: open.map((e) => e.expense_id), amount_cents: amount, asked_at: ctx.now() });
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `clarify:${m.message_id}`,
+      reply_to: m.message_id,
+      text: whichDisputed(ctx, m.sender_phone, open),
+    });
+    return true;
+  }
+  return settleDisputes(ctx, m, p, key, open, new Map([[open[0]!, amount]]));
+}
+
+const FINE = /\b(fine|ok|okay|good|right|correct|accurate)\b/i;
+const THE_REST = /\b(the )?(rest|others?|everything else|other ones?|all)\b/i;
+const myAmount = (ctx: BrainCtx, phone: string, e: Expense) =>
+  ctx.store.shares(e.expense_id).find((s) => s.phone === phone)?.amount_cents ?? 0;
+
+// Clause by clause: a named expense with clear money gets that amount; a
+// named one (or "the rest", or the only one) called fine keeps its amount.
+// An amount with no name goes to the expense named just before it ("I only
+// had one slice of pizza, so $8"). "Fine" never counts for an expense the
+// message also doubts ("pizza was good but I only had one slice").
+const DOUBT = /\b(only|didn'?t|wasn'?t|never|less|wrong|not)\b/i;
+export function readDisputeAnswer(ctx: BrainCtx, phone: string, text: string, open: Expense[]): Map<Expense, number> {
+  const answers = new Map<Expense, number>();
+  const fine = new Set<Expense>();
+  const doubted = new Set<Expense>();
+  let restFine = false;
+  let last: Expense | undefined;
+  for (const clause of text.split(/[.;,!]|\bbut\b|\band\b/i).map((c) => c.trim()).filter(Boolean)) {
+    const named = open.filter((e) => namesExpense(clause, e.description));
+    if (named.length === 1) last = named[0];
+    const about = named.length > 0 ? named : last ? [last] : open.length === 1 ? open : [];
+    const cents = disputeCents(clause);
+    if (cents !== undefined && cents > 0) {
+      const target = named.length === 1 ? named[0] : named.length === 0 ? last : undefined;
+      if (target && !answers.has(target)) answers.set(target, cents);
+    } else if (DOUBT.test(clause)) {
+      for (const e of about) doubted.add(e);
+    } else if (FINE.test(clause)) {
+      if (named.length > 0) for (const e of named) fine.add(e);
+      else if (THE_REST.test(clause)) restFine = true;
+      else if (open.length === 1) fine.add(open[0]!);
     }
-    target = open[0]!;
   }
-  if (await resolveDispute(ctx, m, target, amount)) {
-    // Anything else they disputed is still open to an answer.
-    const rest = open.filter((e) => e.expense_id !== target.expense_id).map((e) => e.expense_id);
-    if (rest.length > 0) ctx.memory.pending.set(key, { ...p, expense_ids: rest, amount_cents: undefined, asked_at: ctx.now() });
-    else ctx.memory.pending.delete(key);
-  } else {
+  if (restFine) for (const e of open) if (!answers.has(e)) fine.add(e);
+  for (const e of fine) if (!answers.has(e) && !doubted.has(e)) answers.set(e, myAmount(ctx, phone, e));
+  return answers;
+}
+
+async function settleDisputes(
+  ctx: BrainCtx,
+  m: Message,
+  p: Extract<Pending, { kind: "dispute" }>,
+  key: string,
+  open: Expense[],
+  answers: Map<Expense, number>,
+): Promise<boolean> {
+  const unresolved: Expense[] = [];
+  for (const [e, cents] of answers) if (!(await resolveDispute(ctx, m, e, cents))) unresolved.push(e);
+  if (unresolved.length > 0) {
     // Too much for the payer's share to absorb: Tab asked again.
-    ctx.memory.pending.set(key, { ...p, expense_ids: [target.expense_id], amount_cents: undefined, asked_at: ctx.now() });
+    ctx.memory.pending.set(key, { ...p, expense_ids: unresolved.map((e) => e.expense_id), amount_cents: undefined, asked_at: ctx.now() });
+    return true;
   }
+  // Anything else they disputed is still open: ask about it, don't leave it stuck.
+  const rest = open.filter((e) => !answers.has(e));
+  if (rest.length === 0) {
+    ctx.memory.pending.delete(key);
+    return true;
+  }
+  ctx.memory.pending.set(key, { ...p, expense_ids: rest.map((e) => e.expense_id), amount_cents: undefined, asked_at: ctx.now(), reminded: false });
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "clarifying_question",
+    id: `dispute_remaining:${m.message_id}`,
+    reply_to: m.message_id,
+    text: T.disputeRemaining(rest.map((e) => ({ description: e.description, amount_cents: myAmount(ctx, m.sender_phone, e) }))),
+  });
   return true;
+}
+
+// §7.6 with no answer: one reminder by DM, then the share goes back to
+// locked at its amount, so the expense can still be settled. Memory only:
+// a restart forgets the timer (the share stays disputed until answered).
+export async function disputeReminders(ctx: BrainCtx) {
+  const after = ctx.timing.durations.DISPUTE_REMINDER_AFTER;
+  for (const [key, p] of [...ctx.memory.pending]) {
+    if (p.kind !== "dispute" || ctx.now().getTime() - p.asked_at.getTime() < after) continue;
+    const phone = p.source.sender_phone;
+    const open = stillDisputed(ctx, phone, p.expense_ids);
+    if (open.length === 0) {
+      ctx.memory.pending.delete(key);
+      continue;
+    }
+    if (!p.reminded) {
+      await say(ctx, {
+        chat: { dm_phone: phone },
+        purpose: "dispute_followup",
+        id: `dispute_reminder:${p.source.message_id}:${p.asked_at.getTime()}`,
+        text: T.disputeReminder(open.map((e) => ({ description: e.description, amount_cents: myAmount(ctx, phone, e) }))),
+      });
+      ctx.memory.pending.set(key, { ...p, reminded: true, asked_at: ctx.now() });
+      continue;
+    }
+    ctx.memory.pending.delete(key);
+    const asDm: Message = { ...p.source, message_id: `dispute_timeout:${p.source.message_id}`, group_id: undefined, is_dm: true };
+    for (const e of open) await resolveDispute(ctx, asDm, e, myAmount(ctx, phone, e));
+  }
 }
 
 // A reply to "What's off?" is usually a description, and "I had 2 beers" or
