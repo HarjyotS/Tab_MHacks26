@@ -271,8 +271,21 @@ export async function handleAdjustment(
   opts: { confirmOnly?: boolean } = {},
 ): Promise<void> {
   const group_id = groupFor(ctx, m);
-  const expense = target ?? latestOpen(ctx, group_id, ["proposed"]);
+  const expense =
+    target ?? latestOpen(ctx, group_id, ["proposed"]) ?? latestOpen(ctx, group_id, ["finalized"]);
   if (!expense) return;
+  // §7.7: a locked-in expense changes only while no money is moving.
+  const locked = expense.status === "finalized";
+  if (locked && moneyMoving(ctx, expense)) {
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `clarify:${m.message_id}`, reply_to: m.message_id,
+      text: T.cantChangePaid(expense.description),
+      expense_id: expense.expense_id,
+    });
+    return;
+  }
   const { result, problems } = await ctx.extract.expense(
     extractInput(ctx, { ...m, text }),
     "adjustment",
@@ -331,9 +344,13 @@ export async function handleAdjustment(
     });
     return;
   }
-  if (opts.confirmOnly) {
+  // Reopening a locked-in expense is always confirmed first.
+  if (opts.confirmOnly || locked) {
+    const question = locked
+      ? `${expense.description} is already locked in. Reopen it and change the split?`
+      : `Change the split on ${expense.description}?`;
     await tapback(ctx, m, "question", expense.expense_id);
-    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: `Change the split on ${expense.description}?`, expense_id: expense.expense_id });
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
     ctx.memory.pending.set(chatKey(chatOf(m)), { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() });
     return;
   }
@@ -341,11 +358,29 @@ export async function handleAdjustment(
   await applyAdjustment(ctx, expense, result);
 }
 
+// Approved or paid shares mean a transfer exists; those can't be undone.
+export function moneyMoving(ctx: BrainCtx, e: Expense): boolean {
+  return ctx.store.shares(e.expense_id).some((s) => s.status === "approved" || s.status === "paid");
+}
+
+// §7.7, finalized with nothing paid: back to proposed, so the module will
+// recompute again. The old settle request stops covering it, and everyone
+// gets a fresh objection window from the updated proposal.
+async function reopen(ctx: BrainCtx, e: Expense): Promise<Expense> {
+  await ctx.db.upsert_expense({ ...e, status: "proposed", settle_message_id: undefined, finalized_at: undefined });
+  for (const s of ctx.store.shares(e.expense_id).filter((x) => x.status === "locked" || x.status === "disputed"))
+    await ctx.db.set_share({ ...s, status: "proposed", responded: false, followup_count: 0 });
+  return ctx.store.expense(e.expense_id)!;
+}
+
 export async function applyAdjustment(
   ctx: BrainCtx,
-  expense: Expense,
+  snapshot: Expense,
   result: ExpenseExtraction,
 ) {
+  const current = ctx.store.expense(snapshot.expense_id) ?? snapshot;
+  if (current.status === "finalized" && moneyMoving(ctx, current)) return;
+  const expense = current.status === "finalized" ? await reopen(ctx, current) : current;
   const before = new Map(
     liveShares(ctx, expense.expense_id).map((s) => [s.phone, s.amount_cents]),
   );
