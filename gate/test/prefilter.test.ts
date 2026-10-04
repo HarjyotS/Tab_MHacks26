@@ -46,6 +46,7 @@ describe('pre-filter', () => {
   it('skips most everyday chatter', () => {
     const skipped = CHATTER.filter(text => !mightBeMoney(say(text)));
     expect(skipped.length / CHATTER.length).toBeGreaterThanOrEqual(0.9);
+    for (const text of ['who\'s driving', 'lol', 'omw']) expect(skipped, text).toContain(text);
   });
 
   it('passes amounts, money words, purchases, and questions for Tab with no state at all', () => {
@@ -54,7 +55,8 @@ describe('pre-filter', () => {
       'can you venmo me', 'I\'ll cover it', 'who owes what', 'what\'s the damage', 'breakdown pls', 'let\'s settle up',
       'square us up', 'paid priya back on cashapp', 'zelled you for the uber', 'Tab help', 'how does this bot work',
       'where do I see the ledger?', 'where\'d that come from', 'are we even?', 'booked the airbnb', 'ordered food',
-      'how much was it', 'I spotted you at lunch', 'meet at 7',
+      'how much was it', 'I spotted you at lunch', 'meet at 7', 'dinner was on jake', 'I handled the airbnb',
+      'drinks are on me', 'it\'s on me', 'took care of the hotel', 'I sorted parking', 'doordash came', 'wifi bill',
     ]) expect(mightBeMoney(say(text)), text).toBe(true);
   });
 

@@ -11,9 +11,15 @@ import type { Classify, ClassifyInput } from './types.js';
 const MONEY =
   /[$€£¥₹]|\d|💸|💰|💵|🧾|\b(pay|pays|paid|paying|payment|payback|owe|owes|owed|owing|iou|ious|venmo\w*|zelle\w*|zelled|cash ?app|paypal|apple ?pay|split\w*|cover|covers|covered|covering|bill|bills|tab|settle\w*|square|squared|tip|tips|tipped|refund\w*|cost|costs|price\w*|pricey|expensive|cheap|buck|bucks|dollar|dollars|cents?|usd|receipt\w*|charge|charged|charges|reimburs\w*|spot|spotted|front|fronted|expenses?|money|cash|card|debt|debts|balances?|breakdown|damage|total|deposit|fees?|rent|tax|loan|lend|lent|borrow\w*|chip in|pitch in|on me|my treat|bot|help)\b/i;
 
-// Purchases often come without an amount ("grabbed dinner for everyone").
+// Purchases often come without an amount ("grabbed dinner for everyone",
+// "dinner was on jake", "I handled the airbnb").
 const PURCHASE =
-  /\b(got|bought|buy|buying|grabbed|picked up|ordered|treated|booked|rented|reserved|purchased|spent|spend|took care of)\b/i;
+  /\b(got|bought|buy|buying|grabbed|picked up|ordered|treated|booked|rented|reserved|purchased|spent|spend|took care of|handled|sorted|dealt with|was on|it'?s on)\b/i;
+
+// Things groups split. Most expenses posted in the chat are there to be split
+// (Joe's review on #28), so naming one is enough to ask Jev.
+const SHARED_COSTS =
+  /\b(dinner|lunch|breakfast|brunch|drinks|groceries|grocery|uber|lyft|cab|taxi|gas|parking|airbnb|hotel|flight|flights|tickets|rent|utilities|wifi|internet|electric|electricity|takeout|delivery|doordash|ubereats|uber eats|instacart|coffee|pizza|bar)\b/i;
 
 // Amounts spelled out ("uber was twenty"). "one" and "two" are left out:
 // they're everywhere in chatter and rarely an amount on their own.
@@ -65,7 +71,7 @@ export function mightBeMoney(input: ClassifyInput): boolean {
   if (!input.members.find(m => m.phone === message.sender_phone)?.name) return true;
   if (input.open_items.some(awaitingSender)) return true;
   const text = message.text ?? '';
-  return MONEY.test(text) || PURCHASE.test(text) || NUMBER_WORDS.test(text) || QUESTIONS.test(text);
+  return [MONEY, PURCHASE, SHARED_COSTS, NUMBER_WORDS, QUESTIONS].some(rule => rule.test(text));
 }
 
 /**

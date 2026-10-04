@@ -1507,6 +1507,32 @@
         "intent": "ignore"
       },
       "note": "Thanks to Tab stays quiet"
+    },
+    {
+      "id": 183,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "dinner was on jake"
+      },
+      "expect": {
+        "intent": "expense"
+      },
+      "note": "No amount or money word; Joe's review on #28: most expenses in the chat are there to be split"
+    },
+    {
+      "id": 184,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "I handled the airbnb"
+      },
+      "expect": {
+        "intent": "expense"
+      },
+      "note": "A purchase verb the pre-filter must not miss (Joe's review on #28)"
     }
   ]
 }
