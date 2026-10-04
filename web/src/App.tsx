@@ -83,10 +83,7 @@ export function App({ secret }: AppProps) {
     setSelectedExpenseId(expenses[0]?.expenseId);
   }, [expenses, selectedExpenseId]);
 
-  const names = useMemo(
-    () => new Map(members.map(member => [member.ledgerMemberId, member.name ?? 'Unnamed member'])),
-    [members]
-  );
+  const names = useMemo(() => memberNames(members), [members]);
   const [graphBox, setGraphBox] = useState<Size>({ width: 0, height: 0 });
   const [graphElement, setGraphElement] = useState<HTMLDivElement | null>(null);
   const graph = useMemo(
@@ -150,7 +147,7 @@ export function App({ secret }: AppProps) {
       <section className="stats">
         <Metric label="Open expenses" value={String(expenses.filter(expense => expense.status !== 'settled').length)} />
         <Metric label="Simulated paid" value={formatMoney(paid)} />
-        <Metric label="Housemates" value={String(members.length)} />
+        <Metric label="People" value={String(members.length)} />
       </section>
 
       <section className="dashboard-grid">
@@ -199,6 +196,29 @@ export function App({ secret }: AppProps) {
       <footer>Simulated settlement · Nessie supplies setup-time sandbox profiles · No real money moves</footer>
     </main>
   );
+}
+
+/**
+ * Display names for the ledger. Members Tab hasn't learned a name for get
+ * "Member 1", "Member 2"… in a stable order; the views never expose phones.
+ */
+function memberNames(members: readonly LedgerMember[]): Map<string, string> {
+  const names = new Map<string, string>();
+  let unnamed = 0;
+  for (const member of [...members].sort((a, b) => a.ledgerMemberId.localeCompare(b.ledgerMemberId))) {
+    const name = member.name?.trim();
+    names.set(member.ledgerMemberId, name || `Member ${++unnamed}`);
+  }
+  return names;
+}
+
+/** "Haejyot" → "H", "Mary Jane" → "MJ", "Member 2" → "2". */
+function initials(name: string): string {
+  const numbered = name.match(/^Member (\d+)$/);
+  if (numbered) return numbered[1];
+  const words = name.split(/\s+/).filter(Boolean);
+  const letters = words.length > 1 ? [words[0], words[words.length - 1]] : words;
+  return letters.map(word => [...word][0]?.toUpperCase() ?? '').join('') || '·';
 }
 
 type LedgerRows = {
@@ -294,7 +314,7 @@ function buildGraph(
         y: height / 2 + Math.sin(angle) * radiusY - nodeSize.height / 2,
       },
       style: { width: nodeSize.width },
-      data: { label: <div className="person-node"><span>{(member.name ?? '?').slice(0, 1).toUpperCase()}</span><strong>{member.name ?? 'Unnamed'}</strong></div> },
+      data: { label: <div className="person-node"><span>{initials(names.get(member.ledgerMemberId) ?? '')}</span><strong>{names.get(member.ledgerMemberId)}</strong></div> },
       className: pulse && (pulse.from === member.ledgerMemberId || pulse.to === member.ledgerMemberId) ? 'graph-node pulse' : 'graph-node',
     };
   });
