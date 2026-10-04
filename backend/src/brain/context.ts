@@ -1,6 +1,6 @@
 // Everything a handler needs, injected so tests can run the whole brain
 // against an in-memory database and fake models.
-import type { Classify, GateMessage } from "@tab/gate";
+import type { Classify, GateMessage, Intent } from "@tab/gate";
 import { CONTEXT_MESSAGES, type LedgerConfig, type Timing } from "../config.js";
 import type { BackendReducers } from "../db/reducers.js";
 import type { OutboxPurpose, Reaction } from "../db/types.js";
@@ -10,14 +10,17 @@ import type { WitContext } from "../copy/wit.js";
 import type { ExpenseMode } from "../extraction/expense.js";
 import type {
   CorrectionExtraction,
+  AnswerResolution,
   ExpenseExtraction,
   Extracted,
   ExtractInput,
+  OpenThread,
   Problem,
 } from "../extraction/types.js";
 import type { ReceiptRead } from "../extraction/receipt.js";
 import type { ClaimResolution, LineItem as ClaimItem } from "../extraction/types.js";
 import type { Expense, Message, Store } from "../store/types.js";
+import type { Thread } from "./threads.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
 
@@ -46,7 +49,11 @@ export type Pending =
   | {
       kind: "confirm"; // "yes" proceeds with `then`
       source: Message;
-      then: "expense" | "large_amount" | "adjustment";
+      // finalize_and_settle: "Still waiting on claims… settle now?"; the
+      // expenses are the thread's expense_ids.
+      // act: an unsure money intent (§6.4 clarify band), acted on on yes.
+      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act";
+      intent?: Intent;
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
       asked_at: Date;
@@ -77,19 +84,11 @@ export type Pending =
       asked_at: Date;
     };
 
-// Process-local memory. Kian's backend_messages view only returns new and
-// processing messages, so recent chat history for classifier context and
-// style matching lives here, and is lost on restart.
+// Process-local memory, lost on restart: Tab's open questions, and what
+// style matching needs.
 export class Memory {
-  private history = new Map<
-    string,
-    { sender_phone: string; text: string; at: Date }[]
-  >();
-  pending = new Map<string, Pending>();
-  // Proposed expenses Tab asked about, and when (§7.5: no lock-in under a
-  // question). Cleared when an adjustment applies; expires with
-  // PENDING_QUESTION_TTL.
-  holds = new Map<string, Date>();
+  // Open questions per chat (threads.ts), keyed by chatKey.
+  threads = new Map<string, Thread[]>();
   lastHadWit = new Map<string, boolean>();
   // Groups whose ledger secret this process has set. The secret is derived,
   // so setting it again after a restart writes the same value.
@@ -106,8 +105,6 @@ export class Memory {
   styleSamples(chat: Chat): StyleFlags[] {
     return this.style.get(chatKey(chat)) ?? [];
   }
-
-
 }
 
 export type Extractors = {
@@ -119,6 +116,8 @@ export type Extractors = {
   receipt: (image_url: string, caption?: string) => Promise<ReceiptRead>;
   claim: (input: ExtractInput, items: ClaimItem[]) => Promise<Extracted<ClaimResolution>>;
   correction: (input: ExtractInput) => Promise<Extracted<CorrectionExtraction>>;
+  // Which of Tab's open questions a message answers, and the answer.
+  answer: (input: ExtractInput, threads: OpenThread[]) => Promise<AnswerResolution>;
 };
 
 export type BrainCtx = {

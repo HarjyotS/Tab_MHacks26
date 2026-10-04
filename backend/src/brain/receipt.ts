@@ -7,7 +7,6 @@ import * as T from "../copy/templates.js";
 import type { Expense, Message } from "../store/types.js";
 import {
   activeMembers,
-  chatKey,
   chatOf,
   inWords,
   outsideQuietHours,
@@ -24,6 +23,7 @@ import {
 } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { finalize } from "./settle.js";
+import { addInvite, addThread } from "./threads.js";
 
 
 // Entry point for a photo (§7.4 steps 2–7).
@@ -52,14 +52,7 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
     return;
   }
   if (read.currency !== "USD") {
-    await askAbout(ctx, m, T.foreignCurrencyQuestion());
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "receipt",
-      stage: "total",
-      source: m,
-      read,
-      asked_at: ctx.now(),
-    });
+    await askAbout(ctx, m, T.foreignCurrencyQuestion(), read, "total");
     return;
   }
   if (read.math_problem) {
@@ -71,38 +64,52 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
       ctx,
       m,
       `I read the total as ${money(receipt.total_cents)}. Is that right?`,
-    );
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "receipt",
-      stage: "confirm_total",
-      source: m,
       read,
-      asked_at: ctx.now(),
-    });
+      "confirm_total",
+    );
     return;
   }
   if (read.tip_line_blank) {
     // §7.4 step 5: the only routine question for receipts.
-    await askAbout(ctx, m, "What tip did you leave?");
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "receipt",
-      stage: "tip",
-      source: m,
-      read,
-      asked_at: ctx.now(),
-    });
+    await askAbout(ctx, m, "What tip did you leave?", read, "tip");
     return;
   }
   await proposeReceipt(ctx, m, read, { itemsTrusted: true });
 }
 
-async function askAbout(ctx: BrainCtx, m: Message, question: string) {
+// §7.4: only the payer answers questions about their receipt. Without a
+// stage, nothing to answer ("send a clearer photo").
+async function askAbout(
+  ctx: BrainCtx,
+  m: Message,
+  question: string,
+  read?: ReceiptRead,
+  stage?: "confirm_total" | "total" | "tip",
+) {
+  const id = `clarify:${m.message_id}`;
   await tapback(ctx, m, "question");
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`, reply_to: m.message_id,
+    id, reply_to: m.message_id,
     text: question,
+  });
+  if (read && stage) askReceipt(ctx, m, { id, text: question, read, stage });
+}
+
+// The receipt's expense doesn't exist until the payer answers.
+export function askReceipt(
+  ctx: BrainCtx,
+  m: Message,
+  a: { id: string; text: string; read: ReceiptRead; stage: "confirm_total" | "total" | "tip" },
+) {
+  addThread(ctx, chatOf(m), {
+    id: a.id,
+    text: a.text,
+    expense_id: expenseIdFor(m.message_id),
+    who: "asker",
+    asker: m.sender_phone,
+    data: { kind: "receipt", stage: a.stage, source: m, read: a.read, asked_at: ctx.now() },
   });
 }
 
@@ -188,18 +195,22 @@ function deadline(ctx: BrainCtx, group_id: string, ms: number): Date {
 
 async function postItemList(ctx: BrainCtx, expense_id: string) {
   const e = ctx.store.expense(expense_id)!;
+  const id = `item_list:${expense_id}`;
+  const text = T.itemList({
+    merchant: e.description,
+    total_cents: e.total_cents,
+    items: ctx.store.lineItems(expense_id),
+  });
   await say(ctx, {
     chat: { group_id: e.group_id },
     purpose: "item_list",
-    id: `item_list:${expense_id}`,
-    text: T.itemList({
-      merchant: e.description,
-      total_cents: e.total_cents,
-      items: ctx.store.lineItems(expense_id),
-    }),
+    id,
+    text,
     expense_id,
     reply_to: e.source_message_id, // answers the receipt photo
   });
+  // Open to claims until it finalizes.
+  addInvite(ctx, { group_id: e.group_id }, { id, text, kind: "claims_open", expense_id });
 }
 
 // §7.5 "uneven without specifics": a receipt switches to itemizing.
@@ -253,35 +264,28 @@ export async function handleClaim(
   if (targets.length === 0) return;
   if (targets.length > 1 && !m.group_id) {
     // §14: two open lists in a DM: ask which one with a numbered list.
+    const id = `clarify:${m.message_id}`;
+    const text = `Which one?\n${targets.map((e, i) => `${i + 1}. ${e.description}`).join("\n")}`;
     await tapback(ctx, m, "question");
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, reply_to: m.message_id,
-      text: `Which one?\n${targets.map((e, i) => `${i + 1}. ${e.description}`).join("\n")}`,
+      id, reply_to: m.message_id,
+      text,
     });
-    ctx.memory.pending.set(chatKey(chatOf(m)), {
-      kind: "which",
-      source: m,
-      expense_ids: targets.map((e) => e.expense_id),
-      asked_at: ctx.now(),
+    addThread(ctx, chatOf(m), {
+      id,
+      text,
+      who: "asker",
+      asker: m.sender_phone,
+      data: { kind: "which", source: m, expense_ids: targets.map((e) => e.expense_id), asked_at: ctx.now() },
     });
     return;
   }
   const e = targets[0]!;
   const items = ctx.store.lineItems(e.expense_id);
   const { result } = await ctx.extract.claim(extractInput(ctx, m), items);
-  if (result.kind === "unclear") {
-    await tapback(ctx, m, "question", e.expense_id);
-    await say(ctx, {
-      chat: chatOf(m),
-      purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, reply_to: m.message_id,
-      text: 'Which ones? Reply with the numbers, or "even".',
-      expense_id: e.expense_id,
-    });
-    return;
-  }
+  if (result.kind === "unclear") return askWhichItems(ctx, m, e);
   await applyClaim(ctx, m, e, result);
   await tapback(ctx, m, "like", e.expense_id);
   // §7.5: as soon as everyone has responded, finalize. Nobody waits.
@@ -290,6 +294,20 @@ export async function handleClaim(
     .filter((s) => s.status !== "opted_out");
   if (live.every((s) => s.responded))
     await finalize(ctx, ctx.store.expense(e.expense_id)!);
+}
+
+// "Which ones?" about an open item list, open to the answer.
+export async function askWhichItems(ctx: BrainCtx, m: Message, e: Expense) {
+  const id = `clarify:${m.message_id}`;
+  await tapback(ctx, m, "question", e.expense_id);
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "clarifying_question",
+    id, reply_to: m.message_id,
+    text: 'Which ones? Reply with the numbers, or "even".',
+    expense_id: e.expense_id,
+  });
+  addInvite(ctx, chatOf(m), { id, text: `Which ones from ${e.description}? Reply with the numbers, or "even".`, kind: "claims_open", expense_id: e.expense_id });
 }
 
 async function applyClaim(
@@ -360,14 +378,16 @@ export async function claimFollowups(ctx: BrainCtx) {
         s.followup_count < 2
           ? T.claimNudge({ seed: `${e.expense_id}:${s.phone}`, person, merchant: e.description, step: (s.followup_count + 1) as 1 | 2 })
           : T.claimLastCall({ person, merchant: e.description, amount_cents: s.amount_cents, when: inWords(end.getTime() - now.getTime()) });
+      const id = `claim_followup:${e.expense_id}:${s.phone}:${s.followup_count + 1}`;
       await say(ctx, {
         chat: { group_id: e.group_id },
         purpose: "claim_followup",
-        id: `claim_followup:${e.expense_id}:${s.phone}:${s.followup_count + 1}`,
+        id,
         text,
         expense_id: e.expense_id,
         send_after: outsideQuietHours(ctx, now, tz),
       });
+      addInvite(ctx, { group_id: e.group_id }, { id, text, kind: "claims_open", expense_id: e.expense_id });
       await ctx.db.set_share({ ...s, followup_count: s.followup_count + 1, last_followup_at: now });
     }
   });

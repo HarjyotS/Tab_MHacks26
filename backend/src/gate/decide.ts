@@ -1,5 +1,5 @@
 import type { ClassifyInput, ClassifyResult, Intent } from "@tab/gate";
-import { thresholds as defaults } from "../config.js";
+import { answerThresholds, thresholds as defaults } from "../config.js";
 
 export type Decision = "act" | "clarify" | "ignore";
 
@@ -21,6 +21,12 @@ export function decide(
   t: Thresholds = defaults,
 ): Decision {
   if (result.intent === "ignore") return "ignore";
+  // An answer to Tab's question exists only while Tab is waiting on one.
+  if (result.intent === "answer") {
+    if (!input.open_questions?.length) return "ignore";
+    const a = answerThresholds;
+    return result.confidence >= a.act ? "act" : result.confidence >= a.clarify ? "clarify" : "ignore";
+  }
   // A typed approval never moves money (P7, SPEC #15); it only earns a pointer
   // to the 👍, and only when something is waiting to be paid.
   if (result.intent === "approval" && !hasSettleRequestFor(input)) return "ignore";

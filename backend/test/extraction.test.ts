@@ -3,6 +3,7 @@ import type { ChatClient } from "../src/grok/structured.js";
 import { extractExpense } from "../src/extraction/expense.js";
 import { resolveClaim } from "../src/extraction/claim.js";
 import { extractCorrection } from "../src/extraction/correction.js";
+import { resolveAnswer } from "../src/extraction/answer.js";
 import { resolveName } from "../src/extraction/names.js";
 import type { ExtractInput } from "../src/extraction/types.js";
 import { FRITA_ITEMS, MEMBERS, PHONES } from "../scripts/extraction-cases.js";
@@ -201,5 +202,73 @@ describe("extractCorrection validation", () => {
     expect(out.problems).toEqual([
       { kind: "ungrounded_amount", amount_cents: 5000 },
     ]);
+  });
+});
+
+describe("resolveAnswer validation", () => {
+  const threads = [
+    { id: "clarify:m2", question: "What tip did you leave?", expects: "an amount or a percent", who: "Joe" },
+    { id: "clarify:m1", question: "Which one?\n1. Diner\n2. Frita", expects: "a numbered choice", choices: 2, who: "Joe" },
+  ];
+  const resolution = (over: Record<string, unknown>) => ({
+    thread_id: "q1",
+    relevance: 0.9,
+    yes_no: null,
+    amount_cents: null,
+    percent: null,
+    choice: null,
+    settle_mode: null,
+    restated: null,
+    also_new: false,
+    also_intent: null,
+    ...over,
+  });
+
+  it("maps the short id back to the thread and keeps a grounded amount", async () => {
+    const out = await resolveAnswer(fake(resolution({ amount_cents: 600 })), "m", input("left 6 bucks"), threads);
+    expect(out).toEqual({ thread_id: "clarify:m2", relevance: 0.9, amount_cents: 600, also_new: false });
+  });
+
+  it("drops an amount, percent, or restated number the message doesn't contain", async () => {
+    const out = await resolveAnswer(
+      fake(resolution({ amount_cents: 900, percent: 18, restated: "Joe left a $9 tip." })),
+      "m",
+      input("the usual"),
+      threads,
+    );
+    expect(out).toEqual({ thread_id: "clarify:m2", relevance: 0.9, also_new: false });
+  });
+
+  it("answers nothing when the id isn't one of the questions offered", async () => {
+    const out = await resolveAnswer(fake(resolution({ thread_id: "clarify:m2", yes_no: "yes" })), "m", input("yes"), threads);
+    expect(out).toEqual({ relevance: 0, also_new: false });
+  });
+
+  it("keeps a choice only in range, and reads unknown enum strings as nothing", async () => {
+    const bad = await resolveAnswer(fake(resolution({ thread_id: "q2", choice: 3, yes_no: "maybe" })), "m", input("the third"), threads);
+    expect(bad).toEqual({ thread_id: "clarify:m1", relevance: 0.9, also_new: false });
+    const good = await resolveAnswer(fake(resolution({ thread_id: "q2", choice: 2, relevance: 4 })), "m", input("the second one"), threads);
+    expect(good).toMatchObject({ choice: 2, relevance: 1 });
+  });
+
+  it("drops a restatement naming someone the message doesn't (Joe's review on #35)", async () => {
+    const wrong = await resolveAnswer(fake(resolution({ restated: "Joe paid for the pizza." })), "m", input("I did", PHONES.Kian), threads);
+    expect(wrong.restated).toBeUndefined();
+    const self = await resolveAnswer(fake(resolution({ restated: "Kian paid for the pizza." })), "m", input("I did", PHONES.Kian), threads);
+    expect(self.restated).toBe("Kian paid for the pizza.");
+    const named = await resolveAnswer(fake(resolution({ restated: "Priya had the salad." })), "m", input("priya had the salad", PHONES.Kian), threads);
+    expect(named.restated).toBe("Priya had the salad.");
+  });
+
+  it("reports what else the message does only when it says something else", async () => {
+    const out = await resolveAnswer(
+      fake(resolution({ also_new: true, also_intent: "expense", amount_cents: 300 })),
+      "m",
+      input("3, and I also got gas $30"),
+      threads,
+    );
+    expect(out).toMatchObject({ amount_cents: 300, also_new: true, also_intent: "expense" });
+    const quiet = await resolveAnswer(fake(resolution({ also_intent: "expense" })), "m", input("3"), threads);
+    expect(quiet.also_intent).toBeUndefined();
   });
 });

@@ -220,8 +220,36 @@ describe("settling while a receipt is open", () => {
     await w.photo("Joe", "frita");
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
     await w.say("Kian", "let's settle up");
-    expect(w.said("balance_reply")[0]).toMatch(/isn't locked in yet/);
+    expect(w.said("clarifying_question")).toEqual([
+      "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?",
+    ]);
+    expect(w.said("balance_reply")).toEqual([]);
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
+  });
+
+  it('takes "yeah lock it in" as yes: splits the unclaimed items evenly and asks to settle', async () => {
+    // Harjyot's playground: the old "isn't locked in yet" wasn't a question,
+    // so "yeah lock it in" went nowhere.
+    const w = world({ receipt: { frita: FRITA }, claim: claims });
+    await w.photo("Joe", "frita");
+    await w.say("Kian", "let's settle up");
+    // Only whoever asked to settle answers (Joe's review on #35): a
+    // bystander's "ok" doesn't split unclaimed items onto people.
+    await w.say("Priya", "ok");
+    expect(w.db.expenses()[0]!.status).toBe("itemizing");
+    await w.say("Kian", "yeah lock it in");
+    expect(w.db.expenses()[0]!.status).toBe("finalized");
+    expect(w.said("settle_request")).toHaveLength(1);
+    expect(w.db.transfers()).toEqual([]);
+  });
+
+  it("leaves the receipt open on no", async () => {
+    const w = world({ receipt: { frita: FRITA }, claim: claims });
+    await w.photo("Joe", "frita");
+    await w.say("Kian", "let's settle up");
+    await w.say("Kian", "nah wait");
+    expect(w.db.expenses()[0]!.status).toBe("itemizing");
+    expect(w.said("settle_request")).toEqual([]);
   });
 });
 
@@ -263,6 +291,28 @@ describe("an item named without a price (SPEC 7.5)", () => {
     expect(w.db.expense(id)!.status).toBe("proposed");
   });
 
+  it("prices an answer that names the item from the receipt", async () => {
+    const ANSWER = "oh it's the cheesecake on the receipt";
+    const w = world({
+      receipt: { bistro: BISTRO },
+      expense: {
+        [`adjustment|${PIE}`]: adjustment([], [{ name: "Priya", amount_cents: null, item: "key lime pie" }]),
+        [`adjustment|${PIE}\n${ANSWER}`]: adjustment([], [{ name: "Priya", amount_cents: null, item: "cheesecake" }]),
+      },
+    });
+    await w.photo("Priya", "bistro");
+    const id = w.db.expenses()[0]!.expense_id;
+    await w.say("Priya", PIE);
+    expect(w.said("clarifying_question")).toHaveLength(1);
+    await w.say("Priya", ANSWER);
+    expect(w.said("clarifying_question")).toHaveLength(1); // nothing more to ask
+    expect(w.db.shares(id).find((s) => s.phone === PEOPLE.Priya)!.fixed_cents).toBe(799);
+    // Answered, so the split can lock in again on schedule.
+    w.advance(60_000); // past the demo deadline, well inside the question TTL
+    await tick(w.ctx);
+    expect(w.db.expense(id)!.status).toBe("finalized");
+  });
+
   const items = (rows: [string, number, number][]): LineItem[] =>
     rows.map(([description, quantity, amount_cents], i) => ({
       item_id: `i${i}`, expense_id: "e", position: i + 1, description, quantity, amount_cents,
@@ -277,6 +327,21 @@ describe("an item named without a price (SPEC 7.5)", () => {
     ["the burger", 1499],
     ["cheesecake", 799],
   ])("matches %s to the receipt", (item, cents) => {
+    expect(receiptPrice(item, bistro)).toBe(cents);
+  });
+
+  // Harjyot's playground on #35: "alex had both drinks" got "How much was
+  // Alex's both drinks?"; quantifiers and filler mustn't block a match.
+  it.each([
+    ["both drinks", 598],
+    ["both soft drinks", 598],
+    ["the drinks", 598],
+    ["all the drinks", 598],
+    ["those drinks", 598],
+    ["our drinks", 598],
+    ["a drink", 299],
+    ["the 2 drinks", 598],
+  ])("matches %s to the drinks line", (item, cents) => {
     expect(receiptPrice(item, bistro)).toBe(cents);
   });
 

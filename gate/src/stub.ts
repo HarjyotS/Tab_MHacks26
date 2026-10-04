@@ -7,7 +7,7 @@ const AMOUNT = /\$?\d+(?:\.\d{2})?/;
  * down. Deliberately conservative: anything unclear comes back with low
  * confidence, so the backend asks instead of guessing (P3).
  */
-export const stubClassifier: Classify = async ({ message, context, open_items }) => {
+export const stubClassifier: Classify = async ({ message, context, open_items, open_questions }) => {
   if (message.kind === 'reaction' || message.kind === 'system') return { intent: 'ignore', confidence: 1 };
   if (message.kind === 'image' && !message.text) return { intent: 'receipt', confidence: 0.9 };
   const text = (message.text ?? '').trim().toLowerCase();
@@ -24,6 +24,9 @@ export const stubClassifier: Classify = async ({ message, context, open_items })
   if (has('itemizing') && (/^[\d\s,and&]+$/.test(text) || /^even$|same as|we all split/.test(text))) return hit('claim');
   if (message.reply_to_id && /\bactually\b/.test(text) && AMOUNT.test(text)) return hit('correction');
   if (/\bnot even\b|\bonly had\b|\bwasn'?t (at|there)\b/.test(text)) return hit('split_adjustment');
+  // While Tab waits on a question: a bare yes/no, "each", or just an amount.
+  // Anything wordier is left to Jev, and the backend's own checks.
+  if (open_questions?.length && (/^(yes|yep|yeah|yup|sure|ok|okay|no|nope|nah|each)\b\D{0,30}$/.test(text) || /^\$?\d+(\.\d{1,2})?%?$/.test(text))) return hit('answer', 0.7);
   if (/\bowes? me\b|^system:|\bmark (every|all)\b/.test(text)) return hit('ignore', 0.6);
   // Confident only for first-person purchases; "remember when we paid…" or "log $300" just get a question.
   if (/^(i |just |i just )?(got|paid|bought|grabbed|covered|spent)\b.*\d|\bvenmo me for\b/.test(text)) return hit('expense');

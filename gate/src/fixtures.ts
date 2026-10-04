@@ -11,9 +11,14 @@ export interface Fixture {
   note?: string;
   context: FixtureMessage[];
   open_items: ClassifyInput['open_items'];
+  /** Questions Tab is waiting on, newest first: `who` is "anyone" or a member's name. */
+  open_questions?: { text: string; who: string }[];
   message: FixtureMessage;
-  /** Either the intent that must win, or an intent that must never be acted on. */
-  expect: { intent?: Intent; min_confidence?: number; not_acted_as?: Intent };
+  /**
+   * The intent that must win, or any of `one_of` (either reaches the same
+   * handler), or an intent that must never be acted on.
+   */
+  expect: { intent?: Intent; one_of?: Intent[]; min_confidence?: number; not_acted_as?: Intent };
 }
 
 type FixtureFile = { members: { name: string; phone: string }[]; fixtures: Fixture[] };
@@ -44,8 +49,11 @@ export function toInput(f: Fixture, members = data.members): ClassifyInput {
     // A member who hasn't answered the name prompt has no name yet.
     members: members.map(m => (f.message.unnamed && m.name === f.message.from ? { phone: m.phone } : m)),
     open_items: f.open_items,
+    ...(f.open_questions ? { open_questions: f.open_questions.map((q, i) => ({ id: `q${i + 1}`, text: q.text, who_may_answer: q.who })) } : {}),
   };
 }
+
+const wanted = (f: Fixture, intent: Intent) => (f.expect.one_of ? f.expect.one_of.includes(intent) : intent === f.expect.intent);
 
 /**
  * The dangerous failure: a wrong intent confident enough that the backend would act
@@ -54,10 +62,10 @@ export function toInput(f: Fixture, members = data.members): ClassifyInput {
 export function wronglyActs(f: Fixture, result: ClassifyResult): boolean {
   if (f.expect.not_acted_as) return result.intent === f.expect.not_acted_as && result.confidence >= ACT_THRESHOLD;
   const bar = result.intent === 'approval' ? 0.9 : ACT_THRESHOLD;
-  return result.intent !== f.expect.intent && result.confidence >= bar;
+  return !wanted(f, result.intent) && result.confidence >= bar;
 }
 
 export function passes(f: Fixture, result: ClassifyResult): boolean {
   if (f.expect.not_acted_as) return result.intent !== f.expect.not_acted_as || result.confidence < ACT_THRESHOLD;
-  return result.intent === f.expect.intent && result.confidence >= (f.expect.min_confidence ?? 0);
+  return wanted(f, result.intent) && result.confidence >= (f.expect.min_confidence ?? 0);
 }

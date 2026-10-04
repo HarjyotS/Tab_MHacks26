@@ -4,8 +4,9 @@ import * as T from "../copy/templates.js";
 import type { Expense, Message, Share } from "../store/types.js";
 import { MAX_DMS_PER_EXPENSE } from "../config.js";
 import type { SettleMode } from "../db/types.js";
-import { activeMembers, type BrainCtx, chatKey, chatOf, outsideQuietHours, type Pending, say, styleFor, tapback } from "./context.js";
+import { activeMembers, type BrainCtx, chatOf, outsideQuietHours, say, styleFor, tapback } from "./context.js";
 import { liveShares } from "./expense.js";
+import { addInvite, addThread } from "./threads.js";
 
 export type { SettleMode };
 
@@ -101,17 +102,21 @@ async function postSettleRequest(
       })),
     };
   });
+  const text = T.settleRequest({
+    seed: request_id,
+    owed,
+    description: included.length === 1 ? included[0]!.description : undefined,
+  });
+  const expense_id = included.length === 1 ? included[0]!.expense_id : undefined;
   await say(ctx, {
     chat: { group_id },
     purpose: "settle_request",
     id: request_id,
-    text: T.settleRequest({
-      seed: request_id,
-      owed,
-      description: included.length === 1 ? included[0]!.description : undefined,
-    }),
-    expense_id: included.length === 1 ? included[0]!.expense_id : undefined,
+    text,
+    expense_id,
   });
+  // "...or reply if something's off."
+  addInvite(ctx, { group_id }, { id: request_id, text, kind: "settle_open", expense_id, expense_ids: included.map((e) => e.expense_id) });
   return true;
 }
 
@@ -141,16 +146,29 @@ export async function settleUp(ctx: BrainCtx, m: Message) {
     `settle_request:${m.group_id}:${m.message_id}`,
   );
   if (posted) return;
-  // Nothing locked in yet, but something may still be open: say so rather
-  // than "everyone's square".
+  // Nothing locked in yet, but a receipt may still be waiting on claims:
+  // offer to split what's unclaimed evenly and settle now, rather than say
+  // "everyone's square" (Harjyot's playground: "yeah lock it in" to the old
+  // "isn't locked in yet" went nowhere).
   const open = ctx.store
     .expenses()
-    .filter((e) => e.group_id === m.group_id && (e.status === "proposed" || e.status === "itemizing"));
-  await say(ctx, {
-    chat: chatOf(m),
-    purpose: "balance_reply",
-    id: `settle_up:${m.message_id}`, reply_to: m.message_id,
-    text: open.length > 0 ? T.notLockedYet(open) : T.nothingToSettle(),
+    .filter((e) => e.group_id === m.group_id && e.status === "itemizing");
+  const id = `settle_up:${m.message_id}`;
+  if (open.length === 0) {
+    await say(ctx, { chat: chatOf(m), purpose: "balance_reply", id, reply_to: m.message_id, text: T.nothingToSettle() });
+    return;
+  }
+  const text = T.notLockedYet(open);
+  await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text });
+  // Only whoever asked to settle answers it: a bystander's "ok" mustn't
+  // split unclaimed items onto people (Joe's review on #35).
+  addThread(ctx, chatOf(m), {
+    id,
+    text,
+    expense_ids: open.map((e) => e.expense_id),
+    who: "asker",
+    asker: m.sender_phone,
+    data: { kind: "confirm", then: "finalize_and_settle", source: m, asked_at: ctx.now() },
   });
 }
 
@@ -233,22 +251,29 @@ export async function dispute(ctx: BrainCtx, m: Message, expenses: Expense[]) {
   if (disputed.length === 0) return;
   const one = disputed.length === 1 ? disputed[0] : undefined;
   const chat = m.kind === "reaction" ? { dm_phone: m.sender_phone } : chatOf(m);
+  const id = `dispute_followup:${m.message_id}`;
+  const text = T.disputeFollowup({ seed: m.message_id, description: one?.description, amount_cents: total });
   await say(ctx, {
     chat,
     purpose: "dispute_followup",
-    id: `dispute_followup:${m.message_id}`,
+    id,
     // A tapback can trigger this; only a text message can be replied to.
     reply_to: m.kind === "reaction" ? undefined : m.message_id,
-    text: T.disputeFollowup({ seed: m.message_id, description: one?.description, amount_cents: total }),
+    text,
     expense_id: one?.expense_id,
   });
-  // Their answer ("I only had $10") goes to resolveDispute.
-  ctx.memory.pending.set(chatKey(chat), {
-    kind: "dispute",
-    source: m,
-    expense_ids: disputed.map((e) => e.expense_id),
-    asked_at: ctx.now(),
-  } satisfies Pending);
+  // Their answer ("I only had $10") goes to resolveDispute. Only theirs:
+  // it's their share.
+  const expense_ids = disputed.map((e) => e.expense_id);
+  addThread(ctx, chat, {
+    id,
+    text,
+    expense_id: one?.expense_id,
+    expense_ids,
+    who: "asker",
+    asker: m.sender_phone,
+    data: { kind: "dispute", source: m, expense_ids, asked_at: ctx.now() },
+  });
 }
 
 // Expenses a pending dispute still covers: finalized, with the disputer's
@@ -378,13 +403,15 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
     if (liveShares(ctx, expense.expense_id).every((s) => s.responded))
       await finalize(ctx, ctx.store.expense(expense.expense_id)!);
   } else if (m.reaction === "dislike" || m.reaction === "question") {
+    const id = `clarify:${m.message_id}`;
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, // answers a tapback: no thread
+      id, // answers a tapback: no inline reply
       text: "What's off?",
       expense_id: expense.expense_id,
     });
+    addInvite(ctx, chatOf(m), { id, text: `What's off with ${expense.description}?`, kind: "adjust_open", expense_id: expense.expense_id });
   }
 }
 

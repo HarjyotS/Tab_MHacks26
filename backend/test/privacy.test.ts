@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { stubClassifier, withPrefilter, type ClassifyInput } from "@tab/gate";
+import { addThread } from "../src/brain/threads.js";
 import { GROUP, world } from "./support/harness.js";
 
 const raw = { is_expense: true, amount_cents: 6300, amount_is_per_person: false, description: "Groceries", payer: "sender", payer_name: null, participants: "everyone", participant_names: [], exclusion_names: [], fixed: [] };
@@ -14,11 +15,15 @@ describe("privacy", () => {
       calls.push({ text: input.message.text ?? "", context: input.context.map((c) => c.text ?? "") });
       return real(input, mode);
     };
+    // The answer resolver never runs while Tab has no open question.
+    const answers: string[] = [];
+    w.ctx.extract.answer = (input) => (answers.push(input.message.text ?? ""), Promise.reject(new Error("no open question")));
     const chatter = ["lol", "who's home tonight", "omw", "did anyone see my charger", "the game starts at 7", "lmaooo", "ok", "anyone want to watch a movie", "happy birthday priya!!", "5 more minutes"];
     for (const [i, text] of chatter.entries()) await w.say((["Kian", "Priya", "Jake"] as const)[i % 3], text);
     await w.say("Joe", "got groceries, $63");
 
     expect(calls).toHaveLength(1);
+    expect(answers).toEqual([]);
     expect(calls[0]!.text).toBe("got groceries, $63");
     expect(calls[0]!.context.filter((t) => chatter.includes(t))).toEqual([]);
     expect(w.said("clarifying_question")).toEqual([]);
@@ -40,7 +45,13 @@ describe("privacy", () => {
 
     // Tab asked Joe something; a bystander's "the second one" has no money words but must still be judged.
     const source = await w.say("Joe", "got groceries, $63");
-    w.ctx.memory.pending.set(GROUP, { kind: "confirm", then: "expense", source, asked_at: w.ctx.now() });
+    addThread(w.ctx, { group_id: GROUP }, {
+      id: `clarify:${source.message_id}`,
+      text: "Want me to split that?",
+      who: "asker",
+      asker: source.sender_phone,
+      data: { kind: "confirm", then: "expense", source, asked_at: w.ctx.now() },
+    });
     await w.say("Priya", "the second one");
     expect(seen.at(-1)).toMatchObject({ tab_question_open: true, message: { text: "the second one" } });
     expect(logged.at(-1)).toMatchObject({ prefiltered: false });

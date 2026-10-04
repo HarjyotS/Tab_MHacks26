@@ -9,7 +9,6 @@ import * as T from "../copy/templates.js";
 import type { Expense, LineItem, Message, Share } from "../store/types.js";
 import {
   activeMembers,
-  chatKey,
   chatOf,
   outsideQuietHours,
   say,
@@ -19,6 +18,7 @@ import {
 } from "./context.js";
 import { extractInput } from "./inputs.js";
 import { startItemizing } from "./receipt.js";
+import { addInvite, addThread, closeExpenseThreads } from "./threads.js";
 
 export const expenseIdFor = (source_message_id: string) =>
   `exp_${source_message_id}`;
@@ -50,15 +50,26 @@ async function ask(
     description,
     people: group_id ? people(ctx, group_id) : [],
   });
+  const id = `clarify:${m.message_id}`;
+  const expense_id = "expense_id" in pending ? pending.expense_id : undefined;
   await tapback(ctx, m, "question");
   await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
-    id: `clarify:${m.message_id}`, reply_to: m.message_id,
+    id, reply_to: m.message_id,
     text: q,
-    expense_id: "expense_id" in pending ? pending.expense_id : undefined,
+    expense_id,
   });
-  ctx.memory.pending.set(chatKey(chatOf(m)), pending);
+  // A missing fact (who paid, how much) anyone in the chat may know; a
+  // confirmation is only the sender's to give.
+  addThread(ctx, chatOf(m), {
+    id,
+    text: q,
+    expense_id,
+    who: pending.kind === "confirm" ? "asker" : "anyone",
+    asker: m.sender_phone,
+    data: pending,
+  });
 }
 
 // Problems Tab can't resolve by asking for a missing fact.
@@ -244,21 +255,25 @@ export async function postProposal(
   }));
   // Updated proposals get a fresh id per version so each one is sent.
   const version = updated ? `:${ctx.now().getTime()}` : "";
+  const id = `split_proposal:${expense_id}${version}`;
+  const text = T.splitProposal({
+    seed: expense_id,
+    description: e.description,
+    total_cents: e.total_cents,
+    shares,
+    updated,
+  });
   await say(ctx, {
     chat: { group_id: e.group_id },
     purpose: "split_proposal",
-    id: `split_proposal:${expense_id}${version}`,
-    text: T.splitProposal({
-      seed: expense_id,
-      description: e.description,
-      total_cents: e.total_cents,
-      shares,
-      updated,
-    }),
+    id,
+    text,
     expense_id,
     // The first proposal answers the expense message; updates aren't answers.
     reply_to: updated ? undefined : e.source_message_id,
   });
+  // "Anything uneven, or anyone not there?": open while it's proposed.
+  addInvite(ctx, { group_id: e.group_id }, { id, text, kind: "split_open", expense_id });
 }
 
 // SPEC §7.5: "not even, John only had a Diet Coke", "I wasn't there".
@@ -321,14 +336,16 @@ export async function handleAdjustment(
       return;
     }
     await holdOpen(ctx, expense);
+    const id = `clarify:${m.message_id}`;
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, reply_to: m.message_id,
+      id, reply_to: m.message_id,
       text: "What's uneven?",
       expense_id: expense.expense_id,
     });
+    addInvite(ctx, chatOf(m), { id, text: `What's uneven on ${expense.description}?`, kind: "adjust_open", expense_id: expense.expense_id });
     return;
   }
   // A pinned amount can't exceed what was spent (the split math would fail).
@@ -338,14 +355,17 @@ export async function handleAdjustment(
     const who = result.fixed.find((f) => f.amount_cents !== undefined)!;
     const name = activeMembers(ctx, expense.group_id).find((x) => x.phone === who.phone)?.name ?? "they";
     await holdOpen(ctx, expense);
+    const id = `clarify:${m.message_id}`;
+    const text = `That's more than the ${money(base)} total. What did ${name} actually have?`;
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
-      id: `clarify:${m.message_id}`, reply_to: m.message_id,
-      text: `That's more than the ${money(base)} total. What did ${name} actually have?`,
+      id, reply_to: m.message_id,
+      text,
       expense_id: expense.expense_id,
     });
+    addInvite(ctx, chatOf(m), { id, text, kind: "adjust_open", expense_id: expense.expense_id });
     return;
   }
   // Reopening a locked-in expense is always confirmed first.
@@ -354,9 +374,17 @@ export async function handleAdjustment(
       ? `${expense.description} is already locked in. Reopen it and change the split?`
       : `Change the split on ${expense.description}?`;
     await holdOpen(ctx, expense);
+    const id = `clarify:${m.message_id}`;
     await tapback(ctx, m, "question", expense.expense_id);
-    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
-    ctx.memory.pending.set(chatKey(chatOf(m)), { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() });
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
+    addThread(ctx, chatOf(m), {
+      id,
+      text: question,
+      expense_id: expense.expense_id,
+      who: "asker",
+      asker: m.sender_phone,
+      data: { kind: "confirm", then: "adjustment", source: m, extraction: { result, problems }, expense_id: expense.expense_id, asked_at: ctx.now() },
+    });
     return;
   }
   await tapback(ctx, m, "like", expense.expense_id);
@@ -366,10 +394,10 @@ export async function handleAdjustment(
 // §7.5: while Tab is asking about a proposed split, it must not lock in
 // under the question (Harjyot's playground: the bistro locked with Alex and
 // Sam still on it, 6 seconds after "How much was Priya's 2 soft drinks?").
+// Every caller then opens a thread about the expense, which tick sees
+// (holdsLockIn); this also pushes the deadline past the answer.
 async function holdOpen(ctx: BrainCtx, expense: Expense) {
   if (expense.status !== "proposed") return;
-  // Seen by tick, since some of these questions set no pending.
-  ctx.memory.holds.set(expense.expense_id, ctx.now());
   const until = ctx.now().getTime() + ctx.timing.durations.OBJECTION_EXTENSION;
   if ((expense.objection_deadline?.getTime() ?? 0) >= until) return;
   await ctx.db.upsert_expense({ ...expense, objection_deadline: new Date(until) });
@@ -377,7 +405,7 @@ async function holdOpen(ctx: BrainCtx, expense: Expense) {
 
 // §7.5: "If an item is named without a price and a receipt exists, match it
 // to a line item." Only one clear match counts; anything else is asked.
-function priceFromReceipt(
+export function priceFromReceipt(
   extracted: Extracted<ExpenseExtraction>,
   items: LineItem[],
 ): Extracted<ExpenseExtraction> {
@@ -403,8 +431,15 @@ function priceFromReceipt(
   };
 }
 
-const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6 };
-const STOP = new Set(["the", "a", "an", "of", "and", "my", "his", "her", "their", "x", "w", "with", "some"]);
+const NUMBER_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, both: 2 };
+// Filler and quantifiers never block a match: "both drinks", "all the
+// drinks" and "those drinks" are all the drinks line (Harjyot's playground).
+const STOP = new Set([
+  "the", "a", "an", "of", "and", "my", "his", "her", "their", "our", "your", "x", "w", "with", "some",
+  "all", "those", "these", "that", "this",
+]);
+// Leading filler before a quantity: "the 2 drinks", "all of the drinks".
+const LEADING = /^((the|all|of|those|these|our|my|his|her|their)\s+)+/;
 
 function words(text: string): string[] {
   return text
@@ -430,7 +465,8 @@ export function receiptPrice(item: string, items: LineItem[]): number | undefine
   if (matches.length !== 1) return undefined;
   const line = matches[0]!;
   const lineQty = Math.max(line.quantity, Number(line.description.match(/^\s*(\d+)\s*x\b/i)?.[1] ?? 1));
-  const asked = item.trim().toLowerCase().match(/^(\d+|a|an|one|two|three|four|five|six)\b/)?.[1];
+  // "all the drinks" (no count after the filler) is the whole line.
+  const asked = item.trim().toLowerCase().replace(LEADING, "").match(/^(\d+|a|an|one|two|three|four|five|six|both)\b/)?.[1];
   const qty = asked === undefined ? lineQty : Number(asked) || NUMBER_WORDS[asked]!;
   if (qty >= lineQty) return line.amount_cents;
   return Math.round((line.amount_cents * qty) / lineQty);
@@ -457,7 +493,8 @@ export async function applyAdjustment(
   result: ExpenseExtraction,
 ) {
   const current = ctx.store.expense(snapshot.expense_id) ?? snapshot;
-  ctx.memory.holds.delete(current.expense_id);
+  // Whatever Tab was asking about this split is answered now.
+  closeExpenseThreads(ctx, current.expense_id, ["adjustment", "adjust_open"]);
   if (current.status === "finalized" && moneyMoving(ctx, current)) return;
   const expense = current.status === "finalized" ? await reopen(ctx, current) : current;
   const before = new Map(

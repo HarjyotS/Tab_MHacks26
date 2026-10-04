@@ -13,6 +13,14 @@ export const thresholds = {
   clarify: 0.5,
 } as const;
 
+// An answer to one of Tab's open questions only picks which question it
+// answers; the resolver and each handler still check everything, and nothing
+// it does moves money (P7). So the gate's bar for it is lower.
+export const answerThresholds = {
+  act: 0.6,
+  clarify: 0.3,
+} as const;
+
 export const LARGE_AMOUNT_CENTS = 100_000;
 export const CONTEXT_MESSAGES = 10;
 export const LOPSIDED_FACTOR = 1.5;

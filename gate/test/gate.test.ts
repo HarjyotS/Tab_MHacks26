@@ -51,6 +51,19 @@ describe('Jev gate', () => {
     expect(buildState(toInput(byId(10)))).toContain('Settle request open for the sender: yes');
   });
 
+  it("lists Tab's open questions only when it is waiting on one", () => {
+    const plain = toInput(byId(3));
+    expect(buildState(plain)).not.toContain('Tab is waiting on');
+    const state = buildState({
+      ...plain,
+      open_questions: [
+        { id: 'q1', text: 'How much was\nthe Uber?', who_may_answer: 'Kian' },
+        { id: 'q2', text: 'Got a trip coming up?', who_may_answer: 'anyone' },
+      ],
+    });
+    expect(state).toContain('Tab is waiting on, newest first:\n- "How much was the Uber?" (only Kian may answer)\n- "Got a trip coming up?" (anyone may answer)');
+  });
+
   it('gives up on a hung Jev request instead of stalling the backend', async () => {
     const hang = vi.fn((_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
       init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
@@ -88,6 +101,20 @@ describe('stub classifier', () => {
     const plain = toInput(byId(3));
     expect((await stubClassifier({ ...plain, message: { ...plain.message, text: 'ok' } })).intent).toBe('ignore');
     expect((await stubClassifier(toInput(byId(14)))).intent).toBe('name_reply');
+  });
+
+  it('reads a bare yes or an amount as an answer only while Tab is waiting on a question', async () => {
+    const plain = toInput(byId(3));
+    const say = (text: string, waiting: boolean) =>
+      stubClassifier({
+        ...plain,
+        message: { ...plain.message, text },
+        ...(waiting ? { open_questions: [{ id: 'q1', text: 'Want me to split that?', who_may_answer: 'Joe' }] } : {}),
+      });
+    expect((await say('yeah lock it in', true)).intent).toBe('answer');
+    expect((await say('22', true)).intent).toBe('answer');
+    expect((await say('yeah lock it in', false)).intent).toBe('ignore');
+    expect((await say('who is driving tonight', true)).intent).toBe('ignore');
   });
 
   it('passes the spec fixtures it is meant to cover', async () => {

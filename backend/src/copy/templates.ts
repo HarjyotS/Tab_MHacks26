@@ -120,12 +120,11 @@ export const tapToPay = () => "Tap 👍 on the settle request to pay your part."
 
 export const nothingToSettle = () => "Nothing to settle. Everyone's square.";
 
-// "let's settle up" while expenses are still open (Harjyot's playground test).
+// "let's settle up" while a receipt is still waiting on claims (Harjyot's
+// playground test): a real question, so "yeah lock it in" does something.
 export function notLockedYet(open: { description: string; total_cents: number }[]): string {
   const what = listJoin(open.map((e) => `${e.description} (${money(e.total_cents)})`));
-  return open.length === 1
-    ? `${what} isn't locked in yet. I'll include it once it is.`
-    : `${what} aren't locked in yet. I'll include them once they are.`;
+  return `Still waiting on claims for ${what}. Split what's unclaimed evenly and settle now?`;
 }
 
 // SPEC §12.3: the web ledger link, one per group when asked by DM.
@@ -211,7 +210,23 @@ export const disputeTooMuch = (a: { description: string; max_cents: number }) =>
 export const whichDispute = (items: { description: string; amount_cents: number }[]) =>
   `Which one?\n${items.map((i, n) => `${n + 1}. ${i.description} (${money(i.amount_cents)})`).join("\n")}`;
 
+// An answer Tab couldn't use: say so once and ask the question again.
+export const answerFollowup = (question: string, onReceipt: boolean) =>
+  `${onReceipt ? "Couldn't find that on the receipt." : "Sorry, I didn't get that."} ${question}`;
+
 // ── Questions (one per extraction Problem, P2/P3) ────────────────────────
+
+// "both drinks" reads as "drinks" after a name ("Alex's drinks"); a count
+// stays ("2 soft drinks"). Plural when the count is more than one, or the
+// item reads plural.
+const COUNT_WORDS: Record<string, number> = { a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, both: 2 };
+function itemLabel(raw: string): { item: string; plural: boolean } {
+  const item = raw.trim().replace(/^((a|an|both|all|of|the|those|these|my|our|his|her|their)\s+)+/i, "") || raw.trim();
+  const first = raw.trim().toLowerCase().match(/^(\d+|a|an|one|two|three|four|five|six|both)\b/)?.[1];
+  const count = first === undefined ? undefined : Number(first) || COUNT_WORDS[first];
+  const plural = count !== undefined ? count > 1 : /[^s]s$/i.test(item);
+  return { item, plural };
+}
 
 export function clarifyingQuestion(
   p: Problem,
@@ -227,7 +242,8 @@ export function clarifyingQuestion(
       return `Who paid for ${thing}?`;
     case "missing_item_price": {
       const person = ctx.people.find((x) => x.phone === p.phone);
-      return `How much was ${person ? `${displayName(person)}'s` : "the"} ${p.item}?`;
+      const { item, plural } = itemLabel(p.item);
+      return `How much ${plural ? "were" : "was"} ${person ? `${displayName(person)}'s` : "the"} ${item}?`;
     }
     case "unknown_name":
       return `Who's ${p.name}? I only know people in this chat.`;

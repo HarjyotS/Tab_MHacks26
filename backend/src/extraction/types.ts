@@ -28,6 +28,43 @@ export type CorrectionExtraction = {
   unclear: boolean;
 };
 
+// One of Tab's open questions, as the answer resolver sees it.
+export type OpenThread = {
+  id: string;
+  question: string; // Tab's own words
+  expects: string; // what an answer looks like, in words
+  choices?: number; // numbered choices 1..n
+  who: string; // "anyone", or the one person who may answer
+};
+
+// What else a message that answers a question may also be doing.
+export const ALSO_INTENTS = [
+  "expense",
+  "split_adjustment",
+  "claim",
+  "dispute",
+  "settle_up",
+  "balance_query",
+  "breakdown_request",
+  "help",
+] as const;
+
+// The answer resolver's output after validation in code (P6): thread_id is
+// one of the questions offered, amounts are grounded in the message, and a
+// choice is in range. Fields it couldn't read are absent.
+export type AnswerResolution = {
+  thread_id?: string;
+  relevance: number;
+  yes_no?: "yes" | "no";
+  amount_cents?: number;
+  percent?: number;
+  choice?: number;
+  settle_mode?: "ledger" | "per_expense";
+  restated?: string;
+  also_new: boolean;
+  also_intent?: (typeof ALSO_INTENTS)[number];
+};
+
 // Why Tab can't act yet. Each problem maps to exactly one short clarifying
 // question, so handlers ask one thing at a time (P2) and never guess (P3).
 export type Problem =

@@ -38,7 +38,7 @@ for (const f of fixtures) {
   latencies.push(...rs.map(r => r.ms));
   const flaky = new Set(rs.map(r => r.result.intent)).size > 1;
   const mark = bad ? '🚨' : ok.every(Boolean) ? '✅' : '❌';
-  const want = f.expect.not_acted_as ? `not ${f.expect.not_acted_as}` : f.expect.intent;
+  const want = f.expect.not_acted_as ? `not ${f.expect.not_acted_as}` : f.expect.one_of?.join(' or ') ?? f.expect.intent;
   const got = rs.map(r => `${r.result.intent} ${r.result.confidence.toFixed(2)}`).join(', ');
   if (mark !== '✅' || flaky || runs === 1) {
     console.log(`${mark} #${f.id} ${JSON.stringify(f.message.text)} want ${want}: ${got}${flaky ? '  (flip-flops)' : ''}`);
