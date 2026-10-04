@@ -72,6 +72,40 @@ describe("corrections that name the expense (#44 #1, with Joe's guards)", () => 
     expect(w.db.expense(`exp_${open.message_id}`)!.total_cents).toBe(cents);
     expect(w.db.expenses()).toHaveLength(2);
   });
+
+  // Merge review: with no "another", a new purchase can still read like
+  // "<expense> was $N". A confident gate's new expense wins unless the
+  // message clearly corrects ("not $24", "meant", "actually" with no purchase).
+  it.each([
+    ["uber was $18, i got it", "Uber back"],
+    ["the uber back was $18", "Uber back"],
+  ])("a confident new expense that only sounds like a correction stays new (case %#)", async (text, newDescription) => {
+    const w = world({ expense: { [`new|${UBER}`]: raw(2400, "Uber"), [`new|${text}`]: raw(1800, newDescription) }, correction: { [text]: fix(1800) } });
+    const uber = await w.say("Joe", UBER);
+    w.ctx.classify = async () => ({ intent: "expense", confidence: 0.95 });
+    await w.say("Joe", text);
+    expect(w.db.expense(`exp_${uber.message_id}`)!.total_cents).toBe(2400);
+    expect(w.db.expenses()).toHaveLength(2);
+  });
+
+  it("corrects on a confident gate when it clearly reads as one", async () => {
+    const text = "actually the uber was 30";
+    const w = world({ expense: { [`new|${UBER}`]: raw(2400, "Uber") }, correction: { [text]: fix(3000) } });
+    const uber = await w.say("Joe", UBER);
+    w.ctx.classify = async () => ({ intent: "expense", confidence: 0.95 });
+    await w.say("Joe", text);
+    expect(w.db.expenses()).toHaveLength(1);
+    expect(w.db.expense(`exp_${uber.message_id}`)!.total_cents).toBe(3000);
+  });
+
+  it("with the stub gate, a correction-shaped message that isn't clearly one is asked about, never applied", async () => {
+    const text = "uber was $18, i got it";
+    const w = world({ expense: { [`new|${UBER}`]: raw(2400, "Uber") }, correction: { [text]: fix(1800) } });
+    const uber = await w.say("Joe", UBER);
+    await w.say("Joe", text);
+    expect(w.db.expense(`exp_${uber.message_id}`)!.total_cents).toBe(2400);
+    expect(w.said("clarifying_question").at(-1)?.toLowerCase()).toBe("change uber to $18.00?");
+  });
 });
 
 const MEIJER: ReceiptRead = {

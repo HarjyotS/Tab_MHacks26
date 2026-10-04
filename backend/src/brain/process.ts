@@ -21,7 +21,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
-import { handleCorrection, namedCorrectionTarget } from "./correction.js";
+import { clearlyCorrects, handleCorrection, namedCorrectionTarget } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
@@ -264,8 +264,9 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     case "expense": {
       // A captioned photo ("dinner, i paid") is still a receipt.
       if (m.kind === "image") return handleReceipt(ctx, m);
-      // "actually the uber was $30 not $24": a correction to the open Uber, not a second one.
-      const corrected = namedCorrectionTarget(ctx, m);
+      // "actually the uber was $30 not $24": a correction to the open Uber, not
+      // a second one. The gate said new expense, so only when it clearly is one.
+      const corrected = clearlyCorrects(m.text ?? "") ? namedCorrectionTarget(ctx, m) : undefined;
       return corrected ? handleCorrection(ctx, m, corrected) : handleExpense(ctx, m);
     }
     case "split_adjustment":

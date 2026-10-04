@@ -18,6 +18,19 @@ const STOPWORDS = new Set(["the", "for", "and", "with", "from", "that", "this", 
 const descriptionWords = (description: string) =>
   (description.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 4 && !STOPWORDS.has(w));
 
+// Overriding the gate takes more than the shape: with no "another", a new
+// purchase still reads "uber was $18, i got it" or "dinner was $80". Only a
+// message that clearly fixes an amount ("not $24", "meant", "should be", or
+// "actually" without buying anything) turns a confident new expense into a
+// correction; anything else stays new, or is asked about when unsure
+// (merge review of #50).
+const FIXING = /\bnot\s+\$?\d|\b(?:meant|typo|should\s+(?:have\s+|'ve\s+)?be(?:en)?)\b/i;
+const PURCHASE = /\b(?:paid|pay|got|get|bought|buy|grabbed|covered|spent|ordered|picked\s+up)\b/i;
+
+export function clearlyCorrects(text: string): boolean {
+  return FIXING.test(text) || (/\bactually\b/i.test(text) && !PURCHASE.test(text));
+}
+
 export function namesExpense(text: string, description: string): boolean {
   return descriptionWords(description).some((w) => new RegExp(`\\b${w}s?\\b`, "i").test(text));
 }
