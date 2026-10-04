@@ -121,7 +121,7 @@ describe("receipts (SPEC 7.4)", () => {
     const w = world({ receipt: { meijer: MEIJER } });
     await w.photo("Joe", "meijer");
     expect(w.said("split_proposal")[0]).toMatch(
-      /^Meijer, \$17\.00\. Split 4 ways, that's \$4\.25 each\./,
+      /^meijer \$17\.00 split 4 ways, so \$4\.25 each\n/,
     );
     expect(w.db.lineItems(w.db.expenses()[0]!.expense_id)).toHaveLength(4);
   });
@@ -135,7 +135,7 @@ describe("receipts (SPEC 7.4)", () => {
       total_cents: 10200,
     });
     expect(w.said("item_list")[0]).toBe(
-      'Frita Batidos, $102.00 total\n1. Ribeye $45.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido $12.00\nReply with what you had, or "even" for an even share of whatever\'s left.',
+      'frita batidos, $102.00 total\n1. ribeye $45.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido $12.00\nreply w what you had (numbers work), or "even" for a share of whatever\'s left',
     );
   });
 
@@ -146,7 +146,7 @@ describe("receipts (SPEC 7.4)", () => {
     );
     const w = world({ receipt: { zing: blank } });
     await w.photo("Joe", "zing");
-    expect(w.said("clarifying_question")).toEqual(["What tip did you leave?"]);
+    expect(w.said("clarifying_question")).toEqual(["what'd you tip?"]);
     await w.say("Kian", "10"); // not the payer: ignored as an answer
     expect(w.db.expenses()).toHaveLength(0);
     await w.say("Joe", "3");
@@ -165,7 +165,7 @@ describe("receipts (SPEC 7.4)", () => {
     const w = world({ receipt: { bad } });
     await w.photo("Joe", "bad");
     expect(w.said("clarifying_question")).toEqual([
-      "I read the total as $102.00. Is that right?",
+      "total looks like $102.00 to me, right?",
     ]);
     await w.say("Joe", "yes");
     expect(w.db.expenses()[0]).toMatchObject({
@@ -180,7 +180,7 @@ describe("receipts (SPEC 7.4)", () => {
     const w = world({ receipt: { chf } });
     await w.photo("Joe", "chf");
     expect(w.said("clarifying_question")).toEqual([
-      "What was that in dollars?",
+      "how much was that in dollars?",
     ]);
     await w.say("Joe", "about $60");
     expect(w.db.expenses()[0]).toMatchObject({
@@ -221,7 +221,7 @@ describe("settling while a receipt is open", () => {
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
     await w.say("Kian", "let's settle up");
     expect(w.said("clarifying_question")).toEqual([
-      "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?",
+      "still waiting on claims for frita batidos ($102.00)\nsplit what's unclaimed evenly and settle now?",
     ]);
     expect(w.said("balance_reply")).toEqual([]);
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
@@ -377,7 +377,7 @@ describe("claims and finalizing (SPEC 7.5)", () => {
       [PEOPLE.Jake]: 637,
     });
     expect(w.said("settle_request")[0]).toContain(
-      "Cool, here's what's owed to Joe for Frita Batidos:\nKian $63.75, Priya $25.50, Jake $6.37.",
+      "cool, here's what's owed to Joe for frita batidos:\nKian $63.75, Priya $25.50, Jake $6.37\n",
     );
   });
 
@@ -405,13 +405,13 @@ describe("claims and finalizing (SPEC 7.5)", () => {
     await w.wait(21_000); // demo: 2h → 20s
     expect(nudges()).toHaveLength(1);
     expect(nudges()[0]).toMatchObject({ kind: "group_message", group_id: "house" });
-    expect(nudges()[0]!.text).toMatch(/^Jake, what (did you have|was yours) at Frita Batidos\?/);
+    expect(nudges()[0]!.text).toMatch(/^Jake,? what('d you get| was yours) at frita batidos\? numbers.*"even"/);
 
     await w.wait(121_000); // +12h → +120s
-    expect(nudges()[1]!.text).toBe('Jake, still need yours for Frita Batidos. Numbers, or "even".');
+    expect(nudges()[1]!.text).toMatch(/^Jake,? (still|no rush, just) need yours for frita batidos.*numbers or "even"$/);
 
     await w.wait(300_000); // 44h → 440s
-    expect(nudges()[2]!.text).toMatch(/^Last call, Jake: in \d+ seconds I'll put you down for \$\d+\.\d{2} for Frita Batidos/);
+    expect(nudges()[2]!.text).toMatch(/^last call Jake: in \d+ seconds i'll put you down for \$\d+\.\d{2} for frita batidos/);
     expect(w.db.outbox().filter((o) => o.kind === "dm")).toEqual([]); // no DMs at all
 
     await w.wait(41_000); // 48h → 480s: deadline

@@ -54,7 +54,7 @@ describe("unsure adjustments (SPEC 6.4 clarify band)", () => {
     await w.say("Joe", "got pizza, $48");
     await w.say("Kian", "yeah dhabush actually owes 10,000");
     expect(w.said("clarifying_question")).toEqual([
-      "Who's dhabush? I only know people in this chat.",
+      "wait who's dhabush? don't think they're in here",
     ]);
   });
 
@@ -64,7 +64,7 @@ describe("unsure adjustments (SPEC 6.4 clarify band)", () => {
     await w.say("Joe", "got pizza, $48");
     await w.say("Kian", "jake actually owes 10,000");
     expect(w.said("clarifying_question")).toEqual([
-      "That's more than the $48.00 total. What did Jake actually have?",
+      "that's more than the $48.00 total, what'd Jake actually have?",
     ]);
   });
 
@@ -74,7 +74,7 @@ describe("unsure adjustments (SPEC 6.4 clarify band)", () => {
     const pizza = await w.say("Joe", "got pizza, $48");
     await w.say("Kian", "jake only had a $3 coke");
     expect(w.said("clarifying_question")).toEqual([
-      "Change the split on Pizza?",
+      "change the split on pizza?",
     ]);
     expect(
       w.db

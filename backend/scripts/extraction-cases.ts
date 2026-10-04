@@ -50,7 +50,7 @@ const onProposal = (text: string, sender: string = Kian): ExtractInput => ({
   members: MEMBERS,
   context: [
     msg(Joe, "dinner was 96, i got it"),
-    msg("tab", "Dinner, $96.00. Split 6 ways, that's $16.00 each.\nAnything uneven, or anyone not there?"),
+    msg("tab", "dinner $96.00 split 6 ways, so $16.00 each\nlmk if it wasn't even or someone skipped"),
   ],
   open_items: [{ expense_id: "e_dinner", description: "Dinner", expense_status: "proposed", my_share_status: "proposed" }],
   message: msg(sender, text),
@@ -59,7 +59,7 @@ const onProposal = (text: string, sender: string = Kian): ExtractInput => ({
 const onItemList = (text: string, dm = false): ExtractInput => ({
   members: MEMBERS,
   context: [
-    msg("tab", "Frita Batidos, $102.00 total\n1. Cuban burger $15.00\n2. Chorizo burger $15.00\n3. Fries $8.00\n4. Batido x2 $14.00", dm),
+    msg("tab", "frita batidos, $102.00 total\n1. cuban burger $15.00\n2. chorizo burger $15.00\n3. fries $8.00\n4. batido x2 $14.00", dm),
   ],
   open_items: [{ expense_id: "e_frita", description: "Frita Batidos", expense_status: "itemizing", my_share_status: "awaiting_claim" }],
   message: msg(Kian, text, dm),
@@ -67,7 +67,7 @@ const onItemList = (text: string, dm = false): ExtractInput => ({
 
 const onPizza = (text: string): ExtractInput => ({
   members: MEMBERS,
-  context: [msg(Kian, "paid 48 for pizza for everyone"), msg("tab", "Pizza, $48.00. Split 6 ways, that's $8.00 each.")],
+  context: [msg(Kian, "paid 48 for pizza for everyone"), msg("tab", "pizza $48.00 split 6 ways, so $8.00 each")],
   open_items: [{ expense_id: "e_pizza", description: "Pizza", expense_status: "proposed", my_share_status: "proposed" }],
   message: msg(Kian, text),
 });

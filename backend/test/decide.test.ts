@@ -51,7 +51,7 @@ describe("decide", () => {
   it("gives an inline reply to Tab more weight", () => {
     const toTab: ClassifyInput = {
       ...base,
-      message: { ...base.message, reply_to_id: "tab-1", reply_to_tab: "I keep track of shared costs" },
+      message: { ...base.message, reply_to_id: "tab-1", reply_to_tab: "i keep the group's tab" },
     };
     expect(decide({ intent: "help", confidence: 0.7 }, toTab)).toBe("act");
     expect(decide({ intent: "breakdown_request", confidence: 0.43 }, toTab)).toBe("clarify");

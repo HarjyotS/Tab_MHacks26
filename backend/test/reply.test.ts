@@ -60,7 +60,7 @@ describe("inline replies", () => {
     const settle = w.db.out.get(`settle_request:exp_${pizza.message_id}`)!;
     await w.say("Priya", "yes", { reply_to_id: settle.sent_photon_id });
     expect(w.db.transfers()).toEqual([]);
-    expect(w.said("clarifying_question")).toEqual(["Tap 👍 on the settle request to pay your part."]);
+    expect(w.said("clarifying_question")).toEqual(["just tap 👍 on the settle msg to pay your part"]);
   });
 
   it("threads Tab's answers to the message they answer, and nothing unprompted (#19)", async () => {

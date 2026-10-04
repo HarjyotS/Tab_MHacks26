@@ -1,5 +1,6 @@
 // Assembles the final text for an outbox row: template, optional wit line,
-// then the group's texting style. Enforces the §9.3 group limit.
+// then Tab's texting style (lowercase, no trailing periods, emoji only if the
+// group uses them; style.ts). Enforces the §9.3 group limit.
 import type { OutboxPurpose } from "../db/types.js";
 import { applyStyle, type GroupStyle } from "./style.js";
 
@@ -23,6 +24,8 @@ export function compose(a: {
   in_group: boolean;
   style: GroupStyle;
   wit?: string | null;
+  // Member names, kept the way they were saved when the rest goes lowercase.
+  names?: string[];
 }): string {
   let text = a.text;
   if (a.wit) {
@@ -33,7 +36,7 @@ export function compose(a: {
       withWit.split("\n").length <= maxLines(a.purpose);
     if (fits) text = withWit;
   }
-  return applyStyle(text, a.style);
+  return applyStyle(text, a.style, a.names);
 }
 
 export function fitsGroupLimit(purpose: OutboxPurpose, text: string): boolean {

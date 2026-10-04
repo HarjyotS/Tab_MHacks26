@@ -4,7 +4,7 @@ import type {
   Extracted,
   Problem,
 } from "../extraction/types.js";
-import { money, type Person } from "../copy/format.js";
+import type { Person } from "../copy/format.js";
 import * as T from "../copy/templates.js";
 import type { Expense, LineItem, Message, Share } from "../store/types.js";
 import {
@@ -88,7 +88,7 @@ export async function handleExpense(
       chat: chatOf(m),
       purpose: "clarifying_question",
       id: `clarify:${m.message_id}`, reply_to: m.message_id,
-      text: "Post that in the group chat and I'll split it.",
+      text: T.postInGroup(m.message_id),
     });
     return;
   }
@@ -234,6 +234,38 @@ export async function proposeNew(
   await postProposal(ctx, expense_id, false);
 }
 
+// For "just you and Priya on Pizza then?": who an opt-out-only change
+// leaves on the split, or who it drops when that's the shorter list. Names
+// only, from members (P3); the sender is "you". Empty when the change pins
+// amounts, which the plain question covers.
+function whoIsLeft(
+  ctx: BrainCtx,
+  expense: Expense,
+  result: { exclusions: string[]; fixed: unknown[] },
+  sender: string,
+): { only?: string[]; without?: string[] } {
+  if (result.fixed.length > 0 || result.exclusions.length === 0) return {};
+  const members = activeMembers(ctx, expense.group_id);
+  const label = (phone: string) =>
+    phone === sender ? "you" : members.find((x) => x.phone === phone)?.name;
+  const named = (phones: string[]) => {
+    const names = phones.map(label);
+    return names.every((n): n is string => Boolean(n))
+      ? [...names.filter((n) => n === "you"), ...names.filter((n) => n !== "you")]
+      : undefined;
+  };
+  const left = liveShares(ctx, expense.expense_id)
+    .map((s) => s.phone)
+    .filter((p) => !result.exclusions.includes(p));
+  if (left.length === 0) return {};
+  if (left.length <= 3) {
+    const only = named(left);
+    if (only) return { only };
+  }
+  const without = named(result.exclusions);
+  return without ? { without } : {};
+}
+
 export function liveShares(ctx: BrainCtx, expense_id: string): Share[] {
   return ctx.store.shares(expense_id).filter((s) => s.status !== "opted_out");
 }
@@ -342,10 +374,10 @@ export async function handleAdjustment(
       chat: chatOf(m),
       purpose: "clarifying_question",
       id, reply_to: m.message_id,
-      text: "What's uneven?",
+      text: T.whatsUneven(),
       expense_id: expense.expense_id,
     });
-    addInvite(ctx, chatOf(m), { id, text: `What's uneven on ${expense.description}?`, kind: "adjust_open", expense_id: expense.expense_id });
+    addInvite(ctx, chatOf(m), { id, text: `${expense.description}: ${T.whatsUneven()}`, kind: "adjust_open", expense_id: expense.expense_id });
     return;
   }
   // A pinned amount can't exceed what was spent (the split math would fail).
@@ -356,7 +388,7 @@ export async function handleAdjustment(
     const name = activeMembers(ctx, expense.group_id).find((x) => x.phone === who.phone)?.name ?? "they";
     await holdOpen(ctx, expense);
     const id = `clarify:${m.message_id}`;
-    const text = `That's more than the ${money(base)} total. What did ${name} actually have?`;
+    const text = T.pinnedOverTotal({ total_cents: base, name });
     await tapback(ctx, m, "question", expense.expense_id);
     await say(ctx, {
       chat: chatOf(m),
@@ -371,8 +403,8 @@ export async function handleAdjustment(
   // Reopening a locked-in expense is always confirmed first.
   if (opts.confirmOnly || locked) {
     const question = locked
-      ? `${expense.description} is already locked in. Reopen it and change the split?`
-      : `Change the split on ${expense.description}?`;
+      ? T.reopenToChange(expense.description)
+      : T.confirmSplitChange({ description: expense.description, ...whoIsLeft(ctx, expense, result, m.sender_phone) });
     await holdOpen(ctx, expense);
     const id = `clarify:${m.message_id}`;
     await tapback(ctx, m, "question", expense.expense_id);
