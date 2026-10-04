@@ -164,16 +164,20 @@ export function explainShare(ctx: BrainCtx, e: Expense, phone: string): string {
   return `split ${shares.length - pinned.length} ways${after}${plus}`;
 }
 
+// Share statuses that count toward a debt (same as `debts`).
 const OWING = ["locked", "approved", "disputed"];
 
-function myLines(ctx: BrainCtx, group_id: string, phone: string): (OwedLine & { to: string })[] {
+// The expenses behind what `phone` owes in a group, newest first: one line
+// per share they still owe, with why it's that amount. `to` narrows it to
+// one payer (lookup.ts whyOwe).
+export function owedLines(ctx: BrainCtx, group_id: string, phone: string, to?: string): (OwedLine & { to: string; expense: Expense })[] {
   return ctx.store
     .expenses()
-    .filter((e) => e.group_id === group_id && e.payer_phone && e.payer_phone !== phone)
+    .filter((e) => e.group_id === group_id && e.payer_phone && e.payer_phone !== phone && (!to || e.payer_phone === to))
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
     .flatMap((e) => {
       const s = ctx.store.shares(e.expense_id).find((x) => x.phone === phone && x.role === "participant");
-      return s && OWING.includes(s.status) ? [{ to: e.payer_phone!, description: e.description, amount_cents: s.amount_cents, why: explainShare(ctx, e, phone) }] : [];
+      return s && OWING.includes(s.status) ? [{ to: e.payer_phone!, expense: e, description: e.description, amount_cents: s.amount_cents, why: explainShare(ctx, e, phone) }] : [];
     });
 }
 
@@ -214,7 +218,7 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
 export async function handleBreakdown(ctx: BrainCtx, m: Message) {
   const groups = groupsOf(ctx, m);
   if (groups.length === 0) return;
-  const lines = groups.flatMap((g) => myLines(ctx, g, m.sender_phone));
+  const lines = groups.flatMap((g) => owedLines(ctx, g, m.sender_phone));
   await say(ctx, {
     chat: chatOf(m),
     purpose: "breakdown_reply",

@@ -21,7 +21,7 @@ export function settleModeFor(ctx: BrainCtx, group_id: string): SettleMode {
   return ctx.store.settleMode(group_id);
 }
 
-const owing = (ctx: BrainCtx, e: Expense): Share[] =>
+export const owing = (ctx: BrainCtx, e: Expense): Share[] =>
   ctx.store
     .shares(e.expense_id)
     .filter(
