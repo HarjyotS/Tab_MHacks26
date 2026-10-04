@@ -5,6 +5,9 @@ dist/
 coverage/
 spacetime/build/
 *.log
+.env.*
+!.env.example
+.DS_Store
 *.tsbuildinfo
 .state/
 .DS_Store
