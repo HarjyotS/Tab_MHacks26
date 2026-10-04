@@ -313,7 +313,9 @@ export async function say(
 
 // 👀 right away, while Grok reads the message (live chats only).
 export async function eyes(ctx: BrainCtx, m: { message_id: string; group_id?: string; sender_phone: string }): Promise<void> {
-  if (!ctx.eyes) return;
+  // Off unless TAB_EYES_MSG=on: Harjyot wants 👀 as a tapback, not a message in
+  // the chat, and replies take about two seconds on the fast model anyway.
+  if (!ctx.eyes || process.env.TAB_EYES_MSG !== "on") return;
   await ctx.db.enqueue_outbox({
     action_id: `eyes:${m.message_id}`,
     kind: m.group_id ? "group_message" : "dm",
