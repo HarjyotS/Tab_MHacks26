@@ -1433,6 +1433,80 @@
         "intent": "expense"
       },
       "note": "From the live test"
+    },
+    {
+      "id": 179,
+      "context": [
+        {
+          "from": "Priya",
+          "text": "what commands do you have"
+        },
+        {
+          "from": "Tab",
+          "text": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+        }
+      ],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "how do we settle the bil or see the ledger?",
+        "reply_to_tab": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+      },
+      "expect": {
+        "intent": "help"
+      },
+      "note": "Harjyot's playground: inline reply to Tab's help"
+    },
+    {
+      "id": 180,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "how do we settle the bil or see the ledger?"
+      },
+      "expect": {
+        "intent": "help"
+      },
+      "note": "Harjyot's playground, not a reply"
+    },
+    {
+      "id": 181,
+      "context": [
+        {
+          "from": "Tab",
+          "text": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+        }
+      ],
+      "open_items": [],
+      "message": {
+        "from": "John",
+        "text": "where do i see what everyone owes",
+        "reply_to_tab": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+      },
+      "expect": {
+        "intent": "balance_query"
+      },
+      "note": "Reply to Tab asking for balances"
+    },
+    {
+      "id": 182,
+      "context": [
+        {
+          "from": "Tab",
+          "text": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+        }
+      ],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "lol ok thanks",
+        "reply_to_tab": "I keep track of shared costs in this chat. Tell me what you paid (\"got groceries, $63\") or send a receipt photo, and I'll split it"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "Thanks to Tab stays quiet"
     }
   ]
 }

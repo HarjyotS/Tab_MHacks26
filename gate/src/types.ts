@@ -30,6 +30,8 @@ export interface GateMessage {
   text?: string;
   image_url?: string;
   reply_to_id?: string;
+  /** Set when this is an inline reply to one of Tab's own messages: what Tab said. */
+  reply_to_tab?: string;
 }
 
 export interface ClassifyInput {
