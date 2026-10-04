@@ -35,13 +35,30 @@ export function namesExpense(text: string, description: string): boolean {
   return descriptionWords(description).some((w) => new RegExp(`\\b${w}s?\\b`, "i").test(text));
 }
 
-export function namedCorrectionTarget(ctx: BrainCtx, m: Message): Expense | undefined {
+// Open expenses the message could be correcting. Several Ubers can be open:
+// the old amount ("not $24") picks one; otherwise it's ambiguous and Tab
+// asks which (P2, audit of #50).
+export function correctionCandidates(ctx: BrainCtx, m: Message): Expense[] {
   const text = m.text ?? "";
-  if (!m.group_id || m.kind !== "text" || !CORRECTION_SHAPE.test(text) || ANOTHER.test(text)) return undefined;
-  return ctx.store
+  if (!m.group_id || m.kind !== "text" || !CORRECTION_SHAPE.test(text) || ANOTHER.test(text)) return [];
+  const named = ctx.store
     .expenses()
-    .filter((e) => e.group_id === m.group_id && (e.status === "proposed" || e.status === "finalized") && namesExpense(text, e.description))
-    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+    .filter((e) => e.group_id === m.group_id && (e.status === "proposed" || e.status === "finalized") && namesExpense(text, e.description));
+  if (named.length <= 1) return named;
+  const old = text.match(/\bnot\s+\$?(\d+(?:\.\d{1,2})?)/i)?.[1];
+  const byOld = old ? named.filter((e) => e.total_cents === Math.round(Number(old) * 100)) : [];
+  return byOld.length === 1 ? byOld : named;
+}
+
+// The one expense a correction names, or undefined when none or several do.
+export function namedCorrectionTarget(ctx: BrainCtx, m: Message): Expense | undefined {
+  const c = correctionCandidates(ctx, m);
+  return c.length === 1 ? c[0] : undefined;
+}
+
+export async function askWhichCorrection(ctx: BrainCtx, m: Message) {
+  await tapback(ctx, m, "question");
+  await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `clarify:${m.message_id}`, reply_to: m.message_id, text: T.whichToCorrect() });
 }
 
 export async function handleCorrection(

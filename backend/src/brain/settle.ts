@@ -407,11 +407,10 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
   const expense = ctx.store.expense(target.expense_id);
   if (expense?.status !== "proposed") return;
   if (m.reaction === "like") {
-    // The payer's 👍 locks it in for the group: they know what it cost and
-    // who was there (Harjyot's playground: Priya's 👍 did nothing). Anyone
-    // who disagrees can still change it (§7.7), and locking in never pays.
-    if (m.sender_phone === expense.payer_phone) await finalize(ctx, expense);
-    else await acceptSplit(ctx, expense, m.sender_phone);
+    // Everyone's 👍, the payer's included, is their own agreement. It locks
+    // in when everyone has agreed or the window ends, so nobody loses their
+    // chance to object (P4, audit of #51). "settle up" still locks it now.
+    await acceptSplit(ctx, expense, m.sender_phone);
   } else if (m.reaction === "dislike" || m.reaction === "question") {
     const id = `clarify:${m.message_id}`;
     await say(ctx, {

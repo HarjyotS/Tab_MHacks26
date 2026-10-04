@@ -6,6 +6,7 @@ import { stubClassifier, type Intent } from "@tab/gate";
 import { processMessage } from "../src/brain/process.js";
 import { openThreads } from "../src/brain/threads.js";
 import type { Message } from "../src/store/types.js";
+import type { ChatClient } from "../src/grok/structured.js";
 import { answer, GROUP, PEOPLE, world, type Script } from "./support/harness.js";
 
 const raw = (cents: number | null, description: string | null, over: object = {}) => ({
@@ -46,12 +47,13 @@ async function tp(script: Script = {}, verdicts: Record<string, [Intent, number]
 }
 
 describe("the payer's 👍 on the proposal", () => {
-  it("locks the split in for the group", async () => {
-    const { w, id } = await tp();
+  it("counts as the payer's own agreement, and leaves everyone else their window (P4)", async () => {
+    const { w, id, share } = await tp();
     await w.react("Priya", `split_proposal:${id}`);
-    expect(w.db.expense(id)!.status).toBe("finalized");
-    expect(w.db.shares(id).every((s) => s.status === "locked")).toBe(true);
-    expect(w.db.transfers()).toEqual([]); // locking in never pays (P7)
+    expect(share("Priya").responded).toBe(true);
+    expect(w.db.expense(id)!.status).toBe("proposed");
+    expect(w.said("settle_request")).toEqual([]);
+    expect(w.db.transfers()).toEqual([]); // never pays (P7)
   });
 
   it("still marks someone else's 👍 as theirs only, until everyone has", async () => {
@@ -64,11 +66,12 @@ describe("the payer's 👍 on the proposal", () => {
     expect(w.db.expense(id)!.status).toBe("finalized");
   });
 
-  it("leaves the reopen path for anyone who disagrees later (§7.7)", async () => {
-    const { w, id } = await tp({ expense: { "adjustment|jake wasnt there": adjust({ exclusion_names: ["jake"] }) } });
+  it("still lets someone object after the payer's 👍, with no reopen needed", async () => {
+    const { w, id, share } = await tp({ expense: { "adjustment|jake wasnt there": adjust({ exclusion_names: ["jake"] }) } });
     await w.react("Priya", `split_proposal:${id}`);
     await w.say("Kian", "jake wasnt there");
-    expect(w.said("clarifying_question")).toEqual(["tp is already locked in, reopen it and change the split?"]);
+    expect(w.db.expense(id)!.status).toBe("proposed");
+    expect(share("Jake").status).toBe("opted_out");
   });
 });
 
@@ -229,5 +232,47 @@ describe("real changes still change the split", () => {
       [JORDAN]: ["proposed", 1600],
     });
     expect(w.said("split_proposal").at(-1)).toMatch(/pizza \$48\.00 split 3 ways, so \$16\.00 each$/);
+  });
+});
+
+// Audit of #52: a "yeah" counts as agreeing to a split only when it's
+// clearly about that split.
+describe("a bare yeah is about the split only when it clearly is", () => {
+  const offTopic = { answer: { yeah: answer({ thread_id: "q1", relevance: 0.1, yes_no: "yes" }) } };
+  // The bare-yeah path sits in front of the money brain, so turn it on. The
+  // agent itself is never needed here: if it's reached, it just fails.
+  const withBrain = (w: ReturnType<typeof world>) => {
+    const client = { chat: { completions: { create: () => Promise.reject(new Error("no agent in this test")) } } } as unknown as ChatClient;
+    w.ctx.ask = { client, model: "m" };
+  };
+
+  it("still counts a yeah right after the proposal", async () => {
+    const { w, share, liked } = await tp(offTopic, { yeah: ["answer", 0.5] });
+    withBrain(w);
+    const m = await w.say("Kian", "yeah");
+    expect(liked(m)).toBe(true);
+    expect(share("Kian").responded).toBe(true);
+  });
+
+  it("ignores a yeah that replies to someone else's question", async () => {
+    const { w, id, share, liked } = await tp(offTopic, { yeah: ["answer", 0.5] });
+    withBrain(w);
+    w.advance(30 * 60_000);
+    const movies = await w.say("Joe", "movies tonight still?");
+    for (const who of ["Kian", "Jake"] as const) {
+      const m = await w.say(who, "yeah", { reply_to_id: movies.message_id });
+      expect(liked(m)).toBe(false);
+      expect(share(who).responded).toBe(false);
+    }
+    expect(w.db.expense(id)!.status).toBe("proposed");
+  });
+
+  it("ignores a yeah after other chat has moved on", async () => {
+    const { w, share, liked } = await tp(offTopic, { yeah: ["answer", 0.5] });
+    withBrain(w);
+    await w.say("Joe", "movies tonight still?");
+    const m = await w.say("Kian", "yeah");
+    expect(liked(m)).toBe(false);
+    expect(share("Kian").responded).toBe(false);
   });
 });

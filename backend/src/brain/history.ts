@@ -251,9 +251,8 @@ export async function handleBalance(ctx: BrainCtx, m: Message) {
       const text = r && recap(ctx, m, r, false);
       if (text) return [text];
     }
-    if (!square) return [];
-    const last = lastPayment(ctx, m.sender_phone, groupsOf(ctx, m));
-    return last ? [T.lastActivity(last)] : [];
+    // Nothing more unless they asked (Joe's rule: answer only what's asked).
+    return [];
   });
 }
 
