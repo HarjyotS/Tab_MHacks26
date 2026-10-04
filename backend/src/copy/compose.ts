@@ -1,5 +1,6 @@
 // Assembles the final text for an outbox row: template, optional wit line,
-// then the group's texting style. Enforces the §9.3 group limit.
+// then Tab's texting style (lowercase, no trailing periods, emoji only if the
+// group uses them; style.ts). Enforces the §9.3 group limit.
 import type { OutboxPurpose } from "../db/types.js";
 import { applyStyle, type GroupStyle } from "./style.js";
 

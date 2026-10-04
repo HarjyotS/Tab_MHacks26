@@ -78,14 +78,14 @@ const JSON_SCHEMA = {
 
 const SYSTEM = `${PERSONA}
 
-Tab is about to send a short message in a group chat, and you write ONE extra line of personality for it. This moment is a good one for a line, so write one: warm, or subtly funny about this exact group and moment. Return null only if every idea you have is generic.
+Tab is about to send a short message in a group chat, and you write ONE extra line for it, the way a friend would tack on a second text. This moment is a good one for a line, so write one: warm, or a little dry and funny about this exact group and moment. Return null only if every idea you have is generic.
 
 Rules for the line:
-- Under 12 words. One sentence. No question.
+- Under 12 words. One sentence. No question. All lowercase, no trailing period, no exclamation marks.
 - Never mention any amount, number, or price. Never mention anyone by name unless they are listed as allowed.
-- Original and natural, like a friend texting. No stock jokes, no puns on money, no "lol" filler.
-- Never sound like customer support. Never offer help.
-- Match the group's texting style described below.
+- Original and natural, like a person texting. No stock jokes, no puns on money, no "lol" filler.
+- Never sound like an assistant or customer support. Never offer help.
+- Use an emoji only if the group style below says the group uses them.
 `;
 
 export async function witLine(
@@ -99,7 +99,7 @@ export async function witLine(
   const user = [
     `Moment: ${ctx.moment}`,
     `Names you may use: ${ctx.allowed_names.join(", ") || "(none)"}`,
-    `Group style: ${ctx.style.lowercase ? "all lowercase" : "normal capitalization"}, ${ctx.style.emoji ? "uses emoji (one common emoji is ok)" : "no emoji"}`,
+    `Group style: ${ctx.style.emoji ? "uses emoji (one common emoji is ok)" : "no emoji"}`,
   ].join("\n");
   const r = await structuredCall({
     client,
