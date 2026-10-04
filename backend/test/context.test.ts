@@ -11,7 +11,9 @@ import type { ChatClient } from "../src/grok/structured.js";
 import { Transcript } from "../src/brain/transcript.js";
 import { PhotoNotes } from "../src/brain/photos.js";
 import * as T from "../src/copy/templates.js";
-import { PEOPLE, world, type Script } from "./support/harness.js";
+import { describePhoto, DESCRIBE_TIMEOUT_MS } from "../src/brain/inputs.js";
+import { ImageCache } from "../src/extraction/image.js";
+import { GROUP, PEOPLE, world, type Script } from "./support/harness.js";
 
 const raw = (cents: number | null, description: string | null, over: object = {}) => ({
   is_expense: true,
@@ -292,5 +294,90 @@ describe("what Grok sees (§19)", () => {
     expect(prompts[0]).toContain("A receipt from THE BISTRO");
     expect(prompts[0]).toContain("CHEESECAKE");
     expect(prompts[0]).toContain("replying_to from=\\\"Joe\\\"");
+  });
+});
+
+describe("Joe's review on #41", () => {
+  it("gives up on a photo description after the hard timeout, so one slow image can't stall every chat", async () => {
+    const w = world({});
+    const logs: string[] = [];
+    w.ctx.log = (event) => void logs.push(event);
+    w.ctx.extract.describe = () => new Promise(() => {}); // never answers
+    expect(DESCRIBE_TIMEOUT_MS).toBeLessThanOrEqual(6_000);
+    vi.useFakeTimers();
+    try {
+      const pending = describePhoto(w.ctx, { message_id: "slow", image_url: "slow", text: undefined });
+      await vi.advanceTimersByTimeAsync(DESCRIBE_TIMEOUT_MS);
+      expect(await pending).toBeUndefined();
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(logs).toContain("describe_timeout");
+    expect(w.ctx.memory.photos.has("slow")).toBe(true); // not tried again
+  });
+
+  it("still reads a bare receipt the description got wrong", async () => {
+    const w = world({
+      receipt: { crumpled: BISTRO, priced: BISTRO },
+      describe: {
+        crumpled: described("other", "A crumpled piece of paper.", "BURGER DELUXE 14.99\nTOTAL 47.07"),
+        priced: described("photo", "A table with plates.", "Check $47.07"),
+      },
+    });
+    const receipt = vi.spyOn(w.ctx.extract, "receipt");
+    await w.photo("Joe", "crumpled");
+    expect(w.db.expenses()[0]).toMatchObject({ description: "THE BISTRO", status: "proposed" });
+    await w.photo("Priya", "priced");
+    expect(receipt).toHaveBeenCalledTimes(2);
+  });
+
+  it("a selfie with no amounts in it still skips the receipt read", async () => {
+    const w = world({ describe: { selfie: described("photo", "Three friends smiling at a beach.") } }); // no receipt script: reading would throw
+    const m = await w.photo("Priya", "selfie");
+    expect(m).toMatchObject({ status: "done", intent: "ignore" });
+    expect(w.db.expenses()).toEqual([]);
+  });
+
+  it("after a restart, re-describes only photos recent context shows, plus the one replied to", async () => {
+    const w = world({ describe: { old: RECEIPT_SEEN, recent: RECEIPT_SEEN } });
+    // Rows from before the restart: this process has described none of them.
+    const old = w.db.ingest({ sender_phone: PEOPLE.Joe, group_id: GROUP, kind: "image", image_url: "old", status: "done", intent: "receipt" });
+    for (let i = 0; i < 12; i++) {
+      w.advance(1000);
+      w.db.ingest({ sender_phone: PEOPLE.Priya, group_id: GROUP, text: `gas $${i + 10}`, status: "done", intent: "expense" });
+    }
+    w.advance(1000);
+    w.db.ingest({ sender_phone: PEOPLE.Jake, group_id: GROUP, kind: "image", image_url: "recent", status: "done", intent: "receipt" });
+    const urls: string[] = [];
+    const real = w.ctx.extract.describe!;
+    w.ctx.extract.describe = (url, caption) => (urls.push(url), real(url, caption));
+    await w.say("Kian", "lol nice");
+    expect(urls).toEqual(["recent"]); // "old" is past the context window
+    await w.say("Kian", "wait what was this one", { reply_to_id: old.message_id });
+    expect(urls).toEqual(["recent", "old"]);
+  });
+
+  it("shares one image download between the description and the receipt read", async () => {
+    const png = () => new Response(new Uint8Array([1, 2, 3]), { headers: { "content-type": "image/png" } });
+    const fetchImpl = vi.fn(async () => png());
+    let now = 0;
+    const cache = new ImageCache({ fetchImpl: fetchImpl as unknown as typeof fetch, now: () => now, max: 2, ttlMs: 1000 });
+    const [a, b] = await Promise.all([cache.get("https://img/x"), cache.get("https://img/x")]);
+    expect(a).toBe("data:image/png;base64,AQID");
+    expect(b).toBe(a);
+    expect(await cache.get("https://img/x")).toBe(a);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    now = 2000; // past the TTL
+    await cache.get("https://img/x");
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    await cache.get("https://img/y");
+    await cache.get("https://img/z"); // over the bound: x goes
+    await cache.get("https://img/x");
+    expect(fetchImpl).toHaveBeenCalledTimes(5);
+
+    const flaky = vi.fn().mockResolvedValueOnce(new Response("no", { status: 500 })).mockResolvedValueOnce(png());
+    const retry = new ImageCache({ fetchImpl: flaky as unknown as typeof fetch });
+    await expect(retry.get("https://img/f")).rejects.toThrow(/HTTP 500/);
+    await expect(retry.get("https://img/f")).resolves.toMatch(/^data:image\/png;base64,/); // a failure isn't kept
   });
 });

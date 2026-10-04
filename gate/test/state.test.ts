@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { loadFixtures, passes, toInput } from '../src/fixtures.js';
-import { buildState, jevClassifier } from '../src/jev.js';
+import { buildState, INTENT_CRITERIA, jevClassifier } from '../src/jev.js';
+import { clearlyNotReceipt, receiptShortcut } from '../src/photo.js';
 import { stubClassifier } from '../src/stub.js';
 import type { ChatExpense, ClassifyInput, PhotoNote } from '../src/types.js';
 
@@ -117,5 +118,66 @@ describe('photos at the gate', () => {
   it('passes the context fixtures the stub is meant to cover', async () => {
     const covered = [301, 304, 305, 306, 311];
     for (const id of covered) expect(passes(fixtures.find(f => f.id === id)!, await stubClassifier(input(id)))).toBe(true);
+  });
+});
+
+// Joe's review on #41: the description must not be the single point of
+// failure for receipts, and two labels were off.
+describe("Joe's #41 fixes at the gate", () => {
+  const bare = (photo?: PhotoNote): ClassifyInput => {
+    const base = input(306);
+    return { ...base, message: { ...base.message, kind: 'image', text: undefined, ...(photo ? { photo } : { photo: undefined }) } };
+  };
+  const MISREAD: PhotoNote = { kind: 'other', description: 'A crumpled piece of paper.', transcription: 'BURGER 14.99\nTOTAL 47.07', money_related: false };
+  const PRICED: PhotoNote = { kind: 'photo', description: 'A table with plates.', transcription: 'Check $38.95', money_related: false };
+  const SELFIE: PhotoNote = { kind: 'photo', description: 'Three friends smiling at a beach.', transcription: '', money_related: false };
+  const VENMO: PhotoNote = { kind: 'payment_screenshot', description: 'Venmo: Kian paid Joe $20.00 for pizza.', transcription: '$20.00 pizza', money_related: true };
+  const SCREEN: PhotoNote = { kind: 'screenshot', description: 'A phone screen.', transcription: '', money_related: false };
+
+  it('only a meme or plain photo with no amounts or total clearly is not a receipt', () => {
+    expect(clearlyNotReceipt(MEME)).toBe(true);
+    expect(clearlyNotReceipt(SELFIE)).toBe(true);
+    expect(clearlyNotReceipt(undefined)).toBe(false);
+    expect(clearlyNotReceipt(MISREAD)).toBe(false); // kind other: never skipped
+    expect(clearlyNotReceipt(PRICED)).toBe(false); // a $ amount in the photo
+    expect(clearlyNotReceipt({ ...SELFIE, transcription: 'SUBTOTAL 12.00 Total 13.20' })).toBe(false);
+    expect(clearlyNotReceipt({ ...SELFIE, money_related: true })).toBe(false);
+    expect(clearlyNotReceipt(SCREEN)).toBe(false);
+    expect(receiptShortcut(VENMO)).toBe(false);
+    expect(receiptShortcut(undefined)).toBe(true);
+  });
+
+  it('Jev: a receipt described as something else still takes the free receipt shortcut', async () => {
+    const fetch = jevReturning('ignore', 0.95);
+    const classify = jevClassifier({ apiKey: 'key', fetch: fetch as typeof globalThis.fetch });
+    expect(await classify(bare(MISREAD))).toEqual({ intent: 'receipt', confidence: 0.9 });
+    expect(await classify(bare(PRICED))).toEqual({ intent: 'receipt', confidence: 0.9 });
+    expect(await classify(bare(SCREEN))).toEqual({ intent: 'receipt', confidence: 0.9 });
+    expect(fetch).not.toHaveBeenCalled();
+    // A selfie and a Venmo screenshot are judged by Jev.
+    await classify(bare(SELFIE));
+    await classify(bare(VENMO));
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+
+  it('stub: the same rule for bare photos', async () => {
+    expect((await stubClassifier(bare(MISREAD))).intent).toBe('receipt');
+    expect((await stubClassifier(bare(PRICED))).intent).toBe('receipt');
+    expect((await stubClassifier(bare(SELFIE))).intent).toBe('ignore');
+    expect((await stubClassifier(bare(MEME))).intent).toBe('ignore');
+    expect((await stubClassifier(bare(VENMO))).intent).toBe('payment_reported');
+  });
+
+  it("labels a DM's open expenses as the sender's groups, not this chat", () => {
+    const dm = input(301);
+    const state = buildState({ ...dm, message: { ...dm.message, is_dm: true } });
+    expect(state).toContain("Open expenses in the sender's groups, newest first:");
+    expect(state).not.toContain('Open expenses in this chat');
+    expect(buildState(input(301))).toContain('Open expenses in this chat, newest first:');
+  });
+
+  it("claims are only the sender's own items (resolveClaim assigns to the sender)", () => {
+    expect(INTENT_CRITERIA.claim).not.toMatch(/or others/);
+    expect(INTENT_CRITERIA.claim).toMatch(/which items they had/);
   });
 });

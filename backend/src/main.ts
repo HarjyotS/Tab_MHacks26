@@ -11,7 +11,7 @@ import { extractReceipt } from "./extraction/receipt.js";
 import { resolveClaim } from "./extraction/claim.js";
 import { extractCorrection } from "./extraction/correction.js";
 import { resolveAnswer } from "./extraction/answer.js";
-import { imageAsDataUrl } from "./extraction/image.js";
+import { ImageCache } from "./extraction/image.js";
 import { describeImage } from "./extraction/describe.js";
 import { witLine } from "./copy/wit.js";
 import { summarizeBreakdown } from "./copy/summary.js";
@@ -60,6 +60,9 @@ if (store.groups().length === 0)
     hint: "Empty views usually mean this identity lacks the backend role.",
   });
 
+// The photo description and the receipt read fetch each image once.
+const images = new ImageCache();
+
 const ctx: BrainCtx = {
   store,
   db: createReducers(conn.reducers),
@@ -67,12 +70,13 @@ const ctx: BrainCtx = {
   classify,
   extract: {
     expense: (input, mode) => extractExpense(xai, grok.model, input, mode),
-    receipt: async (url, caption) => extractReceipt(xai, grok.model, await imageAsDataUrl(url), caption),
+    receipt: async (url, caption) => extractReceipt(xai, grok.model, await images.get(url), caption),
     claim: (input, items) => resolveClaim(xai, grok.model, input, items),
     correction: (input) => extractCorrection(xai, grok.model, input),
     answer: (input, threads) => resolveAnswer(xai, grok.model, input, threads),
     // Every photo in an enabled chat, before the gate (§7.4, §19).
-    describe: async (url, caption) => describeImage(xai, grok.model, await imageAsDataUrl(url), caption),
+    // Shares its download with the receipt read (Joe's review on #41).
+    describe: async (url, caption) => describeImage(xai, grok.model, await images.get(url), caption),
   },
   wit: (w) => witLine(xai, grok.model, w),
   // The money brain: Grok with read-only lookup tools (brain/ask.ts).

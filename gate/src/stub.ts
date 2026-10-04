@@ -1,4 +1,5 @@
 import type { Classify, Intent } from './types.js';
+import { clearlyNotReceipt } from './photo.js';
 
 const AMOUNT = /\$?\d+(?:\.\d{2})?/;
 
@@ -10,11 +11,12 @@ const AMOUNT = /\$?\d+(?:\.\d{2})?/;
 export const stubClassifier: Classify = async ({ message, context, open_items, open_questions, sender, chat_expenses }) => {
   if (message.kind === 'reaction' || message.kind === 'system') return { intent: 'ignore', confidence: 1 };
   const hit = (intent: Intent, confidence = 0.9) => ({ intent, confidence });
-  // What Grok vision saw decides a photo; a bare photo it couldn't see is a receipt.
+  // What Grok vision saw decides a photo. A bare photo is a receipt unless it
+  // clearly isn't one (a meme or plain photo with no amounts in it).
   const seen = message.photo?.kind;
   if (seen === 'receipt' || seen === 'bill') return hit('receipt');
   if (seen === 'payment_screenshot') return hit('payment_reported');
-  if (message.kind === 'image' && !message.text) return seen ? hit('ignore', 0.8) : hit('receipt');
+  if (message.kind === 'image' && !message.text) return clearlyNotReceipt(message.photo) ? hit('ignore', 0.8) : hit('receipt');
   const text = (message.text ?? '').trim().toLowerCase();
   const has = (status: string) => open_items.some(i => i.expense_status === status);
   const splitOpen = has('proposed') || (chat_expenses ?? []).some(e => e.status === 'proposed');

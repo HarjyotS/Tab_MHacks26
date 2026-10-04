@@ -186,6 +186,20 @@ export function recentContext(
   chat: Chat,
   before: Date,
 ): GateMessage[] {
+  return recentEntries(ctx, chat, before).map((x) => x.msg);
+}
+
+// The message ids recentContext shows (Tab's own lines have none), so a
+// photo looked up again after a restart is only one that context will use.
+export function recentMessageIds(ctx: BrainCtx, chat: Chat, before: Date): string[] {
+  return recentEntries(ctx, chat, before).flatMap((x) => (x.message_id ? [x.message_id] : []));
+}
+
+function recentEntries(
+  ctx: BrainCtx,
+  chat: Chat,
+  before: Date,
+): { at: Date; message_id?: string; msg: GateMessage }[] {
   // Kept messages only: the backend reports everything else as `ignore`,
   // and the module clears that text (§19).
   const humans = ctx.store
@@ -196,7 +210,7 @@ export function recentContext(
       // A kept photo comes with what Grok vision saw in it (§7.4), if known.
       const photo = x.kind === "image" ? ctx.memory.photos.get(x.message_id) : undefined;
       const kind = x.kind === "image" ? ("image" as const) : ("text" as const);
-      return { at: x.received_at, msg: { sender_phone: x.sender_phone, is_dm: !chat.group_id, kind, text: x.text, ...(photo ? { photo } : {}) } };
+      return { at: x.received_at, message_id: x.message_id, msg: { sender_phone: x.sender_phone, is_dm: !chat.group_id, kind, text: x.text, ...(photo ? { photo } : {}) } };
     });
   const tab = ctx.store
     .outbox()
@@ -220,8 +234,7 @@ export function recentContext(
     }));
   return [...humans, ...tab]
     .sort((a, b) => a.at.getTime() - b.at.getTime())
-    .slice(-CONTEXT_MESSAGES)
-    .map((x) => x.msg);
+    .slice(-CONTEXT_MESSAGES);
 }
 
 // ── Sending (every write goes through reducers) ──────────────────────────

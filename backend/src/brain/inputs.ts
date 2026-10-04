@@ -10,6 +10,7 @@ import {
   chatKey,
   chatOf,
   recentContext,
+  recentMessageIds,
   type BrainCtx,
 } from "./context.js";
 import { openThreads } from "./threads.js";
@@ -278,19 +279,33 @@ export function remember(ctx: BrainCtx, m: Message) {
   );
 }
 
+// The queue is serial across chats, so one slow image fetch or vision call
+// can't hold every group for long (Joe's review on #41). Past this, the
+// photo goes undescribed: a bare one still counts as a possible receipt.
+export const DESCRIBE_TIMEOUT_MS = 6_000;
+
+class DescribeTimeout extends Error {}
+
 // What Grok vision sees in a photo (§7.4), from memory or described now.
-// An image that's gone or unreadable is skipped, and not tried again.
+// An image that's gone, unreadable, or too slow is skipped, and not tried
+// again.
 export async function describePhoto(ctx: BrainCtx, m: Pick<Message, "message_id" | "image_url" | "text">): Promise<PhotoNote | undefined> {
   if (ctx.memory.photos.has(m.message_id)) return ctx.memory.photos.get(m.message_id);
   if (!m.image_url || !ctx.extract.describe) return undefined;
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new DescribeTimeout(`no description after ${DESCRIBE_TIMEOUT_MS} ms`)), DESCRIBE_TIMEOUT_MS);
+  });
   try {
-    const note = await ctx.extract.describe(m.image_url, m.text);
+    const note = await Promise.race([ctx.extract.describe(m.image_url, m.text), timeout]);
     ctx.memory.photos.set(m.message_id, note);
     return note;
   } catch (err) {
-    ctx.log("describe_failed", { message_id: m.message_id, error: String(err) });
+    ctx.log(err instanceof DescribeTimeout ? "describe_timeout" : "describe_failed", { message_id: m.message_id, error: String(err) });
     ctx.memory.photos.set(m.message_id, null);
     return undefined;
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -298,20 +313,24 @@ export async function describePhoto(ctx: BrainCtx, m: Pick<Message, "message_id"
 const REDESCRIBE = 3;
 
 // Before the gate: describe the new photo, the photo it replies to, and
-// recent kept photos this process hasn't seen (after a restart), so the
-// synchronous input builders find them in memory.
+// kept photos this process hasn't seen (after a restart) that recentContext
+// will show, so the synchronous input builders find them in memory. Only
+// that window, never a walk back through the chat's photo history (Joe's
+// review on #41).
 export async function describePhotos(ctx: BrainCtx, m: Message): Promise<void> {
   if (m.kind === "image") {
     const note = await describePhoto(ctx, m);
     if (note) ctx.memory.transcript.describe(chatKey(chatOf(m)), m.message_id, note);
   }
   const chat = chatOf(m);
+  const shown = new Set(recentMessageIds(ctx, chat, m.received_at));
   const targets = ctx.store
     .messages()
     .filter((x) => x.kind === "image" && x.image_url && x.message_id !== m.message_id && !ctx.memory.photos.has(x.message_id))
     .filter((x) => (chat.group_id ? x.group_id === chat.group_id : !x.group_id && x.sender_phone === chat.dm_phone))
-    .filter((x) => x.message_id === m.reply_to_id || (x.received_at < m.received_at && x.intent !== undefined && x.intent !== "ignore"))
-    .sort((a, b) => b.received_at.getTime() - a.received_at.getTime())
+    .filter((x) => x.message_id === m.reply_to_id || shown.has(x.message_id))
+    // The photo being replied to first, then the newest.
+    .sort((a, b) => Number(b.message_id === m.reply_to_id) - Number(a.message_id === m.reply_to_id) || b.received_at.getTime() - a.received_at.getTime())
     .slice(0, Math.min(REDESCRIBE, CONTEXT_MESSAGES));
   for (const x of targets) await describePhoto(ctx, x);
 }

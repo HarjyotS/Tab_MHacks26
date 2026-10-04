@@ -1,5 +1,6 @@
 import type { ChatExpense, Classify, ClassifyInput, ExpenseStatus, GateMessage, Intent, OpenQuestion, PhotoNote } from './types.js';
 import { INTENTS } from './types.js';
+import { receiptShortcut } from './photo.js';
 
 const ENDPOINT = 'https://api.typesafe.ai/v1/systemone';
 
@@ -16,7 +17,7 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
   split_adjustment:
     'While a split is still proposed (not yet final), the sender says it should not be even, that someone had only a specific item or amount, or that someone (often the sender) was not there. Examples: "just me and Priya", "only Jake and Kian went", "Priya and I went, no one else", "I got both drinks and Jake got the cheesecake". Naming items from an open expense\'s receipt as who had what counts, and so does "update it" or "change it" right after someone in the recent chat described such a change.',
   claim:
-    'An item list is open (an expense is "item list open for claims") and the sender says which items they or others had: item numbers, item names from that list, "same as" another person, "even", or that everyone shared an item.',
+    'An item list is open (an expense is "item list open for claims") and the sender says which items they had: item numbers, item names from that list, "same as" another person, "even", or that everyone shared an item.',
   correction:
     'The sender fixes the amount or description of an expense that was already logged, usually as a reply to it ("actually it was 38").',
   approval:
@@ -224,7 +225,9 @@ export function buildState(input: ClassifyInput): string {
   if (input.chat_expenses) {
     const shown = input.chat_expenses.slice(0, MAX_EXPENSES).map(e => expense(e, input));
     const more = input.chat_expenses.length - shown.length;
-    sections.push(`Open expenses in this chat, newest first:\n${shown.join('\n') || '- none'}${more > 0 ? `\n- and ${more} older` : ''}`);
+    // A DM covers every group the sender is in (Joe's review on #41).
+    const where = input.message.is_dm ? "in the sender's groups" : 'in this chat';
+    sections.push(`Open expenses ${where}, newest first:\n${shown.join('\n') || '- none'}${more > 0 ? `\n- and ${more} older` : ''}`);
   }
   sections.push(`Open items for the sender:\n${items}`);
   sections.push(`Settle request open for the sender: ${settleOpen ? 'yes' : 'no'}`);
@@ -267,10 +270,11 @@ export function jevClassifier(options: {
   return async input => {
     // Reactions route deterministically (SPEC 6.2); neither needs a model.
     if (input.message.kind === 'reaction' || input.message.kind === 'system') return { intent: 'ignore', confidence: 1 };
-    // A bare photo is a receipt unless Grok vision saw something else in it
-    // (a meme, a payment screenshot), which Jev then judges with the rest.
-    const seen = input.message.photo?.kind;
-    if (input.message.kind === 'image' && !input.message.text && (!seen || seen === 'receipt' || seen === 'bill')) {
+    // A bare photo is a receipt unless Grok vision clearly saw something
+    // else in it (a meme or plain photo with no amounts, or a payment
+    // screenshot), which Jev then judges with the rest. A receipt the
+    // description got wrong still takes the shortcut (Joe's review on #41).
+    if (input.message.kind === 'image' && !input.message.text && receiptShortcut(input.message.photo)) {
       return { intent: 'receipt', confidence: 0.9 };
     }
 
