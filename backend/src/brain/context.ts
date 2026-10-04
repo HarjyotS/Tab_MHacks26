@@ -1,6 +1,6 @@
 // Everything a handler needs, injected so tests can run the whole brain
 // against an in-memory database and fake models.
-import type { Classify, GateMessage, Intent } from "@tab/gate";
+import type { Classify, GateMessage, Intent, PhotoNote } from "@tab/gate";
 import { CONTEXT_MESSAGES, type LedgerConfig, type Timing } from "../config.js";
 import type { BackendReducers } from "../db/reducers.js";
 import type { OutboxPurpose, Reaction } from "../db/types.js";
@@ -22,6 +22,8 @@ import type { ReceiptRead } from "../extraction/receipt.js";
 import type { ClaimResolution, LineItem as ClaimItem } from "../extraction/types.js";
 import type { Expense, Message, Store } from "../store/types.js";
 import type { Thread } from "./threads.js";
+import { PhotoNotes } from "./photos.js";
+import { Transcript } from "./transcript.js";
 import type { ChatClient } from "../grok/structured.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
@@ -86,12 +88,17 @@ export type Pending =
       asked_at: Date;
     };
 
-// Process-local memory, lost on restart: Tab's open questions, and what
-// style matching needs.
+// Process-local memory, lost on restart: Tab's open questions, photo
+// descriptions, the gate's raw transcript, and what style matching needs.
 export class Memory {
   // Open questions per chat (threads.ts), keyed by chatKey.
   threads = new Map<string, Thread[]>();
   lastHadWit = new Map<string, boolean>();
+  // What Grok vision saw in each photo, by message_id (§7.4); null when the
+  // image couldn't be read. Re-described from image_url when missing.
+  photos = new PhotoNotes();
+  // The gate-only raw transcript (§19): 12 lines, 15 minutes, never stored.
+  transcript = new Transcript();
   // Groups whose ledger secret this process has set. The secret is derived,
   // so setting it again after a restart writes the same value.
   ledgerSecretSet = new Set<string>();
@@ -120,6 +127,8 @@ export type Extractors = {
   correction: (input: ExtractInput) => Promise<Extracted<CorrectionExtraction>>;
   // Which of Tab's open questions a message answers, and the answer.
   answer: (input: ExtractInput, threads: OpenThread[]) => Promise<AnswerResolution>;
+  // What a photo shows, before the gate (§7.4). Absent: photos go undescribed.
+  describe?: (image_url: string, caption?: string) => Promise<PhotoNote>;
 };
 
 export type AskAgent = {
@@ -177,13 +186,32 @@ export function recentContext(
   chat: Chat,
   before: Date,
 ): GateMessage[] {
+  return recentEntries(ctx, chat, before).map((x) => x.msg);
+}
+
+// The message ids recentContext shows (Tab's own lines have none), so a
+// photo looked up again after a restart is only one that context will use.
+export function recentMessageIds(ctx: BrainCtx, chat: Chat, before: Date): string[] {
+  return recentEntries(ctx, chat, before).flatMap((x) => (x.message_id ? [x.message_id] : []));
+}
+
+function recentEntries(
+  ctx: BrainCtx,
+  chat: Chat,
+  before: Date,
+): { at: Date; message_id?: string; msg: GateMessage }[] {
   // Kept messages only: the backend reports everything else as `ignore`,
   // and the module clears that text (§19).
   const humans = ctx.store
     .messages()
-    .filter((x) => x.status === "done" && x.text && x.intent && x.intent !== "ignore" && x.received_at < before)
+    .filter((x) => x.status === "done" && (x.text || x.kind === "image") && x.intent && x.intent !== "ignore" && x.received_at < before)
     .filter((x) => (chat.group_id ? x.group_id === chat.group_id : !x.group_id && x.sender_phone === chat.dm_phone))
-    .map((x) => ({ at: x.received_at, msg: { sender_phone: x.sender_phone, is_dm: !chat.group_id, kind: "text" as const, text: x.text } }));
+    .map((x) => {
+      // A kept photo comes with what Grok vision saw in it (§7.4), if known.
+      const photo = x.kind === "image" ? ctx.memory.photos.get(x.message_id) : undefined;
+      const kind = x.kind === "image" ? ("image" as const) : ("text" as const);
+      return { at: x.received_at, message_id: x.message_id, msg: { sender_phone: x.sender_phone, is_dm: !chat.group_id, kind, text: x.text, ...(photo ? { photo } : {}) } };
+    });
   const tab = ctx.store
     .outbox()
     .filter(
@@ -206,8 +234,7 @@ export function recentContext(
     }));
   return [...humans, ...tab]
     .sort((a, b) => a.at.getTime() - b.at.getTime())
-    .slice(-CONTEXT_MESSAGES)
-    .map((x) => x.msg);
+    .slice(-CONTEXT_MESSAGES);
 }
 
 // ── Sending (every write goes through reducers) ──────────────────────────

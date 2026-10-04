@@ -339,7 +339,9 @@ const TASK: Record<AskKind, string> = {
 
 function userPrompt(ctx: BrainCtx, m: Message, kind: AskKind, names: Map<string, string>, preload?: string): string {
   const nameOf = (phone: string) => (phone === "tab" ? "Tab" : names.get(phone) ?? `member ending ${phone.slice(-4)}`);
-  const recent = recentContext(ctx, chatOf(m), m.received_at).slice(-6);
+  // Text only: #41 adds kept photos to recentContext, but their
+  // descriptions are for the gate and extraction, not this prompt.
+  const recent = recentContext(ctx, chatOf(m), m.received_at).filter((x) => x.text).slice(-6);
   const tz = (m.group_id && ctx.store.group(m.group_id)?.timezone) || "America/Detroit";
   const today = new Intl.DateTimeFormat("en-US", { weekday: "short", year: "numeric", month: "short", day: "numeric", timeZone: tz }).format(ctx.now());
   const replyingTo = m.reply_to_id ? ctx.store.outbox().find((o) => o.sent_photon_id === m.reply_to_id)?.text : undefined;
