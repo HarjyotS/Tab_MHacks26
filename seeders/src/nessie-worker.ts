@@ -26,8 +26,11 @@ const gateway: MoneyGateway = {
 };
 
 // A mirror that silently lost SpacetimeDB would stop recording, so exit loudly instead.
+// Run exactly one mirror: two at once could both record a new settlement.
+let running = true;
 const connection = await connect({
   onDisconnect: error => {
+    if (!running) return; // our own shutdown, not a lost connection
     console.error(`Lost the SpacetimeDB connection${error ? `: ${error.message}` : ''}. Restart the mirror.`);
     process.exit(1);
   },
@@ -52,7 +55,6 @@ async function drain(): Promise<void> {
   }
 }
 
-let running = true;
 process.on('SIGINT', () => { running = false; });
 process.on('SIGTERM', () => { running = false; });
 console.log('Nessie mirror watching for completed settlements.');

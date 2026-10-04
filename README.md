@@ -49,7 +49,7 @@ Settlement never depends on Nessie: SpacetimeDB completes it itself. Optionally,
 npm run nessie:mirror
 ```
 
-It reads the `nessie_mirror` view (seeder role or owner), tags both records `[tab:<transfer_id>]`, and looks them up by tag before creating anything, so restarts never record twice. It never writes to SpacetimeDB. Nessie stores whole dollars only, so the exact amount stays in SpacetimeDB and in each description.
+Run exactly one mirror at a time. It reads the `nessie_mirror` view (seeder role or owner), tags both records `[tab:<transfer_id>]`, and looks them up by tag before creating anything, so restarts never record twice. It never writes to SpacetimeDB. Nessie stores whole dollars only, so the exact amount stays in SpacetimeDB and in each description.
 
 ## Verification
 
