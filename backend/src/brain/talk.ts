@@ -4,7 +4,6 @@ import type { Debt, OwedLine } from "../copy/templates.js";
 import { listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
 import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, styleFor, tapback, chatKey } from "./context.js";
-import { groupFor } from "./expense.js";
 
 // §7.2 step 2: intro, name prompt, and contact card for a new group.
 export async function onboardNewGroups(ctx: BrainCtx) {
@@ -170,10 +169,27 @@ function myLines(ctx: BrainCtx, group_id: string, phone: string): (OwedLine & { 
     });
 }
 
+// A DM is about every group the sender is in (Harjyot's playground test:
+// a member of two groups got no answer by DM).
+function groupsOf(ctx: BrainCtx, m: Message): string[] {
+  if (m.group_id) return [m.group_id];
+  return ctx.store
+    .groups()
+    .filter((g) => activeMembers(ctx, g.group_id).some((x) => x.phone === m.sender_phone))
+    .map((g) => g.group_id);
+}
+
 export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
-  const group_id = groupFor(ctx, m);
-  if (!group_id) return;
-  const all = debts(ctx, group_id);
+  const groups = groupsOf(ctx, m);
+  if (groups.length === 0) return;
+  // The same two people can owe each other in several groups: one line each.
+  const byPair = new Map<string, Debt>();
+  for (const d of groups.flatMap((g) => debts(ctx, g))) {
+    const key = `${d.from.phone}>${d.to.phone}`;
+    const seen = byPair.get(key);
+    byPair.set(key, seen ? { ...seen, amount_cents: seen.amount_cents + d.amount_cents } : d);
+  }
+  const all = [...byPair.values()];
   const text = PERSONAL.test(m.text ?? "")
     ? T.personalBalanceReply({
         owes: all.filter((d) => d.from.phone === m.sender_phone),
@@ -184,13 +200,13 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
 }
 
 export async function handleBreakdown(ctx: BrainCtx, m: Message) {
-  const group_id = groupFor(ctx, m);
-  if (!group_id) return;
+  const groups = groupsOf(ctx, m);
+  if (groups.length === 0) return;
   await say(ctx, {
     chat: chatOf(m),
     purpose: "breakdown_reply",
     id: `breakdown_reply:${m.message_id}`, reply_to: m.message_id,
-    text: T.breakdownReply({ lines: myLines(ctx, group_id, m.sender_phone) }),
+    text: T.breakdownReply({ lines: groups.flatMap((g) => myLines(ctx, g, m.sender_phone)) }),
   });
 }
 
