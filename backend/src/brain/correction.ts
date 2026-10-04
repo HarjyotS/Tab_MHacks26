@@ -1,6 +1,5 @@
 // SPEC §7.7 corrections: "actually it was 44", or a new description, sent as
 // a reply to the expense or to Tab's proposal.
-import { money } from "../copy/format.js";
 import * as T from "../copy/templates.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, say, tapback } from "./context.js";
@@ -30,11 +29,11 @@ export async function handleCorrection(
       : undefined);
   if (!target) {
     await tapback(ctx, m, "question");
-    return ask("Which one? Reply to the expense you want to change.");
+    return ask(T.whichToCorrect());
   }
   if (result.unclear) {
     await tapback(ctx, m, "question", target.expense_id);
-    return ask(`What should ${target.description} be?`, target.expense_id);
+    return ask(T.correctionUnclear(target.description), target.expense_id);
   }
   // Paid, or partly paid: the money already moved (§7.7).
   if (
@@ -58,10 +57,7 @@ export async function handleCorrection(
   );
   if (pinned > total) {
     await tapback(ctx, m, "question", target.expense_id);
-    return ask(
-      `That's less than the ${money(pinned)} already set for specific people. What was the total?`,
-      target.expense_id,
-    );
+    return ask(T.totalUnderPinned(pinned), target.expense_id);
   }
 
   await tapback(ctx, m, "like", target.expense_id);

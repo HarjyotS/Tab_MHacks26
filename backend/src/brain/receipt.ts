@@ -2,7 +2,6 @@
 import type { ClaimResolution } from "../extraction/types.js";
 import { LOPSIDED_FACTOR, MAX_DMS_PER_EXPENSE } from "../config.js";
 import { extrasOf, type ReceiptRead } from "../extraction/receipt.js";
-import { money } from "../copy/format.js";
 import * as T from "../copy/templates.js";
 import type { Expense, Message } from "../store/types.js";
 import {
@@ -34,7 +33,7 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
       chat: chatOf(m),
       purpose: "clarifying_question",
       id: `clarify:${m.message_id}`, reply_to: m.message_id,
-      text: "Post that in the group chat and I'll split it.",
+      text: T.postInGroup(m.message_id),
     });
     return;
   }
@@ -48,7 +47,7 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
     return;
   }
   if (receipt.total_cents === undefined || receipt.items.length === 0) {
-    await askAbout(ctx, m, "Can you send a clearer photo of the receipt?");
+    await askAbout(ctx, m, T.clearerPhoto());
     return;
   }
   if (read.currency !== "USD") {
@@ -60,18 +59,12 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
       message_id: m.message_id,
       problem: read.math_problem,
     });
-    await askAbout(
-      ctx,
-      m,
-      `I read the total as ${money(receipt.total_cents)}. Is that right?`,
-      read,
-      "confirm_total",
-    );
+    await askAbout(ctx, m, T.receiptTotalCheck(receipt.total_cents), read, "confirm_total");
     return;
   }
   if (read.tip_line_blank) {
     // §7.4 step 5: the only routine question for receipts.
-    await askAbout(ctx, m, "What tip did you leave?", read, "tip");
+    await askAbout(ctx, m, T.whatTip(), read, "tip");
     return;
   }
   await proposeReceipt(ctx, m, read, { itemsTrusted: true });
@@ -265,7 +258,7 @@ export async function handleClaim(
   if (targets.length > 1 && !m.group_id) {
     // §14: two open lists in a DM: ask which one with a numbered list.
     const id = `clarify:${m.message_id}`;
-    const text = `Which one?\n${targets.map((e, i) => `${i + 1}. ${e.description}`).join("\n")}`;
+    const text = T.whichList(targets.map((e) => e.description));
     await tapback(ctx, m, "question");
     await say(ctx, {
       chat: chatOf(m),
@@ -304,10 +297,10 @@ export async function askWhichItems(ctx: BrainCtx, m: Message, e: Expense) {
     chat: chatOf(m),
     purpose: "clarifying_question",
     id, reply_to: m.message_id,
-    text: 'Which ones? Reply with the numbers, or "even".',
+    text: T.whichItems(m.message_id),
     expense_id: e.expense_id,
   });
-  addInvite(ctx, chatOf(m), { id, text: `Which ones from ${e.description}? Reply with the numbers, or "even".`, kind: "claims_open", expense_id: e.expense_id });
+  addInvite(ctx, chatOf(m), { id, text: `${e.description}: ${T.whichItems(m.message_id)}`, kind: "claims_open", expense_id: e.expense_id });
 }
 
 async function applyClaim(

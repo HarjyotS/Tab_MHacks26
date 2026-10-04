@@ -408,10 +408,10 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
       chat: chatOf(m),
       purpose: "clarifying_question",
       id, // answers a tapback: no inline reply
-      text: "What's off?",
+      text: T.whatsOff(m.message_id),
       expense_id: expense.expense_id,
     });
-    addInvite(ctx, chatOf(m), { id, text: `What's off with ${expense.description}?`, kind: "adjust_open", expense_id: expense.expense_id });
+    addInvite(ctx, chatOf(m), { id, text: `${expense.description}: ${T.whatsOff(m.message_id)}`, kind: "adjust_open", expense_id: expense.expense_id });
   }
 }
 
@@ -512,7 +512,7 @@ export async function announceSettlements(ctx: BrainCtx) {
     const text =
       covered.length === 1
         ? T.allSquare({ seed: e.expense_id, description: e.description })
-        : "Everyone's square.";
+        : T.allSquare({ seed: e.expense_id });
     await say(ctx, { chat, purpose: "all_square", id, text, wit });
   }
 }

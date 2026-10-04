@@ -297,8 +297,11 @@ export const whatTip = () => "what'd you tip?";
 export const postInGroup = (seed: string) =>
   pick(seed, ["drop that in the group chat and i'll split it there", "send it in the group and i'll split it"]);
 
-// The gate wasn't sure a message was a purchase (§6.4).
+// The gate wasn't sure what a money message meant (§6.4): one yes/no each.
 export const confirmExpense = () => "want me to split that?";
+export const confirmCorrection = () => "want me to change that one?";
+export const confirmDispute = () => "something off with what you owe?";
+export const confirmSettleUp = () => "want me to settle everyone up now?";
 
 // ── Adjustments and corrections (§7.5, §7.7) ─────────────────────────────
 
@@ -310,7 +313,13 @@ export const pinnedOverTotal = (a: { total_cents: number; name: string }) =>
 export const reopenToChange = (description: string) =>
   `${description} is already locked in, reopen it and change the split?`;
 
-export const confirmSplitChange = (description: string) => `change the split on ${description}?`;
+// An unsure adjustment, confirmed first. An opt-out names who's left
+// ("just you and Priya on Pizza then?") or who's out when that's shorter.
+export function confirmSplitChange(a: { description: string; only?: string[]; without?: string[] }): string {
+  if (a.only?.length) return `just ${listJoin(a.only)} on ${a.description} then?`;
+  if (a.without?.length) return `so ${a.description} without ${listJoin(a.without)} then?`;
+  return `change the split on ${a.description}?`;
+}
 
 export const whichToCorrect = () => "which one? reply to the expense you mean";
 
