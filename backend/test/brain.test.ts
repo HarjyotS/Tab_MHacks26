@@ -161,11 +161,11 @@ describe("text expense (SPEC 7.3)", () => {
       target_message_id: m.message_id,
     });
     const [first, ask] = said("split_proposal")[0]!.split("\n");
-    expect(first).toBe("Groceries, $63.00. Split 4 ways, that's $15.75 each.");
+    expect(first).toBe("groceries $63.00 split 4 ways, so $15.75 each");
     expect([
-      "Anything uneven, or anyone not there?",
-      "Tell me if it wasn't even or someone wasn't there.",
-      "Shout if it's not even or someone skipped it.",
+      "lmk if it wasn't even or someone skipped",
+      "shout if it wasn't even or someone wasn't there",
+      "not even, or someone sat it out? just say",
     ]).toContain(ask);
   });
 
@@ -189,7 +189,7 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
     await tick(ctx);
     await tick(ctx);
     expect(said("objection_reminder")).toHaveLength(1);
-    expect(said("objection_reminder")[0]).toBe("Anything else?");
+    expect(said("objection_reminder")[0]).toMatch(/^(anything else on this one\?|we all good on this one\?)$/);
 
     advance(10_000);
     await tick(ctx);
@@ -199,7 +199,7 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
       true,
     );
     expect(said("settle_request")[0]).toContain(
-      "Cool, here's what's owed to Joe for Groceries:\nKian $15.75, Priya $15.75, Jake $15.75.",
+      "ok here's what's owed to joe for groceries:\nkian $15.75, priya $15.75, jake $15.75\n",
     );
   });
 
@@ -234,7 +234,7 @@ describe("settling, per-expense mode (SPEC 7.6)", () => {
     expect(db.outbox().find((o) => o.purpose === "payment_receipt")).toMatchObject({
       kind: "dm",
       to_phone: KIAN,
-      text: "Simulated settlement complete: you paid Joe $15.75 for Groceries. All square.",
+      text: "done, you paid joe $15.75 for groceries (simulated, no real money moved)\nyou're all square",
     });
   });
 
@@ -249,7 +249,7 @@ describe("settling, per-expense mode (SPEC 7.6)", () => {
     await send(KIAN, "yes");
     await send(KIAN, "yes");
     expect(db.transfers()).toHaveLength(0);
-    expect(said("clarifying_question")).toEqual(["Tap 👍 on the settle request to pay your part."]);
+    expect(said("clarifying_question")).toEqual(["just tap 👍 on the settle msg to pay your part"]);
   });
 });
 
@@ -263,10 +263,10 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
     expect(said("settle_request")).toEqual([]);
 
     const settle = await send(KIAN, "let's settle up");
-    // The group texts in lowercase, so Tab does too; the tap line varies.
-    const [head, joe, priya] = said("settle_request")[0]!.toLowerCase().split("\n");
+    // Tab texts in lowercase by default; the tap line varies.
+    const [head, joe, priya] = said("settle_request")[0]!.split("\n");
     expect([head, joe, priya]).toEqual([
-      "cool, here's what's owed:",
+      "ok here's the tab:",
       "owed to joe: kian $15.75, priya $15.75, jake $15.75",
       "owed to priya: joe $10.00, kian $10.00, jake $10.00",
     ]);
@@ -278,8 +278,9 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
     for (const who of [PRIYA, JAKE, JOE]) await react(who, request);
     db.completeTransfers();
     await tick(ctx);
-    expect(said("payment_receipt")).toContain("Simulated settlement complete: you paid Joe $15.75 and Priya $10.00. All square.");
-    expect(said("all_square")).toEqual(["everyone's square"]);
+    expect(said("payment_receipt")).toContain("done, you paid joe $15.75 and priya $10.00 (simulated, no real money moved)\nyou're all square");
+    expect(said("all_square")).toHaveLength(1);
+    expect(["and that's everyone square", "everyone's square, nice"]).toContain(said("all_square")[0]);
   });
 
   it("locks in a split still open for changes when someone asks to settle now", async () => {
@@ -301,7 +302,7 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
 
   it("says there's nothing to settle when nobody owes anything", async () => {
     await send(KIAN, "let's settle up");
-    expect(said("balance_reply")).toEqual(["Nothing to settle. Everyone's square."]);
+    expect(said("balance_reply")).toEqual(["nothing to settle, everyone's even"]);
   });
 });
 
@@ -319,8 +320,8 @@ describe("adjustments (SPEC 7.5)", () => {
       [JAKE]: 300,
     });
     expect(db.expense(expenseId(m))!.split_mode).toBe("custom");
-    expect(said("split_proposal")[1]).toBe(
-      "Updated: Groceries, $63.00. Joe $20.00, Kian $20.00, Priya $20.00, Jake $3.00.",
+    expect(said("split_proposal")[1]).toMatch(
+      /^(ok redid it|fixed it|bet, redid it): groceries \$63\.00: joe \$20\.00, kian \$20\.00, priya \$20\.00, jake \$3\.00$/,
     );
   });
 
@@ -340,7 +341,7 @@ describe("adjustments (SPEC 7.5)", () => {
 describe("Tab's questions (SPEC 7.3 step 2)", () => {
   it("asks for a missing amount, then uses the answer", async () => {
     await send(KIAN, "venmo me for the uber");
-    expect(said("clarifying_question")).toEqual(["How much was the Uber?"]);
+    expect(said("clarifying_question")).toEqual(["how much was the uber?"]);
     // A $0 needs_info row holds the place while Tab asks (Kian's #16).
     expect(db.expenses()[0]).toMatchObject({ status: "needs_info", total_cents: 0 });
     await send(KIAN, "22");
@@ -353,9 +354,9 @@ describe("Tab's questions (SPEC 7.3 step 2)", () => {
 
   it("asks who paid, and takes the answer from the person it asked", async () => {
     await send(PRIYA, "pizza was $48 lol");
-    expect(said("clarifying_question")).toEqual(["Want me to split that?"]); // the stub is unsure (0.6)
+    expect(said("clarifying_question")).toEqual(["want me to split that?"]); // the stub is unsure (0.6)
     await send(PRIYA, "yes");
-    expect(said("clarifying_question")[1]).toBe("Who paid for the Pizza?");
+    expect(said("clarifying_question")[1]).toBe("who got the pizza?");
     expect(db.expenses()[0]).toMatchObject({
       status: "needs_info",
       total_cents: 4800,

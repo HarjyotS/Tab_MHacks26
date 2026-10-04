@@ -48,7 +48,7 @@ describe("corrections (§7.7)", () => {
     });
     expect(shares(w, id)).toEqual([1100, 1100, 1100, 1100]);
     expect(w.said("split_proposal").at(-1)).toMatch(
-      /^Updated: Thai food, \$44\.00/,
+      /^(ok redid it|fixed it|bet, redid it): thai food \$44\.00 split 4 ways, so \$11\.00 each$/,
     );
   });
 
@@ -83,7 +83,7 @@ describe("corrections (§7.7)", () => {
     await w.say("Joe", "actually it was 44", { reply_to_id: pizza.message_id });
     expect(w.db.expense(`exp_${pizza.message_id}`)!.total_cents).toBe(4000);
     expect(w.said("clarifying_question")).toEqual([
-      "Pizza is already being paid, so I can't change it. Log the difference as a new expense.",
+      "pizza is already being paid, so i can't change it\njust log the difference as a new expense",
     ]);
   });
 
@@ -99,7 +99,7 @@ describe("corrections (§7.7)", () => {
     await w.say("Joe", "actually that's wrong $", {
       reply_to_id: pizza.message_id,
     });
-    expect(w.said("clarifying_question")).toEqual(["What should Pizza be?"]);
+    expect(w.said("clarifying_question")).toEqual(["what should pizza be instead?"]);
     expect(w.db.expense(`exp_${pizza.message_id}`)!.total_cents).toBe(4000);
   });
 

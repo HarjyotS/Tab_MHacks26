@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { OutboxPurpose } from "../src/db/types.js";
 import { money } from "../src/copy/format.js";
-import { applyStyle, detectStyle } from "../src/copy/style.js";
+import { applyStyle, DEFAULT_STYLE, detectStyle } from "../src/copy/style.js";
 import { compose, fitsGroupLimit } from "../src/copy/compose.js";
 import { rejectWit, witAllowed, type WitContext } from "../src/copy/wit.js";
-import { bannedPhraseIn, MARKDOWN } from "../src/copy/voice.js";
+import { BANNED_PHRASES, bannedPhraseIn, MARKDOWN } from "../src/copy/voice.js";
 import * as T from "../src/copy/templates.js";
+import type { Problem } from "../src/extraction/types.js";
 
 const joe = { phone: "+15555550101", name: "Joe" };
 const jake = { phone: "+15555550105", name: "Jake" };
@@ -14,6 +15,17 @@ const unnamed = { phone: "+15555550199" };
 const items = [
   { position: 1, description: "Cuban burger", amount_cents: 1500 },
   { position: 2, description: "Fries", amount_cents: 800 },
+];
+
+// One question per extraction problem, with the amounts each may show.
+const QUESTIONS: [Problem, number[]][] = [
+  [{ kind: "missing_amount" }, []],
+  [{ kind: "ungrounded_amount", amount_cents: 999 }, []],
+  [{ kind: "missing_payer" }, []],
+  [{ kind: "missing_item_price", phone: "+15555550101", item: "Diet Coke" }, []],
+  [{ kind: "unknown_name", name: "Mike" }, []],
+  [{ kind: "large_amount", amount_cents: 124000 }, [124000]],
+  [{ kind: "invalid_amount", amount_cents: -500 }, []],
 ];
 
 // Every template, rendered with many seeds so every variant is covered.
@@ -72,7 +84,7 @@ function renders(seed: string): {
     {
       purpose: "objection_reminder",
       group: true,
-      text: T.objectionReminder(),
+      text: T.objectionReminder(seed),
       amounts: [],
     },
     {
@@ -206,6 +218,64 @@ function renders(seed: string): {
       text: T.helpReply(seed),
       amounts: [6300],
     },
+    { purpose: "all_square", group: true, text: T.allSquare({ seed }), amounts: [] },
+    { purpose: "settle_request", group: true, text: T.settleRequest({ seed, owed: [{ payee: joe, shares: [{ person: jake, amount_cents: 3825 }] }] }), amounts: [3825] },
+    { purpose: "approval_followup", group: true, text: T.approvalFollowup({ seed, person: jake, owed: [{ payee: joe, amount_cents: 3825 }], step: 2 }), amounts: [3825] },
+    { purpose: "approval_followup", group: true, text: T.approvalFollowup({ seed, person: jake, owed: [{ payee: joe, amount_cents: 3825 }], step: 3 }), amounts: [3825] },
+    { purpose: "dispute_followup", group: true, text: T.disputeFollowup({ seed, amount_cents: 3825 }), amounts: [3825] },
+    { purpose: "dispute_followup", group: false, text: T.disputeResolved({ description: "Pizza", amount_cents: 400, requested: true }), amounts: [400] },
+    { purpose: "clarifying_question", group: true, text: T.disputeTooMuch({ description: "Pizza", max_cents: 2000 }), amounts: [2000] },
+    { purpose: "clarifying_question", group: true, text: T.whichDispute([{ description: "Pizza", amount_cents: 1000 }, { description: "Groceries", amount_cents: 1500 }]), amounts: [1000, 1500] },
+    { purpose: "clarifying_question", group: true, text: T.whichList(["Pizza", "Groceries"]), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.whichItems(seed), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.whatsOff(seed), amounts: [] },
+    { purpose: "clarifying_question", group: false, text: T.postInGroup(seed), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.tapToPay(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.settleModeQuestion(), amounts: [] },
+    { purpose: "other", group: true, text: T.settleModeSet("ledger"), amounts: [] },
+    { purpose: "other", group: true, text: T.settleModeSet("per_expense"), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.cantChangePaid("Pizza"), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.receiptTotalFixed("Frita Batidos"), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.receiptTotalCheck(10200), amounts: [10200] },
+    { purpose: "clarifying_question", group: true, text: T.whatWasTotal(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.clearerPhoto(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.whatTip(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmExpense(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.whatsUneven(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.pinnedOverTotal({ total_cents: 4800, name: "Jake" }), amounts: [4800] },
+    { purpose: "clarifying_question", group: true, text: T.reopenToChange("Pizza"), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmSplitChange("Pizza"), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.whichToCorrect(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.correctionUnclear("Pizza"), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.totalUnderPinned(500), amounts: [500] },
+    { purpose: "clarifying_question", group: true, text: T.duplicateReceiptQuestion(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.foreignCurrencyQuestion(), amounts: [] },
+    ...QUESTIONS.map(([problem, amounts]) => ({
+      purpose: "clarifying_question" as const,
+      group: true,
+      text: T.clarifyingQuestion(problem, { description: "Uber", people: [joe] }),
+      amounts,
+    })),
+    { purpose: "balance_reply", group: true, text: T.nothingToSettle(), amounts: [] },
+    { purpose: "balance_reply", group: true, text: T.notLockedYet([{ description: "Pizza", total_cents: 4800 }]), amounts: [4800] },
+    { purpose: "balance_reply", group: true, text: T.balanceReply({ debts: [] }), amounts: [] },
+    {
+      purpose: "balance_reply",
+      group: true,
+      text: T.balanceReply({
+        debts: [
+          { from: jake, to: joe, amount_cents: 3825 },
+          { from: priya, to: joe, amount_cents: 1200 },
+          { from: unnamed, to: joe, amount_cents: 500 },
+        ],
+      }),
+      amounts: [3825, 1200, 500],
+    },
+    { purpose: "balance_reply", group: true, text: T.personalBalanceReply({ owes: [], owed: [] }), amounts: [] },
+    { purpose: "balance_reply", group: true, text: T.personalBalanceReply({ owes: [], owed: [{ from: jake, to: priya, amount_cents: 500 }] }), amounts: [500] },
+    { purpose: "breakdown_reply", group: true, text: T.breakdownReply({ lines: [] }), amounts: [] },
+    { purpose: "other", group: false, text: T.ledgerLink([{ url: "https://tab.tech/g/AbC123" }]), amounts: [] },
+    { purpose: "other", group: false, text: T.noLedger(), amounts: [] },
   ];
 }
 
@@ -255,7 +325,7 @@ describe("templates", () => {
       shares,
     });
     expect(text.split("\n")[0]).toBe(
-      "Groceries, $63.00. Split 4 ways, that's $15.75 each.",
+      "Groceries $63.00 split 4 ways, so $15.75 each",
     );
   });
 
@@ -266,7 +336,7 @@ describe("templates", () => {
 
   it("says the settlement receipt is simulated, as SPEC 7.6 requires", () => {
     expect(T.paymentConfirmation({ paid: [{ payee: joe, amount_cents: 3825 }, { payee: priya, amount_cents: 1200 }], label: "Vegas Trip", allSquare: true })).toBe(
-      "Simulated settlement complete: you paid Joe $38.25 and Priya $12.00 for Vegas Trip. All square.",
+      "done, you paid Joe $38.25 and Priya $12.00 for Vegas Trip (simulated, no real money moved)\nyou're all square",
     );
   });
 
@@ -277,7 +347,7 @@ describe("templates", () => {
         { kind: "missing_amount" },
         { description: "Uber", people },
       ),
-    ).toBe("How much was the Uber?");
+    ).toBe("how much was the Uber?");
     expect(
       T.clarifyingQuestion(
         {
@@ -287,19 +357,54 @@ describe("templates", () => {
         },
         { people },
       ),
-    ).toBe("How much was John's Diet Coke?");
+    ).toBe("how much was John's Diet Coke?");
     // Quantifiers drop and a plural takes "were" (Harjyot's playground on #35).
     const item = (i: string) => T.clarifyingQuestion({ kind: "missing_item_price", phone: "+15555550106", item: i }, { people });
-    expect(item("both drinks")).toBe("How much were John's drinks?");
-    expect(item("2 soft drinks")).toBe("How much were John's 2 soft drinks?");
-    expect(item("fries")).toBe("How much were John's fries?");
-    expect(item("a glass of wine")).toBe("How much was John's glass of wine?");
+    expect(item("both drinks")).toBe("how much were John's drinks?");
+    expect(item("2 soft drinks")).toBe("how much were John's 2 soft drinks?");
+    expect(item("fries")).toBe("how much were John's fries?");
+    expect(item("a glass of wine")).toBe("how much was John's glass of wine?");
     expect(
       T.clarifyingQuestion(
         { kind: "large_amount", amount_cents: 120000 },
         { description: "Rent", people },
       ),
-    ).toBe("That's $1,200.00 for the Rent. Is that right?");
+    ).toBe("$1,200.00 for Rent? just making sure");
+    for (const [problem] of QUESTIONS) {
+      const q = T.clarifyingQuestion(problem, { description: "Uber", people });
+      expect(q.match(/\?/g) ?? [], q).toHaveLength(1);
+    }
+  });
+
+  it("never sounds like an assistant (the old bot copy is banned)", () => {
+    for (const phrase of [
+      "Here's where things stand:",
+      "Updated: Pizza, $48.00.",
+      "I keep track of shared costs in this chat.",
+      "Tell me if it wasn't even or someone wasn't there.",
+      "That's $1,200.00 for the Rent. Is that right?",
+      "Post that in the group chat and I'll split it.",
+      "Amounts need to be more than $0.00.",
+      "Simulated settlement complete: you paid Joe $38.25.",
+      "Nothing to settle. Everyone's square.",
+      "Quick one: reply with your first name so I know who's who.",
+    ])
+      expect(bannedPhraseIn(phrase), phrase).toBeDefined();
+    for (const p of BANNED_PHRASES) expect(p).toBe(p.toLowerCase());
+    for (const r of all) expect(r.text, r.text).not.toMatch(/!/);
+  });
+
+  it("goes out lowercase with no trailing periods by default, URLs and amounts intact", () => {
+    for (const r of all) {
+      const out = compose({ purpose: r.purpose, text: r.text, in_group: r.group, style: DEFAULT_STYLE });
+      const words = out.replace(/https?:\/\/\S+/g, "");
+      expect(words, out).toBe(words.toLowerCase());
+      expect(out, out).not.toMatch(/(?<!\.)\.(\n|$)/);
+      for (const a of r.text.match(/\$[\d,]+\.\d{2}/g) ?? []) expect(out).toContain(a);
+    }
+    expect(
+      compose({ purpose: "other", text: T.ledgerLink([{ url: "https://tab.tech/g/AbC123" }]), in_group: false, style: DEFAULT_STYLE }),
+    ).toBe("here's the ledger: https://tab.tech/g/AbC123");
   });
 });
 
@@ -315,13 +420,15 @@ describe("money", () => {
 });
 
 describe("group style", () => {
-  it("goes lowercase when the group texts in lowercase", () => {
-    expect(
-      detectStyle(["got groceries", "lol ok", "who's home", "Nice"]).lowercase,
-    ).toBe(true);
-    expect(detectStyle(["Got groceries", "Who's home?", "ok"]).lowercase).toBe(
-      false,
-    );
+  it("is lowercase with no trailing periods however the group types", () => {
+    for (const texts of [
+      ["got groceries", "lol ok", "who's home", "Nice"],
+      ["Got groceries.", "Who's home?", "Ok."],
+      [],
+    ]) {
+      expect(detectStyle(texts).lowercase).toBe(true);
+      expect(detectStyle(texts).periods).toBe(false);
+    }
   });
 
   it("uses emoji only once the group has", () => {
@@ -329,14 +436,17 @@ describe("group style", () => {
     expect(detectStyle(["got groceries 🛒", "ok"]).emoji).toBe(true);
   });
 
-  it("drops trailing periods when the group doesn't use them, but never inside amounts", () => {
-    expect(
-      detectStyle(["what do i owe", "got pizza, $48", "ok cool"]).periods,
-    ).toBe(false);
-    expect(detectStyle(["What do I owe.", "Got pizza.", "Ok."]).periods).toBe(
-      true,
+  it("shows decorative emoji only once the group has, but always keeps 👍", () => {
+    expect(applyStyle("hey i'm tab 👋\nand that's everyone square 🎉", DEFAULT_STYLE)).toBe(
+      "hey i'm tab\nand that's everyone square",
     );
-    const casual = { lowercase: true, emoji: false, periods: false };
+    expect(applyStyle("tap 👍 to pay", DEFAULT_STYLE)).toBe("tap 👍 to pay");
+    const emoji = { ...DEFAULT_STYLE, emoji: true };
+    expect(applyStyle("everyone's square 🎉", emoji)).toBe("everyone's square 🎉");
+  });
+
+  it("drops trailing periods, but never inside amounts", () => {
+    const casual = DEFAULT_STYLE;
     expect(applyStyle("You owe Joe $63.75.", casual)).toBe(
       "you owe joe $63.75",
     );

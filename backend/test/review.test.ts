@@ -76,7 +76,7 @@ describe("answers to Tab's questions (findings 3, 5)", () => {
     await w.say("Priya", "pizza was $48 lol");
     await w.say("Priya", "yes");
     expect(w.said("clarifying_question").at(-1)).toBe(
-      "Who paid for the Pizza?",
+      "who got the pizza?",
     );
   }
 
@@ -230,15 +230,15 @@ describe("settling gaps in §7.6 (finding 8)", () => {
     await w.react("Kian", `settle_request:${id}`);
     await w.wait(21_000); // the first nudge: 2h, scaled
     expect(w.said("approval_followup")).toHaveLength(2);
-    expect(w.said("approval_followup").join("\n")).not.toContain("Kian");
+    expect(w.said("approval_followup").join("\n")).not.toContain("kian");
     const priya = w.db
       .outbox()
       .find(
-        (o) => o.purpose === "approval_followup" && o.text?.startsWith("Priya"),
+        (o) => o.purpose === "approval_followup" && /^(hey )?priya\b/.test(o.text ?? ""),
       )!;
     expect(priya).toMatchObject({ kind: "group_message", group_id: GROUP });
     expect(priya.text).toMatch(
-      /Joe \$10\.00\. Tap 👍 on the settle request to pay\.$/,
+      /you owe joe \$10\.00\nno rush, just tap 👍 on the settle msg when you can$/,
     );
     await w.wait(121_000);
     await w.wait(400_000);
@@ -270,7 +270,7 @@ describe("settling gaps in §7.6 (finding 8)", () => {
     ).toMatchObject({
       kind: "dm",
       to_phone: PEOPLE.Kian,
-      text: "What's off with your $25.00? Tell me what you had and I'll fix it.",
+      text: "what's off with your $25.00? say what you had and i'll fix it",
     });
   });
 });

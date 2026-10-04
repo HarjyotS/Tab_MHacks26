@@ -83,7 +83,7 @@ describe("several open questions at once", () => {
     const ride = await sayIn(w, "trip", PEOPLE.Joe, "venmo me for the uber");
     expect(w.db.outbox().map((o) => o.text)).toContain("how much was the uber?");
     await sayIn(w, "trip", PEOPLE.Kian, LEDGER);
-    expect(settleModeReply(w)).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
+    expect(settleModeReply(w)).toBe('bet, running tab it is\nsay "settle up" whenever');
     expect(w.db.settleMode("trip")).toBe("ledger");
     await sayIn(w, "trip", PEOPLE.Joe, "22");
     expect(w.db.expense(`exp_${ride.message_id}`)).toMatchObject({ status: "proposed", total_cents: 2200 });
@@ -130,7 +130,7 @@ describe("several open questions at once", () => {
     await w.say("Kian", "22"); // the older question, after a newer one was asked
     expect(w.db.expense(`exp_${ride.message_id}`)).toMatchObject({ status: "proposed", total_cents: 2200 });
     await w.say("Priya", "yes");
-    expect(w.said("clarifying_question").at(-1)!.toLowerCase()).toBe("who paid for the pizza?");
+    expect(w.said("clarifying_question").at(-1)!.toLowerCase()).toBe("who got the pizza?");
     expect(w.db.expense(`exp_${pizza.message_id}`)!.status).toBe("needs_info");
   });
 
@@ -217,9 +217,9 @@ describe("free-form answers (Grok resolves them)", () => {
     });
     gateSays(w, { [text]: ["answer", 0.9] });
     const pizza = await w.say("Priya", "pizza was $48 lol");
-    expect(w.said("clarifying_question")).toEqual(["Want me to split that?"]);
+    expect(w.said("clarifying_question")).toEqual(["want me to split that?"]);
     const both = await w.say("Priya", text);
-    expect(w.said("clarifying_question").slice(1)).toEqual(["Who paid for the Pizza?", "Want me to split that?"]);
+    expect(w.said("clarifying_question").slice(1)).toEqual(["who got the pizza?", "want me to split that?"]);
     expect(w.db.expense(`exp_${pizza.message_id}`)!.status).toBe("needs_info");
     // The rest of an `answer` asks before acting (Joe's review on #35).
     expect(w.db.expense(`exp_${both.message_id}`)).toBeUndefined();
@@ -387,7 +387,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
     ]);
     gateSays(w, verdicts);
     await sayIn(w, "bistro", PEOPLE.Priya, "", { kind: "image", image_url: "bistro" });
-    expect(w.db.outbox().some((o) => o.text?.toLowerCase() === "what tip did you leave?")).toBe(true);
+    expect(w.db.outbox().some((o) => o.text?.toLowerCase() === "what'd you tip?")).toBe(true);
     await sayIn(w, "bistro", PEOPLE.Priya, "5 bucks");
     const e = w.db.expenses().find((x) => x.group_id === "bistro")!;
     expect(e).toMatchObject({ status: "proposed", tip_cents: 500, total_cents: 4707 });
@@ -455,7 +455,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
     await sayIn(w, "bistro", PEOPLE.Priya, text);
     expect(asked().at(-1)).toBe("how much were alex's cocktails?");
     const reply = await sayIn(w, "bistro", PEOPLE.Priya, answerText);
-    expect(asked().at(-1)).toBe("couldn't find that on the receipt. how much were alex's cocktails?");
+    expect(asked().at(-1)).toBe("hm can't find that on the receipt, how much were alex's cocktails?");
     expect(reply).toMatchObject({ intent: "answer", text: answerText }); // kept, not cleared
     expect(logged.some((l) => l.startsWith("answer_unresolved") && l.includes('"kind":"adjustment"'))).toBe(true);
     await sayIn(w, "bistro", PEOPLE.Priya, "12");
@@ -469,7 +469,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
       { [text]: ["name_reply", 0.41] },
     );
     await sayIn(w, "bistro", SAM, text);
-    expect(asked().at(-1)).toBe("change the split on the bistro?");
+    expect(asked().at(-1)).toBe("just you and priya on the bistro then?");
     await sayIn(w, "bistro", SAM, "yes");
     expect(shares()[ALEX]!.status).toBe("opted_out");
     expect(shares()[JORDAN]!.status).toBe("opted_out");

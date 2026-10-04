@@ -80,7 +80,7 @@ describe("the settle-mode answer", () => {
       await reply(
         "nah we are just adding it for friend expenses in the long run",
       ),
-    ).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
+    ).toBe('bet, running tab it is\nsay "settle up" whenever');
     expect(w.db.settings.get("trip")).toBe("ledger"); // stored, not just the default
   });
 
@@ -93,13 +93,13 @@ describe("the settle-mode answer", () => {
         "nah we are just keeping a ledger for the long run and we will settle it every month",
         34_000,
       ),
-    ).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
+    ).toBe('bet, running tab it is\nsay "settle up" whenever');
     expect(w.db.settings.get("trip")).toBe("ledger"); // stored, not just the default
   });
 
   it('confirms "each"', async () => {
     const { w, reply } = await asked();
-    expect(await reply("each")).toBe("got it, i'll settle after each expense");
+    expect(await reply("each")).toBe("bet, i'll settle up after each one");
     expect(w.db.settleMode("trip")).toBe("per_expense");
   });
 
@@ -124,7 +124,7 @@ describe("balance questions by DM", () => {
     ).toMatchObject({
       kind: "dm",
       to_phone: PEOPLE.Kian,
-      text: "You owe Joe $10.00.",
+      text: "you owe joe $10.00",
     });
   });
 });
@@ -134,7 +134,7 @@ describe("no lock-in under Tab's question (Joe's review on #30)", () => {
     const w = world({ expense: { ...script.expense, "adjustment|not even": raw(null, null, "unknown") } });
     await w.say("Joe", "got pizza, $40");
     await w.say("Kian", "not even");
-    expect(w.said("clarifying_question")).toEqual(["What's uneven?"]);
+    expect(w.said("clarifying_question")).toEqual(["ok what was uneven?"]);
     await w.wait(31_000);
     expect(w.db.expenses()[0]!.status).toBe("proposed");
   });
@@ -163,7 +163,7 @@ describe("changing a locked-in expense (§7.7)", () => {
     expect(w.db.expense(id)!.status).toBe("finalized");
     await w.say("Kian", COKE);
     expect(w.said("clarifying_question")).toEqual([
-      "Pizza is already locked in. Reopen it and change the split?",
+      "pizza is already locked in, reopen it and change the split?",
     ]);
     await w.say("Kian", "yes");
     expect(w.db.expense(id)).toMatchObject({
@@ -199,7 +199,7 @@ describe("changing a locked-in expense (§7.7)", () => {
     await w.react("Priya", `settle_request:exp_${pizza.message_id}`);
     await w.say("Kian", COKE);
     expect(w.said("clarifying_question")).toEqual([
-      "Pizza is already being paid, so I can't change it. Log the difference as a new expense.",
+      "pizza is already being paid, so i can't change it\njust log the difference as a new expense",
     ]);
   });
 });
