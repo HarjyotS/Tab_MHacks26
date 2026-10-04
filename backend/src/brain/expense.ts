@@ -371,7 +371,17 @@ export async function handleAdjustment(
   // else is out, and nobody needs a price ("how much was Joe's pool cabana?").
   // No amount or fraction in the words means nobody's share was stated, even when
   // the item ("pool cabana") got priced as the whole expense for each of them.
-  if (PRESENCE.test(text) && result.fixed.length > 0 && !/\d|\$/.test(text) && !fractionIn(text)) {
+  // Only when what each of them "had" is the expense itself: "alex had both
+  // drinks" on a receipt is still Alex's item.
+  const whole = (item: string | undefined) => {
+    const i = (item ?? "").toLowerCase().trim();
+    const d = expense.description.toLowerCase().trim();
+    return i.length === 0 || i.includes(d) || d.includes(i);
+  };
+  if (
+    PRESENCE.test(text) && result.fixed.length > 0 && !/\d|\$/.test(text) && !fractionIn(text) &&
+    result.fixed.every((f) => f.amount_cents === undefined || whole(f.item))
+  ) {
     const inIt = new Set(result.fixed.map((f) => f.phone));
     const out = activeMembers(ctx, expense.group_id).map((x) => x.phone).filter((p) => !inIt.has(p));
     result = { ...result, fixed: [], exclusions: [...new Set([...result.exclusions, ...out])] };
