@@ -11,6 +11,7 @@ export const INTENTS = [
   'dispute',
   'balance_query',
   'breakdown_request',
+  'money_question',
   'payment_reported',
   'settle_up',
   'help',

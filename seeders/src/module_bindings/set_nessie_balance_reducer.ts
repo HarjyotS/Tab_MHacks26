@@ -10,9 +10,7 @@ import {
   type Infer as __Infer,
 } from "spacetimedb";
 
-export default __t.row({
-  ledgerMemberId: __t.string().primaryKey().name("ledger_member_id"),
-  ledgerGroupId: __t.string().name("ledger_group_id"),
-  name: __t.option(__t.string()),
-  bankBalanceCents: __t.option(__t.i64()).name("bank_balance_cents"),
-});
+export default {
+  memberId: __t.string(),
+  balanceCents: __t.i64(),
+};

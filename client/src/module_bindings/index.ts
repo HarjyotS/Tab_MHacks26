@@ -43,6 +43,7 @@ import GrantServiceRoleReducer from "./grant_service_role_reducer";
 import IngestMessageReducer from "./ingest_message_reducer";
 import MarkOutboxReducer from "./mark_outbox_reducer";
 import RecomputeExpenseReducer from "./recompute_expense_reducer";
+import RecordNessieMirrorReducer from "./record_nessie_mirror_reducer";
 import RedeemLedgerAccessReducer from "./redeem_ledger_access_reducer";
 import RemoveClaimReducer from "./remove_claim_reducer";
 import ResolveDisputeReducer from "./resolve_dispute_reducer";
@@ -53,6 +54,7 @@ import SetLedgerSecretReducer from "./set_ledger_secret_reducer";
 import SetLineItemsReducer from "./set_line_items_reducer";
 import SetMemberNameReducer from "./set_member_name_reducer";
 import SetMessageResultReducer from "./set_message_result_reducer";
+import SetNessieBalanceReducer from "./set_nessie_balance_reducer";
 import SetNessieIdsReducer from "./set_nessie_ids_reducer";
 import SetSettleModeReducer from "./set_settle_mode_reducer";
 import SetShareReducer from "./set_share_reducer";
@@ -247,6 +249,7 @@ const reducersSchema = __reducers(
   __reducerSchema("ingest_message", IngestMessageReducer),
   __reducerSchema("mark_outbox", MarkOutboxReducer),
   __reducerSchema("recompute_expense", RecomputeExpenseReducer),
+  __reducerSchema("record_nessie_mirror", RecordNessieMirrorReducer),
   __reducerSchema("redeem_ledger_access", RedeemLedgerAccessReducer),
   __reducerSchema("remove_claim", RemoveClaimReducer),
   __reducerSchema("resolve_dispute", ResolveDisputeReducer),
@@ -257,6 +260,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_line_items", SetLineItemsReducer),
   __reducerSchema("set_member_name", SetMemberNameReducer),
   __reducerSchema("set_message_result", SetMessageResultReducer),
+  __reducerSchema("set_nessie_balance", SetNessieBalanceReducer),
   __reducerSchema("set_nessie_ids", SetNessieIdsReducer),
   __reducerSchema("set_settle_mode", SetSettleModeReducer),
   __reducerSchema("set_share", SetShareReducer),

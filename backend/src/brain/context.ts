@@ -7,6 +7,7 @@ import type { OutboxPurpose, Reaction } from "../db/types.js";
 import { compose } from "../copy/compose.js";
 import { styleFlags, styleFromFlags, type GroupStyle, type StyleFlags } from "../copy/style.js";
 import type { WitContext } from "../copy/wit.js";
+import type { SummaryInput } from "../copy/summary.js";
 import type { ExpenseMode } from "../extraction/expense.js";
 import type {
   CorrectionExtraction,
@@ -23,6 +24,7 @@ import type { Expense, Message, Store } from "../store/types.js";
 import type { Thread } from "./threads.js";
 import { PhotoNotes } from "./photos.js";
 import { Transcript } from "./transcript.js";
+import type { ChatClient } from "../grok/structured.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
 
@@ -129,6 +131,14 @@ export type Extractors = {
   describe?: (image_url: string, caption?: string) => Promise<PhotoNote>;
 };
 
+export type AskAgent = {
+  client: ChatClient;
+  model: string;
+  budgetMs?: number; // whole answer, retry included (default 25 s)
+  maxRounds?: number; // tool rounds per attempt (default 5)
+  clock?: () => number; // for the budget; defaults to Date.now
+};
+
 export type BrainCtx = {
   store: Store;
   db: BackendReducers;
@@ -136,6 +146,11 @@ export type BrainCtx = {
   classify: Classify;
   extract: Extractors;
   wit?: (ctx: WitContext) => Promise<string | null>;
+  // The money brain (ask.ts): Grok with lookup tools. Absent means
+  // questions get the template answers.
+  ask?: AskAgent;
+  // A short reason per balance for a long "@Tab breakdown"; null falls back to the full list.
+  summarize?: (input: SummaryInput) => Promise<string[] | null>;
   timing: Timing;
   ledger?: LedgerConfig; // §12.3 links; absent means Tab posts none
   memory: Memory;
