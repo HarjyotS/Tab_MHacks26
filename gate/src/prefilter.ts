@@ -20,8 +20,10 @@ const PURCHASE =
 const NUMBER_WORDS =
   /\b(three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand|grand|half)\b/i;
 
-// Questions about what Tab said or where a number came from, and "are we even?".
-const QUESTIONS = /\b(how much|where('?s| is| did| does)?\b.*\bfrom|are we (even|good|square)|we'?re even|close out)\b/i;
+// Questions about where a number came from, "are we even?", and how to use
+// Tab ("how do we see the ledger?"), which is help.
+const QUESTIONS =
+  /\b(how much|where('?s| is| did| does)?\b.*\bfrom|are we (even|good|square)|we'?re even|close out|ledger|log|logged|how (do|does|can|should) (i|we|you|this|it))\b/i;
 
 /** Values of GATE_PREFILTER that turn the pre-filter off; anything else (or unset) leaves it on. */
 const OFF = new Set(['off', 'false', '0', 'no']);
@@ -52,8 +54,10 @@ export function mightBeMoney(input: ClassifyInput): boolean {
   // Photos may be receipts; reactions and system events are routed by the
   // classifier itself without a model.
   if (message.kind !== 'text' || message.image_url) return true;
-  // DMs are always to Tab, and an inline reply may be to Tab or to an expense.
-  if (message.is_dm || message.reply_to_id) return true;
+  // DMs are always to Tab, and so is an inline reply to one of Tab's
+  // messages. Replies between people go through the rules below like any
+  // other message (a reply about an open split or settle request still passes).
+  if (message.is_dm || message.reply_to_tab) return true;
   // Tab is waiting on an answer in this chat; bystanders' inline answers
   // only count if the gate passes them.
   if (input.tab_question_open) return true;
