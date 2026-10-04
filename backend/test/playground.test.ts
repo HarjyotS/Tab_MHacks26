@@ -62,8 +62,8 @@ describe("the settle-mode answer", () => {
     expect(w.db.outbox().some((o) => o.action_id === "settle_mode:trip")).toBe(
       true,
     );
-    const reply = async (text: string) => {
-      w.advance(1000);
+    const reply = async (text: string, after = 1000) => {
+      w.advance(after);
       await processMessage(
         w.ctx,
         w.db.ingest({ sender_phone: PEOPLE.Kian, group_id: "trip", text }),
@@ -79,6 +79,19 @@ describe("the settle-mode answer", () => {
     expect(
       await reply(
         "nah we are just adding it for friend expenses in the long run",
+      ),
+    ).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
+    expect(w.ctx.memory.settleMode.get("trip")).toBe("ledger");
+  });
+
+  it("still takes the answer half a minute later in DEMO_MODE", async () => {
+    // Harjyot's playground: Priya answered 34s after the question, but
+    // DEMO_MODE had cut the answer window to 20s.
+    const { w, reply } = await asked();
+    expect(
+      await reply(
+        "nah we are just keeping a ledger for the long run and we will settle it every month",
+        34_000,
       ),
     ).toBe('got it, i\'ll keep a running tab. say "settle up" whenever');
     expect(w.ctx.memory.settleMode.get("trip")).toBe("ledger");
