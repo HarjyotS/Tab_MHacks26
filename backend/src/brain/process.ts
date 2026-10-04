@@ -5,7 +5,7 @@ import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, PRESENCE, priceFromReceipt, proposeNew } from "./expense.js";
+import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
@@ -676,12 +676,13 @@ async function answerExpense(ctx: BrainCtx, m: Message, t: Thread, answer: strin
     mode,
   );
   // "it's the cheesecake on the receipt": an item named in the answer is
-  // priced from the receipt, as in the first message (§7.5).
-  const retry = p.kind === "adjustment" ? priceFromReceipt(extracted, ctx.store.lineItems(p.expense_id)) : extracted;
+  // priced from the receipt, and "half of the cost" from the total, as in
+  // the first message (§7.5).
+  const expense = p.kind === "adjustment" ? ctx.store.expense(p.expense_id) : undefined;
+  const retry = expense ? priceChange(ctx, expense, extracted, { text: answer, problem: p.problems[0] }) : extracted;
   if (retry.problems.length >= p.problems.length) return false; // didn't help
   closeThread(ctx, chatOf(m), t);
   if (p.kind === "adjustment") {
-    const expense = ctx.store.expense(p.expense_id);
     if (!expense) return true;
     if (retry.problems.length > 0) {
       const id = `clarify:${m.message_id}`;

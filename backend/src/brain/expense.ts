@@ -338,7 +338,7 @@ export async function handleAdjustment(
     extractInput(ctx, { ...m, text }),
     "adjustment",
   );
-  const { result, problems } = priceFromReceipt(extracted, ctx.store.lineItems(expense.expense_id));
+  const { result, problems } = priceChange(ctx, expense, extracted);
   const unknown = problems.filter(
     (p) => p.kind === "unknown_name" || p.kind === "missing_item_price",
   );
@@ -407,6 +407,9 @@ export async function handleAdjustment(
     addInvite(ctx, chatOf(m), { id, text, kind: "adjust_open", expense_id: expense.expense_id });
     return;
   }
+  // Only says what the split already is ("me and jordan had the other half"
+  // right after Priya's half): nothing to change, so nothing to confirm.
+  if (changesNothing(ctx, expense, result)) return keepSplit(ctx, m, expense, true);
   // Reopening a locked-in expense is always confirmed first.
   if (opts.confirmOnly || locked) {
     const question = locked
@@ -440,6 +443,18 @@ async function holdOpen(ctx: BrainCtx, expense: Expense) {
   const until = ctx.now().getTime() + ctx.timing.durations.OBJECTION_EXTENSION;
   if ((expense.objection_deadline?.getTime() ?? 0) >= until) return;
   await ctx.db.upsert_expense({ ...expense, objection_deadline: new Date(until) });
+}
+
+function changesNothing(ctx: BrainCtx, e: Expense, result: ExpenseExtraction): boolean {
+  const shares = ctx.store.shares(e.expense_id);
+  const share = (phone: string) => shares.find((s) => s.phone === phone);
+  return (
+    result.exclusions.every((p) => share(p)?.status === "opted_out") &&
+    result.fixed.every((f) => {
+      const s = share(f.phone);
+      return f.amount_cents !== undefined && s !== undefined && s.status !== "opted_out" && s.fixed_cents === f.amount_cents;
+    })
+  );
 }
 
 // "What's uneven?" (or "what's off?") about this expense, still open here.
@@ -517,6 +532,95 @@ export function fractionIn(text: string): Fraction | undefined {
         ? { num: part[1] ? (NUMERATOR[part[1].toLowerCase()] ?? Number(part[1])) : 1, den: DENOMINATOR[part[2]!.toLowerCase()]! }
         : undefined;
   return f && f.num > 0 && f.den > 0 && f.num <= f.den ? f : undefined;
+}
+
+// Words that mean the whole expense ("half of the cost", "a third of it"),
+// and the fraction words themselves.
+const WHOLE = new Set(["it", "bill", "cost", "total", "check", "tab", "everything", "thing", "whole", "order", "price", "amount", "food", "share", "part", "portion", "lot"]);
+const COUNTED = /^\s*(the\s+)?(a|an|one|two|three|four|five|six|both|\d+)\b/i;
+const FRACTION_WORDS = new Set(["half", "halve", "third", "quarter", "fourth", "fifth", "percent", "rest", "remainder", "remaining", "other", "leftover"]);
+
+// Whether what someone had is the expense itself, or a fraction of it:
+// "half of the pizza" or "the pizzas" on Pizza, "half", "a third of it".
+// Not "half of the fries" on Dinner, nor "the pizza" on "Pizza and wings":
+// those need a price.
+function ofTheExpense(item: string, description: string): boolean {
+  const own = words(description);
+  const said = words(item).filter((w) => !WHOLE.has(w) && !FRACTION_WORDS.has(w));
+  if (!said.every((w) => own.includes(w))) return false;
+  // "one pizza" may be one of several; "half of the pizza" is a share of it.
+  if (said.length > 0 && !fractionIn(item) && COUNTED.test(item)) return false;
+  const several = /\band\b|&|,|\+/.test(description);
+  return said.length === 0 || !several || own.every((w) => said.includes(w));
+}
+
+// What a change says once code has priced it (§7.5): items from the
+// receipt, fractions from the total. `answer` replies to "how much was
+// Priya's …?" and may be a fraction of it all ("half of the cost", "50%").
+export function priceChange(
+  ctx: BrainCtx,
+  expense: Expense,
+  extracted: Extracted<ExpenseExtraction>,
+  answer?: { text: string; problem?: Problem },
+): Extracted<ExpenseExtraction> {
+  return shareFractions(ctx, expense, priceFromReceipt(extracted, ctx.store.lineItems(expense.expense_id)), answer);
+}
+
+// A fraction of the expense is a fixed share of what was spent, computed
+// here and never asked for (Harjyot's playground: "priyas fatass had half
+// of the pizza" got "how much was Priya's half of the pizza?" three times).
+// The rest splits evenly as usual; "me and jordan had the other half" gives
+// it to exactly them, so anyone else still on the split had none of it.
+function shareFractions(
+  ctx: BrainCtx,
+  expense: Expense,
+  extracted: Extracted<ExpenseExtraction>,
+  answer?: { text: string; problem?: Problem },
+): Extracted<ExpenseExtraction> {
+  const base = expense.subtotal_cents ?? expense.total_cents;
+  const cents = (f: { num: number; den: number }) => Math.round((base * f.num) / f.den);
+  const asked = answer?.problem?.kind === "missing_item_price" ? answer.problem.phone : undefined;
+  const told = answer && ofTheExpense(answer.text, expense.description) ? fractionIn(answer.text) : undefined;
+  const byAnswer = told && told !== "rest" ? told : undefined;
+  const rest = new Set<string>();
+  const priced = new Set<string>(); // phone|item, answered here
+  const fixed: ExpenseExtraction["fixed"] = [];
+  for (const f of extracted.result.fixed) {
+    if (f.amount_cents !== undefined || !f.item) {
+      fixed.push(f);
+      continue;
+    }
+    const share = ofTheExpense(f.item, expense.description)
+      ? (fractionIn(f.item) ?? { num: 1, den: 1 }) // "priya had the pizza": all of it
+      : f.phone === asked
+        ? byAnswer
+        : undefined;
+    if (!share) fixed.push(f);
+    else if (share === "rest") rest.add(f.phone);
+    else fixed.push({ phone: f.phone, item: f.item, amount_cents: cents(share) });
+    if (share) priced.add(`${f.phone}|${f.item}`);
+  }
+  // The question's answer stands even if the re-read dropped who it was about.
+  if (asked && byAnswer && !fixed.some((f) => f.phone === asked && f.amount_cents !== undefined))
+    fixed.push({ phone: asked, amount_cents: cents(byAnswer) });
+  if (priced.size === 0 && fixed.length === extracted.result.fixed.length) return extracted;
+  const pinned = new Set(fixed.map((f) => f.phone));
+  const leftOut =
+    rest.size === 0
+      ? []
+      : liveShares(ctx, expense.expense_id)
+          .map((s) => s.phone)
+          .filter((p) => !pinned.has(p) && !rest.has(p));
+  return {
+    result: {
+      ...extracted.result,
+      fixed,
+      exclusions: [...new Set([...extracted.result.exclusions.filter((p) => !pinned.has(p) && !rest.has(p)), ...leftOut])],
+    },
+    problems: extracted.problems.filter(
+      (p) => !(p.kind === "missing_item_price" && (priced.has(`${p.phone}|${p.item}`) || (p.phone === asked && byAnswer))),
+    ),
+  };
 }
 
 // §7.5: "If an item is named without a price and a receipt exists, match it
