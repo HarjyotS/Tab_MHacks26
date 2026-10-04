@@ -12,7 +12,6 @@ export type Invite = {
   kind:
     | "split_open" // the split proposal and "Anything else?"
     | "adjust_open" // "What's uneven?", "That's more than the total…", "What's off?"
-    | "dispute_open" // "What's off with your $X?" after a dispute
     | "claims_open" // the item list, "Which ones?", claim nudges
     | "settle_open"; // the settle request's "reply if something's off"
 };
@@ -20,7 +19,6 @@ export type Invite = {
 export const INVITES = new Set<Thread["data"]["kind"]>([
   "split_open",
   "adjust_open",
-  "dispute_open",
   "claims_open",
   "settle_open",
 ]);
@@ -112,7 +110,6 @@ function stillOpen(ctx: BrainCtx, t: Thread): boolean {
       return is("proposed");
     case "adjust_open":
       return is("proposed", "finalized");
-    case "dispute_open":
     case "settle_open":
       return is("finalized");
     case "claims_open":

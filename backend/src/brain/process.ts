@@ -1,9 +1,11 @@
 // SPEC §11.1 processing loop and §11.2 scheduler.
-import type { Intent } from "@tab/gate";
-import { decide } from "../gate/decide.js";
+import type { ClassifyResult, Intent } from "@tab/gate";
+import { thresholds } from "../config.js";
+import { decide, type Decision } from "../gate/decide.js";
+import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { applyAdjustment, groupFor, handleAdjustment, handleExpense, proposeNew } from "./expense.js";
+import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { askReceipt, claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
@@ -28,7 +30,7 @@ import {
   handleNameReply,
   onboardNewGroups,
 } from "./talk.js";
-import { addThread, closeThread, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
+import { addThread, closeThread, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
 
 // Intents whose messages are about money: the only ones kept as context and
@@ -90,7 +92,8 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
         prefiltered: result.prefiltered === true,
       });
 
-      const answered = await answerThreads(ctx, m, decision !== "ignore");
+      const reply = await answerThreads(ctx, m, result, decision);
+      const answered = reply.answered;
       // "why?" right after Tab's balance reply: the short explanation.
       const why = !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
       if (why) await handleBreakdown(ctx, m);
@@ -104,6 +107,10 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       if (!answered && !why && !ledger) {
         if (decision === "act") await act(ctx, m, result.intent);
         else if (decision === "clarify") await clarify(ctx, m, result.intent);
+      } else if (reply.rest) {
+        // The same message also said something else ("yep, and I got gas $30").
+        if (reply.rest.decision === "act") await act(ctx, m, reply.rest.intent);
+        else await clarify(ctx, m, reply.rest.intent);
       }
     }
     await ctx.db.set_message_result({
@@ -218,35 +225,252 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   });
 }
 
+type Reply = {
+  answered: boolean;
+  // What else the message does, handled as if it had come on its own.
+  rest?: { intent: Intent; decision: "act" | "clarify" };
+};
+
 // Tab's open questions in this chat (threads.ts), tried before normal
 // handling. An answer is accepted only if it actually resolves something;
 // otherwise the message is handled as if nothing were open.
 // Who may answer (Harjyot's review on #14): a question about the sender's
-// own money only the person Tab asked; a missing fact anyone, but someone
-// else only by replying inline to that question, and only if the gate passed
-// it; a bystander's "uber was $30, I paid" is their own expense, not an answer.
-async function answerThreads(ctx: BrainCtx, m: Message, passed: boolean): Promise<boolean> {
-  if (m.kind !== "text" || !m.text) return false;
+// own money only the person Tab asked; a missing fact, or a reply Tab
+// invited, anyone. A bystander's "uber was $30, I paid" is their own
+// expense, not an answer: Grok says so, and it's handled as one.
+async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, decision: Decision): Promise<Reply> {
+  const no: Reply = { answered: false };
+  if (m.kind !== "text" || !m.text) return no;
   const mine = openThreads(ctx, chatOf(m)).filter((t) => mayAnswer(t, m));
-  if (mine.length === 0) return false;
+  if (mine.length === 0) return no; // nothing open: exactly as before
+  const passed = decision !== "ignore";
+  // An inline reply picks its question for certain, but lowers no bar.
   const replied = threadForReply(ctx, m, mine);
   const pool = replied ? [replied] : mine;
 
-  // Today's parsers, for a plain answer to exactly one question: no Grok call.
+  // 1. Today's parsers, for a plain answer to exactly one question: no Grok call.
   const hits = pool.flatMap((t) => {
     const apply = quickAnswer(ctx, m, t);
     return apply ? [apply] : [];
   });
   if (hits.length === 1) {
     await hits[0]!();
-    return true;
+    return { answered: true };
   }
-  // A question about an expense: read it again with the answer appended.
+  // 2. A question about an expense, answered by the person Tab asked (or
+  //    inline by someone the gate passed): read it again with the answer.
   const reask = pool.find(
     (t) => (t.data.kind === "expense" || t.data.kind === "adjustment") && (isAsker(t, m) || (t === replied && passed)),
   );
-  if (!reask) return false;
-  return answerExpense(ctx, m, reask, isAsker(reask, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m)));
+  if (reask && (await answerExpense(ctx, m, reask, isAsker(reask, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m)))))
+    return { answered: true };
+
+  // 3. Grok, for everything the parsers can't read. Only a message the gate
+  //    passed, or one from the person Tab asked a question only they can
+  //    answer, ever reaches it (§19, §16.3). For invites alone the gate's
+  //    own intent already reaches the same handler, so it isn't asked then
+  //    unless the gate called it an answer or it's an inline reply.
+  const offered = pool.filter((t) => t !== reask);
+  const asked = offered.filter((t) => !INVITES.has(t.data.kind));
+  const askerOnly = offered.some((t) => t.who === "asker" && isAsker(t, m));
+  const worth = passed && (result.intent === "answer" || replied !== undefined || asked.length > 0);
+  if (offered.length === 0 || !(worth || askerOnly)) return no;
+  let r: AnswerResolution;
+  try {
+    r = await ctx.extract.answer(extractInput(ctx, m), offered.map((t) => threadView(ctx, m, t)));
+  } catch (err) {
+    ctx.log("answer_failed", { message_id: m.message_id, group_id: m.group_id, error: String(err) });
+    return no;
+  }
+  const t = offered.find((x) => x.id === r.thread_id);
+  ctx.log("answer_resolved", { message_id: m.message_id, group_id: m.group_id, kind: t?.data.kind, relevance: r.relevance, also_new: r.also_new });
+  // 4. Low relevance, or nothing it could read: handled as before.
+  if (!t || r.relevance < 0.5) return no;
+  if (!(await applyAnswer(ctx, m, t, r, result, decision))) return no;
+  return { answered: true, rest: restOf(t, r, result, decision) };
+}
+
+// What each kind of question expects, for the resolver's prompt.
+const EXPECTS: Record<Thread["data"]["kind"], string> = {
+  expense: "the missing fact (who paid, how much, or who was in): restated",
+  adjustment: "the missing fact about the split (who someone is, what an item cost): restated",
+  confirm: "yes or no: yes_no",
+  receipt: "",
+  which: "a numbered choice: choice",
+  settle_mode: "how the group wants to settle: settle_mode",
+  split_open: 'a change to the split (who wasn\'t there, who had what): restated; or yes_no "no" only if they say nothing needs changing',
+  adjust_open: "what is uneven, or what someone actually had: restated",
+  dispute: "what their share should be, in dollars: amount_cents",
+  claims_open: 'which items they had (numbers, item names, "even", or "same as" someone)',
+  settle_open: 'yes_no "yes" if they agree to pay; yes_no "no" and restated if something is wrong with what they owe',
+};
+
+const RECEIPT_EXPECTS = {
+  confirm_total: "yes or no, is the total Tab read right: yes_no",
+  total: "the total in dollars: amount_cents",
+  tip: 'the tip they left: amount_cents, percent, or yes_no "no" for none',
+} as const;
+
+function threadView(ctx: BrainCtx, m: Message, t: Thread): OpenThread {
+  const d = t.data;
+  const g = groupFor(ctx, m);
+  const name = (g && ctx.store.members(g).find((x) => x.phone === t.asker)?.name) || "the person Tab asked";
+  return {
+    id: t.id,
+    question: t.text,
+    expects: d.kind === "receipt" ? RECEIPT_EXPECTS[d.stage] : EXPECTS[d.kind],
+    ...(d.kind === "which" ? { choices: d.expense_ids.length } : {}),
+    // A dispute that already has an amount is waiting on "Which one?".
+    ...(d.kind === "dispute" && d.amount_cents !== undefined
+      ? { expects: "a numbered choice: choice", choices: d.expense_ids.length }
+      : {}),
+    who: t.who === "anyone" ? "anyone" : name,
+  };
+}
+
+// The resolver's fields, applied with the same handlers a message would
+// reach (plan §5.5). False when they don't answer this kind of question.
+async function applyAnswer(
+  ctx: BrainCtx,
+  m: Message,
+  t: Thread,
+  r: AnswerResolution,
+  result: ClassifyResult,
+  decision: Decision,
+): Promise<boolean> {
+  const d = t.data;
+  // An unsure gate confirms a change to a split instead of applying it (§6.4).
+  const confirmOnly = decision !== "act" || result.confidence < thresholds.act;
+  switch (d.kind) {
+    case "confirm":
+      if (!r.yes_no) return false;
+      await answerConfirm(ctx, m, t, d, r.yes_no === "yes");
+      return true;
+    case "receipt": {
+      const { receipt } = d.read;
+      const answer: ReceiptAnswer | undefined =
+        d.stage === "confirm_total"
+          ? r.yes_no ? r.yes_no === "yes" : undefined
+          : d.stage === "total"
+            ? r.amount_cents
+            : r.percent !== undefined
+              ? Math.round(((receipt.subtotal_cents ?? receipt.total_cents ?? 0) * r.percent) / 100) // computed in code (P6)
+              : (r.amount_cents ?? (r.yes_no === "no" ? 0 : undefined));
+      if (answer === undefined) return false;
+      await answerReceipt(ctx, m, t, d, answer);
+      return true;
+    }
+    case "which":
+      if (!r.choice || !d.expense_ids[r.choice - 1]) return false;
+      await answerWhich(ctx, m, t, d, r.choice);
+      return true;
+    case "settle_mode":
+      if (!r.settle_mode || !m.group_id) return false;
+      await answerSettleMode(ctx, m, t, r.settle_mode);
+      return true;
+    case "expense":
+    case "adjustment": {
+      // The asker's own words; anyone else's restated in the third person,
+      // so "I paid" from Joe reads as "Joe paid".
+      const answer = isAsker(t, m) ? m.text : r.restated;
+      return answer ? answerExpense(ctx, m, t, answer) : false;
+    }
+    case "split_open": {
+      const e = threadExpense(ctx, t, "proposed");
+      if (!e) return false;
+      if (r.yes_no === "no") return splitLooksRight(ctx, m, t, e);
+      await handleAdjustment(ctx, m, m.text ?? "", e, { confirmOnly });
+      closeThread(ctx, chatOf(m), t);
+      return true;
+    }
+    case "dispute": {
+      // Only a clear amount of money (disputeCents: "I had 2 beers" is a
+      // count, Joe on #29), or a number from "Which one?". Anything else
+      // ("I wasn't there") goes through normal handling.
+      const open = stillDisputed(ctx, m.sender_phone, d.expense_ids);
+      if (d.amount_cents !== undefined) {
+        const target = r.choice ? open.find((e) => e.expense_id === d.expense_ids[r.choice! - 1]) : undefined;
+        if (!target) return false;
+        await answerDispute(ctx, m, t, d, open, d.amount_cents, target);
+        return true;
+      }
+      const amount = disputeCents(m.text ?? "");
+      if (open.length === 0 || amount === undefined || amount <= 0 || r.amount_cents !== amount) return false;
+      await answerDispute(ctx, m, t, d, open, amount);
+      return true;
+    }
+    case "adjust_open": {
+      const e = threadExpense(ctx, t, "proposed", "finalized");
+      if (!e) return false;
+      // "oh just $10" after "What did Jake actually have?" needs the name.
+      await handleAdjustment(ctx, m, r.restated ?? m.text ?? "", e, { confirmOnly });
+      closeThread(ctx, chatOf(m), t);
+      return true;
+    }
+    case "claims_open": {
+      const e = threadExpense(ctx, t, "itemizing");
+      const share = e && ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
+      if (!e || !share || share.status === "opted_out") return false;
+      await handleClaim(ctx, m, e);
+      return true;
+    }
+    case "settle_open": {
+      const owed = disputeTargets(ctx, m);
+      if (owed.length === 0) return false; // only someone who owes answers it
+      if (r.yes_no === "yes") await textApproval(ctx, m); // never pays (P7)
+      else await dispute(ctx, m, owed); // marks it disputed, then asks what's off
+      return true;
+    }
+  }
+}
+
+function threadExpense(ctx: BrainCtx, t: Thread, ...statuses: Expense["status"][]): Expense | undefined {
+  const ids = t.expense_ids ?? (t.expense_id ? [t.expense_id] : []);
+  const open = ids.map((id) => ctx.store.expense(id)).filter((e): e is Expense => Boolean(e && statuses.includes(e.status)));
+  return open.length === 1 ? open[0] : undefined;
+}
+
+// "nope, looks right" to "Anything uneven?": the same as a 👍 on the
+// proposal from them (§6.2), which locks it in once everyone has.
+async function splitLooksRight(ctx: BrainCtx, m: Message, t: Thread, e: Expense): Promise<boolean> {
+  const share = ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
+  if (!share || share.status === "opted_out") return false;
+  await tapback(ctx, m, "like", e.expense_id);
+  if (!share.responded) await ctx.db.set_share({ ...share, responded: true });
+  if (liveShares(ctx, e.expense_id).every((s) => s.responded)) {
+    closeThread(ctx, chatOf(m), t);
+    await finalize(ctx, ctx.store.expense(e.expense_id)!);
+  }
+  return true;
+}
+
+// Intents an answer to each kind of question already covers, so the gate
+// seeing one of them is not a second thing to do.
+const COVERS: Record<Thread["data"]["kind"], Intent[]> = {
+  expense: ["expense", "receipt", "correction"],
+  adjustment: ["split_adjustment", "correction"],
+  confirm: ["expense", "split_adjustment", "correction", "settle_up", "approval"],
+  receipt: ["expense", "receipt", "correction"],
+  which: ["claim"],
+  settle_mode: ["settle_up"],
+  split_open: ["split_adjustment", "correction", "dispute", "approval"],
+  adjust_open: ["split_adjustment", "correction", "dispute"],
+  dispute: ["dispute", "correction"],
+  claims_open: ["claim"],
+  settle_open: ["approval", "dispute", "split_adjustment"],
+};
+
+// Plan §5.6: the rest of the message, when Grok says it also says something
+// else, or the gate read a money intent the answer didn't cover. The gate's
+// decision still sets the bar: below act, Tab asks instead.
+function restOf(t: Thread, r: AnswerResolution, result: ClassifyResult, decision: Decision): Reply["rest"] {
+  const gate =
+    decision !== "ignore" && result.intent !== "answer" && MONEY_INTENTS.has(result.intent) && !COVERS[t.data.kind].includes(result.intent)
+      ? result.intent
+      : undefined;
+  const intent = gate ?? (r.also_new ? r.also_intent : undefined);
+  if (!intent) return undefined;
+  return { intent, decision: decision === "act" ? "act" : "clarify" };
 }
 
 // Someone else's answer is read as the asker's message, so "I" and "me"
