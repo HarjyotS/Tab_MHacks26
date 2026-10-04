@@ -189,10 +189,10 @@ export function approvalFollowup(a: {
   const name = displayName(a.person);
   const owe = listJoin(a.owed.map((o) => `${displayName(o.payee)} ${money(o.amount_cents)}`));
   const tap = "no rush, just tap 👍 on the settle msg when you can";
-  if (a.step === 3) return `last nudge from me ${name}, promise: you're at ${owe}\n${tap}`;
+  if (a.step === 3) return `last nudge from me ${name}, promise: you owe ${owe}\n${tap}`;
   return a.step === 1
-    ? pick(a.seed, [`${name}, you've got ${owe} on the tab\n${tap}`, `hey ${name}, you're at ${owe}\n${tap}`])
-    : `${name} just bumping this, you're at ${owe}\n${tap}`;
+    ? pick(a.seed, [`hey ${name}, you owe ${owe}\n${tap}`, `${name} heads up, you owe ${owe}\n${tap}`])
+    : `${name} just bumping this, you owe ${owe}\n${tap}`;
 }
 
 // 🎉 shows only if the group uses emoji (style.ts). Without a description
