@@ -496,6 +496,7 @@ export async function announceSettlements(ctx: BrainCtx) {
         })),
         label,
         allSquare: !stillOwes,
+        nessie: process.env.NESSIE_RECEIPTS === "on",
       }),
     });
   }

@@ -363,7 +363,7 @@ describe("templates", () => {
 
   it("says the settlement receipt is simulated, as SPEC 7.6 requires", () => {
     expect(T.paymentConfirmation({ paid: [{ payee: joe, amount_cents: 3825 }, { payee: priya, amount_cents: 1200 }], label: "Vegas Trip", allSquare: true })).toBe(
-      "done, you paid Joe $38.25 and Priya $12.00 for Vegas Trip through capital one nessie (sandbox, no real money moved)\nyou're all square",
+      "done, you paid Joe $38.25 and Priya $12.00 for Vegas Trip (simulated, no real money moved)\nyou're all square",
     );
   });
 
@@ -559,5 +559,12 @@ describe("wit line", () => {
     ["one line\ntwo lines", "multiline"],
   ])("judges %j as %s", (line, why) => {
     expect(rejectWit(line, ctx)).toBe(why);
+  });
+});
+
+describe("payment receipt with the Nessie mirror on", () => {
+  it("says it went through capital one nessie, and that it's a sandbox", () => {
+    const text = T.paymentConfirmation({ paid: [{ payee: { phone: "+15550000001", name: "Sam" }, amount_cents: 1200 }], label: "pizza", allSquare: true, nessie: true });
+    expect(text).toBe("done, you paid Sam $12.00 for pizza through capital one nessie (sandbox, no real money moved)\nyou're all square");
   });
 });
