@@ -103,7 +103,7 @@ describe("one 👍 pays every share the request covers", () => {
     w.db.completeTransfers();
     await w.wait(1000);
     expect(w.said("payment_receipt")).toEqual([
-      "done, you paid Joe $10.00 and Priya $15.00 (simulated, no real money moved)\nyou're all square",
+      "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries (simulated, no real money moved)\nyou're all square",
     ]);
   });
 });
@@ -160,7 +160,7 @@ describe("every approver gets their own payment DM (SPEC #15)", () => {
       w.db.completeTransfers();
       await w.wait(1000);
     }
-    const both = "done, you paid Joe $10.00 and Priya $15.00 (simulated, no real money moved)\nyou're all square";
+    const both = "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries (simulated, no real money moved)\nyou're all square";
     expect(receipts(w)).toEqual([
       [PEOPLE.Kian, both],
       [PEOPLE.Jake, both],

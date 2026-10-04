@@ -48,12 +48,15 @@ export function addThread(
   t: Omit<Thread, "asked_at">,
 ): Thread {
   const key = chatKey(chat);
-  const thread: Thread = { ...t, asked_at: ctx.now() };
   const same = (x: Thread) =>
     x.id === t.id ||
     (x.data.kind === t.data.kind &&
       (singleton(t) || (t.expense_id !== undefined && x.expense_id === t.expense_id)));
-  const kept = (ctx.memory.threads.get(key) ?? []).filter((x) => !same(x));
+  const before = ctx.memory.threads.get(key) ?? [];
+  // The same words again (say didn't repeat them): still followed up once.
+  const followed_up = t.followed_up || before.some((x) => same(x) && x.text === t.text && x.followed_up) || undefined;
+  const thread: Thread = { ...t, asked_at: ctx.now(), ...(followed_up ? { followed_up } : {}) };
+  const kept = before.filter((x) => !same(x));
   ctx.memory.threads.set(key, [...kept, thread].slice(-MAX_PER_CHAT));
   return thread;
 }

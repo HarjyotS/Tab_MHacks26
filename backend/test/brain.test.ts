@@ -278,7 +278,7 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
     for (const who of [PRIYA, JAKE, JOE]) await react(who, request);
     db.completeTransfers();
     await tick(ctx);
-    expect(said("payment_receipt")).toContain("done, you paid Joe $15.75 and Priya $10.00 (simulated, no real money moved)\nyou're all square");
+    expect(said("payment_receipt")).toContain("done, you paid Joe $15.75 and Priya $10.00 for groceries and pizza (simulated, no real money moved)\nyou're all square");
     expect(said("all_square")).toHaveLength(1);
     expect(["and that's everyone square", "everyone's square, nice"]).toContain(said("all_square")[0]);
   });

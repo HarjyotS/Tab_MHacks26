@@ -284,6 +284,12 @@ function renders(seed: string): {
       text: T.clarifyingQuestion(problem, { description: "Uber", people: [joe] }),
       amounts,
     })),
+    ...QUESTIONS.flatMap(([problem]) => {
+      const text = T.rephraseQuestion(problem, { description: "Uber", people: [joe], example_cents: 1600 });
+      return text ? [{ purpose: "clarifying_question" as const, group: true, text, amounts: [1600] }] : [];
+    }),
+    { purpose: "other", group: false, text: T.payeeTapped([jake, priya]), amounts: [] },
+    { purpose: "other", group: false, text: T.payeeTapped([]), amounts: [] },
     { purpose: "balance_reply", group: true, text: T.nothingToSettle(), amounts: [] },
     { purpose: "balance_reply", group: true, text: T.notLockedYet([{ description: "Pizza", total_cents: 4800 }]), amounts: [4800] },
     { purpose: "balance_reply", group: true, text: T.balanceReply({ debts: [] }), amounts: [] },
@@ -580,5 +586,12 @@ describe("wit line", () => {
     ["one line\ntwo lines", "multiline"],
   ])("judges %j as %s", (line, why) => {
     expect(rejectWit(line, ctx)).toBe(why);
+  });
+});
+
+describe("payment receipt with the Nessie mirror on", () => {
+  it("says it went through capital one nessie, and that it's a sandbox", () => {
+    const text = T.paymentConfirmation({ paid: [{ payee: { phone: "+15550000001", name: "Sam" }, amount_cents: 1200 }], label: "pizza", allSquare: true, nessie: true });
+    expect(text).toBe("done, you paid Sam $12.00 for pizza through capital one nessie (sandbox, no real money moved)\nyou're all square");
   });
 });

@@ -5,10 +5,11 @@ import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { applyAdjustment, groupFor, handleAdjustment, handleExpense, latestOpen, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
+import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
+  acceptSplit,
   announceSettlements,
   approvalFollowups,
   dispute,
@@ -21,7 +22,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
-import { handleCorrection } from "./correction.js";
+import { clearlyCorrects, handleCorrection, namedCorrectionTarget } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
@@ -70,11 +71,6 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
 // Intents that only read data or point to the 👍: answered even when unsure.
 // Not `receipt`: an unsure photo gets a question, not the receipt read (§19).
 const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question", "approval"]);
-
-// "just me and priya", "only sam and alex went", "priya and I went, no one
-// else", "jordan didn't come": who was there, said to an open split.
-const PRESENCE =
-  /\b(just|only)\s+\w+\s+(and|&)\s+\w+|\b(no ?one|nobody) else\b|\b(didn'?t|did not|wasn'?t|weren'?t)\s+(go|come|there|in)\b|\bskipped\b/i;
 
 // iPhones type curly quotes ("I’m", "didn’t"); every parser expects ASCII.
 export function normalizeText(text: string | undefined): string | undefined {
@@ -212,9 +208,18 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       const reason = !wrote() && !replied
         ? fallbackReason(m, result, decision, input, openThreads(ctx, chatOf(m)).length > 0)
         : undefined;
-      // "what was it for" right after one of Tab's messages is answered from
-      // that message's records, no Grok needed (§7.8 History).
-      if (reason && (await answerWhatItWas(ctx, m))) {
+      // A bare "yeah" / "ok" / "bet" right after a split is agreement, not a
+      // question for the money brain (playground: "yeah" after the payer's 👍
+      // got the proposal posted again). Tab likes it; an open split counts it.
+      const agreed = reason && ctx.ask && !m.is_dm ? recentSplit(ctx, m) : undefined;
+      if (agreed) {
+        await tapback(ctx, m, "like", agreed.expense_id);
+        if (agreed.status === "proposed") await acceptSplit(ctx, agreed, m.sender_phone);
+        keep = true;
+        ctx.log("agreement_liked", { message_id: m.message_id, group_id: m.group_id, expense_id: agreed.expense_id });
+      } else if (reason && (await answerWhatItWas(ctx, m))) {
+        // "what was it for" right after one of Tab's messages is answered
+        // from that message's records, no Grok needed (§7.8 History).
         ctx.log("fallback_history", { message_id: m.message_id, group_id: m.group_id, reason });
         keep = true;
         intent = result.intent;
@@ -268,9 +273,14 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
   const bound = repliedExpense(ctx, m);
   const boundIf = (...statuses: Expense["status"][]) => (bound && statuses.includes(bound.status) ? bound : undefined);
   switch (intent) {
-    case "expense":
+    case "expense": {
       // A captioned photo ("dinner, i paid") is still a receipt.
-      return m.kind === "image" ? handleReceipt(ctx, m) : handleExpense(ctx, m);
+      if (m.kind === "image") return handleReceipt(ctx, m);
+      // "actually the uber was $30 not $24": a correction to the open Uber, not
+      // a second one. The gate said new expense, so only when it clearly is one.
+      const corrected = clearlyCorrects(m.text ?? "") ? namedCorrectionTarget(ctx, m) : undefined;
+      return corrected ? handleCorrection(ctx, m, corrected) : handleExpense(ctx, m);
+    }
     case "split_adjustment":
       return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed", "finalized"));
     case "name_reply":
@@ -309,7 +319,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return receipt ? handleAdjustment(ctx, m, m.text ?? "", receipt) : handleClaim(ctx, m, boundIf("itemizing"));
     }
     case "correction":
-      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : undefined);
+      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m));
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
     // payment_reported is ignored in the MVP; ignore needs nothing.
@@ -334,6 +344,11 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     if (receipt) return handleAdjustment(ctx, m, m.text ?? "", receipt, { confirmOnly: true });
     return ctx.log("no_handler", { message_id: m.message_id, intent });
   }
+  // Unsure, but it reads as a correction to an open expense it names: ask
+  // "change uber to $30?" and apply only on yes (Joe's review on #44), never
+  // "want me to split that?" about a duplicate.
+  const correcting = intent === "expense" || intent === "correction" ? namedCorrectionTarget(ctx, m) : undefined;
+  if (correcting) return confirmCorrectionOf(ctx, m, correcting, id);
   // "whats the $90.70 from?" asks about a balance; offering to split it as a
   // new expense would be wrong. Point to the command instead (live run).
   if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
@@ -361,6 +376,17 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     data: intent === "expense"
       ? { kind: "confirm", then: "expense", source: m, asked_at: ctx.now() }
       : { kind: "confirm", then: "act", intent, source: m, asked_at: ctx.now() },
+  });
+}
+
+async function confirmCorrectionOf(ctx: BrainCtx, m: Message, e: Expense, id: string) {
+  const { result } = await ctx.extract.correction(extractInput(ctx, m));
+  const text = T.confirmCorrectionTo(e.description, result.new_amount_cents);
+  await tapback(ctx, m, "question", e.expense_id);
+  await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text, expense_id: e.expense_id });
+  addThread(ctx, chatOf(m), {
+    id, text, who: "asker", asker: m.sender_phone, expense_id: e.expense_id,
+    data: { kind: "confirm", then: "act", intent: "correction", source: m, asked_at: ctx.now() },
   });
 }
 
@@ -607,7 +633,10 @@ async function applyAnswer(
     case "split_open": {
       const e = threadExpense(ctx, t, "proposed");
       if (!e) return false;
-      if (r.yes_no === "no") return splitLooksRight(ctx, m, t, e);
+      // Agreement is never an objection: "yeah", "nope, looks right" and
+      // "split 4 ways" change nothing, whatever yes_no Grok read (Harjyot's
+      // playground: "yeah" got "ok what was uneven?"). Only a change goes on.
+      if (agreesWithSplit(ctx, m.text ?? "", e)) return splitLooksRight(ctx, m, t, e);
       // The proposal stays open to everyone else's changes.
       await handleAdjustment(ctx, m, m.text ?? "", e, { confirmOnly });
       return true;
@@ -631,6 +660,12 @@ async function applyAnswer(
     case "adjust_open": {
       const e = threadExpense(ctx, t, "proposed", "finalized");
       if (!e) return false;
+      // "split 4 ways", "nvm it's even": even after all, so the split stands
+      // and the question is answered (playground: Tab asked it again).
+      if (agreesWithSplit(ctx, m.text ?? "", e)) {
+        await keepSplit(ctx, m, e, true);
+        return true;
+      }
       // "oh just $10" after "What did Jake actually have?" needs the name.
       await handleAdjustment(ctx, m, r.restated ?? m.text ?? "", e, { confirmOnly });
       closeThread(ctx, chatOf(m), t);
@@ -662,17 +697,15 @@ function threadExpense(ctx: BrainCtx, t: Thread, ...statuses: Expense["status"][
   return open.length === 1 ? open[0] : undefined;
 }
 
-// "nope, looks right" to "Anything uneven?": the same as a 👍 on the
-// proposal from them (§6.2), which locks it in once everyone has.
+// "nope, looks right" to "Anything uneven?": that person is fine with it,
+// as with their 👍 on the proposal (§6.2), and it locks in once everyone
+// is. Unlike the payer's 👍, the payer's typed "yeah" doesn't lock it in.
 async function splitLooksRight(ctx: BrainCtx, m: Message, t: Thread, e: Expense): Promise<boolean> {
   const share = ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
   if (!share || share.status === "opted_out") return false;
   await tapback(ctx, m, "like", e.expense_id);
-  if (!share.responded) await ctx.db.set_share({ ...share, responded: true });
-  if (liveShares(ctx, e.expense_id).every((s) => s.responded)) {
-    closeThread(ctx, chatOf(m), t);
-    await finalize(ctx, ctx.store.expense(e.expense_id)!);
-  }
+  await acceptSplit(ctx, e, m.sender_phone);
+  if (ctx.store.expense(e.expense_id)?.status !== "proposed") closeThread(ctx, chatOf(m), t);
   return true;
 }
 
@@ -766,12 +799,13 @@ async function answerExpense(ctx: BrainCtx, m: Message, t: Thread, answer: strin
     mode,
   );
   // "it's the cheesecake on the receipt": an item named in the answer is
-  // priced from the receipt, as in the first message (§7.5).
-  const retry = p.kind === "adjustment" ? priceFromReceipt(extracted, ctx.store.lineItems(p.expense_id)) : extracted;
+  // priced from the receipt, and "half of the cost" from the total, as in
+  // the first message (§7.5).
+  const expense = p.kind === "adjustment" ? ctx.store.expense(p.expense_id) : undefined;
+  const retry = expense ? priceChange(ctx, expense, extracted, { text: answer, problem: p.problems[0] }) : extracted;
   if (retry.problems.length >= p.problems.length) return false; // didn't help
   closeThread(ctx, chatOf(m), t);
   if (p.kind === "adjustment") {
-    const expense = ctx.store.expense(p.expense_id);
     if (!expense) return true;
     if (retry.problems.length > 0) {
       const id = `clarify:${m.message_id}`;
@@ -1071,3 +1105,14 @@ async function answerSettleMode(ctx: BrainCtx, m: Message, t: Thread, mode: "led
     text: T.settleModeSet(mode),
   });
 }
+
+// "yeah", "ok", "bet", "sounds good", 👍: a short message that only agrees.
+const BARE_AGREEMENT = /^(?:y(?:ea+h?|es+|ep|up|a)|ok(?:ay)?|k+|kk|cool|bet|word|facts|perfect|sounds? good|looks? (?:good|right)|all good|that'?s right|correct|true|fair|for sure|fs|deal|done|👍|👌|💯)[\s!.]*$/iu;
+
+// The split a bare agreement is about: the newest one in this chat that's
+// proposed or just locked in.
+function recentSplit(ctx: BrainCtx, m: Message): Expense | undefined {
+  if (!BARE_AGREEMENT.test((m.text ?? "").trim())) return undefined;
+  return latestOpen(ctx, groupFor(ctx, m), ["proposed", "finalized"]);
+}
+

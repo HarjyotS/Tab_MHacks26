@@ -136,6 +136,13 @@ export function settleRequest(a: { seed: string; owed: Owed[]; description?: str
 // A typed "yes" never moves money (P7, SPEC #15).
 export const tapToPay = () => "just tap 👍 on the settle msg to pay your part";
 
+// The payee's own 👍 on a settle request pays nothing (P7): said once, so
+// they know Tab saw it (Joe's review on #47: Priya tapped five times).
+export const payeeTapped = (waitingOn: Person[]) =>
+  waitingOn.length > 0
+    ? `you're the one getting paid, just waiting on ${listJoin(waitingOn.map(displayName))}`
+    : "everyone's already paid you";
+
 export const nothingToSettle = () => "nothing to settle, everyone's even";
 
 // "let's settle up" while a receipt is still waiting on claims (Harjyot's
@@ -173,9 +180,12 @@ export const settleModeQuestion = () =>
 
 // SPEC #15: one DM once all of a person's approved transfers are done.
 // SPEC §7.6: it must say the settlement is simulated.
-export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: number }[]; label?: string; allSquare: boolean }): string {
+// "through capital one nessie" only when the Nessie mirror is recording
+// settlements (NESSIE_RECEIPTS=on); otherwise the plain SPEC 7.6 line.
+export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: number }[]; label?: string; allSquare: boolean; nessie?: boolean }): string {
   const what = listJoin(a.paid.map((p) => `${displayName(p.payee)} ${money(p.amount_cents)}`));
-  return `done, you paid ${what}${a.label ? ` for ${a.label}` : ""} (simulated, no real money moved)${a.allSquare ? "\nyou're all square" : ""}`;
+  const how = a.nessie ? " through capital one nessie (sandbox, no real money moved)" : " (simulated, no real money moved)";
+  return `done, you paid ${what}${a.label ? ` for ${a.label}` : ""}${how}${a.allSquare ? "\nyou're all square" : ""}`;
 }
 
 // §7.6: a friendly nudge in the group by name (P5). Money moves only on a
@@ -282,6 +292,30 @@ export function clarifyingQuestion(
   }
 }
 
+// The same question once more, said differently, when the first didn't land
+// (Tab never asks the exact same thing twice in a row). Undefined when there
+// is no better way to put it: Tab just stops asking.
+export function rephraseQuestion(
+  p: Problem,
+  ctx: { description?: string; people: Person[]; example_cents?: number },
+): string | undefined {
+  const thing = ctx.description ? `the ${ctx.description}` : "it";
+  switch (p.kind) {
+    case "missing_item_price": {
+      const person = ctx.people.find((x) => x.phone === p.phone);
+      const example = ctx.example_cents ? ` like ${money(ctx.example_cents)}` : "";
+      return `how much should ${person ? displayName(person) : "they"} pay?${example}`;
+    }
+    case "missing_amount":
+    case "ungrounded_amount":
+      return `what did ${thing} cost all in? just the number works`;
+    case "missing_payer":
+      return `who covered ${thing}? just a name works`;
+    default:
+      return undefined;
+  }
+}
+
 export const duplicateReceiptQuestion = () =>
   "wait is this the same one as earlier?";
 export const foreignCurrencyQuestion = () => "how much was that in dollars?";
@@ -300,6 +334,8 @@ export const postInGroup = (seed: string) =>
 // The gate wasn't sure what a money message meant (§6.4): one yes/no each.
 export const confirmExpense = () => "want me to split that?";
 export const confirmCorrection = () => "want me to change that one?";
+export const confirmCorrectionTo = (description: string, cents?: number) =>
+  cents === undefined ? `change ${description}?` : `change ${description} to ${money(cents)}?`;
 export const confirmDispute = () => "something off with what you owe?";
 export const confirmSettleUp = () => "want me to settle everyone up now?";
 // A photo the gate wasn't sure was a receipt: asked before the receipt read.
