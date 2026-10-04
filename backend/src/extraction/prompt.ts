@@ -31,7 +31,9 @@ export function renderExtractInput(input: ExtractInput): string {
     : "(none)";
   return [
     `<chat>${message.is_dm ? "private DM between Tab and the sender" : "group chat"}</chat>`,
-    `<members>\n${people.map((m) => `${m.name ?? `member ending ${m.phone.slice(-4)}`}: ${m.phone}`).join("\n")}\n</members>`,
+    // Names only: Grok answers with names and code maps them to members
+    // (names.ts), so phone numbers never need to leave the backend.
+    `<members>\n${people.map((m) => m.name ?? `member ending ${m.phone.slice(-4)}`).join("\n")}\n</members>`,
     `<recent_messages oldest_first="true">\n${recent}\n</recent_messages>`,
     `<sender_open_items>\n${open}\n</sender_open_items>`,
     `<message from=${quote(name(message.sender_phone))}>\n${quote(message.text)}\n</message>`,

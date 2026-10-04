@@ -21,6 +21,7 @@ import type { ReceiptRead } from "../extraction/receipt.js";
 import type { ClaimResolution, LineItem as ClaimItem } from "../extraction/types.js";
 import type { Expense, Message, Store } from "../store/types.js";
 import type { Thread } from "./threads.js";
+import type { ChatClient } from "../grok/structured.js";
 
 export type Chat = { group_id?: string; dm_phone?: string };
 
@@ -120,6 +121,14 @@ export type Extractors = {
   answer: (input: ExtractInput, threads: OpenThread[]) => Promise<AnswerResolution>;
 };
 
+export type AskAgent = {
+  client: ChatClient;
+  model: string;
+  budgetMs?: number; // whole answer, retry included (default 25 s)
+  maxRounds?: number; // tool rounds per attempt (default 5)
+  clock?: () => number; // for the budget; defaults to Date.now
+};
+
 export type BrainCtx = {
   store: Store;
   db: BackendReducers;
@@ -127,6 +136,9 @@ export type BrainCtx = {
   classify: Classify;
   extract: Extractors;
   wit?: (ctx: WitContext) => Promise<string | null>;
+  // The money brain (ask.ts): Grok with lookup tools. Absent means
+  // questions get the template answers.
+  ask?: AskAgent;
   timing: Timing;
   ledger?: LedgerConfig; // §12.3 links; absent means Tab posts none
   memory: Memory;
