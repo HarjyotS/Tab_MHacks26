@@ -338,8 +338,17 @@ export async function handleAdjustment(
   opts: { confirmOnly?: boolean } = {},
 ): Promise<void> {
   const group_id = groupFor(ctx, m);
+  // "the pool cabana was just tanuj and joe": the expense it names, even an
+  // older locked-in one, before the newest open one (live run).
+  const said = text.toLowerCase();
+  const named = target
+    ? undefined
+    : ctx.store
+        .expenses()
+        .filter((e) => e.group_id === group_id && (e.status === "proposed" || e.status === "finalized") && e.description.length >= 4 && said.includes(e.description.toLowerCase()))
+        .sort((x, y) => y.created_at.getTime() - x.created_at.getTime())[0];
   const expense =
-    target ?? latestOpen(ctx, group_id, ["proposed"]) ?? latestOpen(ctx, group_id, ["finalized"]);
+    target ?? named ?? latestOpen(ctx, group_id, ["proposed"]) ?? latestOpen(ctx, group_id, ["finalized"]);
   if (!expense) return;
   // §7.7: a locked-in expense changes only while no money is moving.
   const locked = expense.status === "finalized";
@@ -357,7 +366,15 @@ export async function handleAdjustment(
     extractInput(ctx, { ...m, text }),
     "adjustment",
   );
-  const { result, problems } = priceChange(ctx, expense, extracted);
+  let { result, problems } = priceChange(ctx, expense, extracted);
+  // "just tanuj and joe" says who was in it, not what they had: everyone
+  // else is out, and nobody needs a price ("how much was Joe's pool cabana?").
+  if (PRESENCE.test(text) && result.fixed.length > 0 && result.fixed.every((f) => f.amount_cents === undefined)) {
+    const inIt = new Set(result.fixed.map((f) => f.phone));
+    const out = activeMembers(ctx, expense.group_id).map((x) => x.phone).filter((p) => !inIt.has(p));
+    result = { ...result, fixed: [], exclusions: [...new Set([...result.exclusions, ...out])] };
+    problems = problems.filter((p) => p.kind !== "missing_item_price");
+  }
   const unknown = problems.filter(
     (p) => p.kind === "unknown_name" || p.kind === "missing_item_price",
   );
@@ -430,7 +447,8 @@ export async function handleAdjustment(
   // right after Priya's half): nothing to change, so nothing to confirm.
   if (changesNothing(ctx, expense, result, text)) return keepSplit(ctx, m, expense, true);
   // Reopening a locked-in expense is always confirmed first.
-  if (opts.confirmOnly || locked) {
+  // A locked-in expense named outright, by someone the gate is sure about, just changes.
+  if (opts.confirmOnly || (locked && !named)) {
     const question = locked
       ? T.reopenToChange(expense.description)
       : T.confirmSplitChange({ description: expense.description, ...whoIsLeft(ctx, expense, result, m.sender_phone) });
