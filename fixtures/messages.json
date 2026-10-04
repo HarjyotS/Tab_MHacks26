@@ -210,7 +210,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "ok here's what's owed to joe for frita batidos:\njake $38.25, priya $25.50, kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -235,7 +235,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "ok here's what's owed to joe for frita batidos:\njake $38.25, priya $25.50, kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
+          "text": "cool, here's what's owed to Joe for frita batidos:\nJake $38.25, Priya $25.50, Kian $38.25\ntap 👍 on this to pay your part, or reply if something's off"
         }
       ],
       "open_items": [
@@ -285,7 +285,7 @@
       "context": [
         {
           "from": "Tab",
-          "text": "hey i'm tab\ni keep track of who paid for what so nobody has to be the spreadsheet friend\nwhat should i call you? just reply w your first name"
+          "text": "hey i'm tab\ni keep track of who paid for what so nobody has to be the spreadsheet friend\nwhat should i call everyone? reply w your first name"
         }
       ],
       "open_items": [],

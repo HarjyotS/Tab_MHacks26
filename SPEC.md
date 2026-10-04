@@ -512,7 +512,7 @@ Trigger: Tab's phone texts `/tab on` into the group. Tab isn't "added" to a grou
 | 4    | Optional Nessie fixtures are created before the demo with`seed:nessie` (12.2)                                                                                                                                            | Setup-only and never blocks onboarding or runtime.                          |
 | 5    | The group becomes`active` once every known member is named, or after the first expense                                                                                                                                   | Tab works fully before onboarding completes. Nothing blocks on it (P4).     |
 
-Default intro **[YOUR CALL on voice and wording]**, at most four short lines, in Tab's voice (9.3). The 👋 shows only once the group uses emoji. A separate name prompt follows ("what should i call you? just reply w your first name").
+Default intro **[YOUR CALL on voice and wording]**, at most four short lines, in Tab's voice (9.3). The 👋 shows only once the group uses emoji. A separate name prompt follows ("what should i call everyone? reply w your first name").
 
 ```
 hey i'm tab 👋
@@ -542,7 +542,7 @@ lmk if it wasn't even or someone skipped
 
 An updated proposal is one line: `ok redid it: groceries $63.00 split 3 ways, so $21.00 each`.
 
-Example reminder: `anything else on this one?` About an hour later, the settle request (7.6) goes out.
+Example reminder: `anything else?` About an hour later, the settle request (7.6) goes out.
 
 ### 7.4 Receipt
 
@@ -596,7 +596,7 @@ As soon as every participant has responded, the expense finalizes. Nobody waits 
 | When | Channel | Content |
 |---|---|---|
 | Item list posted | Group | The numbered list |
-| FOLLOWUP_DM1_AFTER | Group | "jake what was yours at frita batidos? numbers or 'even' works" |
+| FOLLOWUP_DM1_AFTER | Group | "Jake what was yours at frita batidos? numbers or 'even' works" |
 | FOLLOWUP_DM2_AT the next morning | Group | A one-line reminder |
 | FOLLOWUP_DM3_AFTER | Group | Last call, with the dollar amount they'll be assigned |
 | CLAIM_DEADLINE | None | Assign an even share of the unclaimed pool and finalize |
@@ -604,7 +604,7 @@ As soon as every participant has responded, the expense finalizes. Nobody waits 
 Follow-up rules: never send during quiet hours, cap nudges at MAX_DMS_PER_EXPENSE per person, and include the "even" escape hatch in every nudge. The last call must show a dollar amount, because people answer fastest when they think they might be overcharged.
 
 ```
-last call jake: in 4 hours i'll put you down for $24.75 for frita batidos
+last call Jake: in 4 hours i'll put you down for $24.75 for frita batidos
 (an even share of what's unclaimed) unless you say what you had
 ```
 
@@ -626,9 +626,9 @@ Tab asks once, right after onboarding names are in, and accepts the answer as pl
 **The settle request.** In `ledger` mode, one message covers every locked share in the group, grouped by who is owed:
 
 ```
-ok here's the tab:
-owed to joe: jake $38.25, priya $25.50
-owed to priya: joe $12.00
+cool, here's what's owed:
+owed to Joe: Jake $38.25, Priya $25.50
+owed to Priya: Joe $12.00
 tap 👍 on this to pay your part, or reply if something's off
 ```
 
@@ -637,7 +637,7 @@ Every expense included gets this message's id as its `settle_message_id`, so a t
 | Event                                         | What happens                                                                                                                                                                                                                                                                          |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A participant taps 👍 on the settle request    | Every share of theirs that the request covers becomes `approved`, and `create_transfer` runs once per share. Nobody else is affected (P4). Typed approvals never count (P7).                                                                                                          |
-| A transfer completes                          | The share becomes `paid` and the ledger updates. Once all of that person's approved transfers are done, Tab sends them **one DM** confirming exactly what was paid, and that it was simulated: "done, you paid joe $38.25 and priya $12.00 for vegas trip (simulated, no real money moved) / you're all square" |
+| A transfer completes                          | The share becomes `paid` and the ledger updates. Once all of that person's approved transfers are done, Tab sends them **one DM** confirming exactly what was paid, and that it was simulated: "done, you paid Joe $38.25 and Priya $12.00 for vegas trip (simulated, no real money moved) / you're all square" |
 | Every participant share of an expense is paid | The expense becomes `settled`. When everything in the settle request is paid, Tab may post one short "and that's everyone square" **[YOUR CALL]**                                                                                                                                             |
 | A participant dislikes it or replies "no"     | Their shares in the request become `disputed`. Tab asks what's off, in the group if they replied there, otherwise by DM.                                                                                                                                                              |
 | A participant hasn't approved                 | A friendly nudge in the group by name (P5), on the same schedule as claim nudges, using the `approval_followup` purpose. Each nudge ends with "no rush, just tap 👍 on the settle msg when you can". After the last one, the balance simply stays outstanding. Tab never pays on anyone's behalf (P7). |
@@ -660,16 +660,16 @@ A correction arrives as a reply to the original expense message, or to Tab's pro
 
 ### 7.8 Queries
 
-**Balance.** Tab replies with one line per nonzero debt between two people, at most six lines. Beyond that, it summarizes and links the web ledger. "What do I owe" gets just the amount ("you owe joe $38.25"), and nothing more unless they ask why. One or two debts fit on one line ("rn: jake owes joe $38.25, priya owes joe $25.50"); more get a line each:
+**Balance.** Tab replies with one line per nonzero debt between two people, at most six lines. Beyond that, it summarizes and links the web ledger. "What do I owe" gets just the amount ("you owe Joe $38.25"), and nothing more unless they ask why. One or two debts fit on one line ("ok so rn: Jake owes Joe $38.25, Priya owes Joe $25.50"); more get a line each:
 
 ```
 ok so rn:
-jake owes joe $38.25
-priya owes joe $25.50
-kian owes priya $12.00
+Jake owes Joe $38.25
+Priya owes Joe $25.50
+Kian owes Priya $12.00
 ```
 
-**Breakdown.** On "why" (or a breakdown request), Tab lists the recent expenses behind the requester's balance, one short line each with why it's that amount ("pizza $15.00: split 3 ways after jake's $3.00"), most recent first, at most five, plus the web ledger link for the rest.
+**Breakdown.** On "why" (or a breakdown request), Tab lists the recent expenses behind the requester's balance, one short line each with why it's that amount ("pizza $15.00: split 3 ways after Jake's $3.00"), most recent first, at most five, plus the web ledger link for the rest.
 
 **Help.** Three lines on what Tab does and how to remove it.
 
@@ -798,12 +798,12 @@ Every message that contains numbers is built from a template filled with values 
 | --- | --- |
 | Split proposal | `pizza $48.00 split 4 ways, so $12.00 each` / `lmk if it wasn't even or someone skipped` |
 | Updated proposal | `ok redid it: pizza $48.00 split 2 ways, so $24.00 each` |
-| Questions | `how much was the uber?`, `who got it?`, `wait who's mike? don't think they're in here`, `$1,240.00 for dinner? just making sure` |
-| Balance | `rn: jake owes joe $38.25, priya owes joe $12.00`, `you're square with everyone` |
-| Payment DM | `done, you paid joe $15.75 for groceries (simulated, no real money moved)` / `you're all square` |
-| Nudge | `hey jake, you owe joe $38.25` / `no rush, just tap 👍 on the settle msg when you can` |
+| Questions | `how much was the uber?`, `who paid for the pizza?`, `wait who's Mike? don't think they're in here`, `$1,240.00 for dinner? just making sure` |
+| Balance | `ok so rn: Jake owes Joe $38.25, Priya owes Joe $12.00`, `you're square with everyone` |
+| Payment DM | `done, you paid Joe $15.75 for groceries (simulated, no real money moved)` / `you're all square` |
+| Nudge | `hey Jake, you owe Joe $38.25` / `no rush, just tap 👍 on the settle msg when you can` |
 
-**Style for every message.** At most three lines in the group (lists exempt), no guilt-tripping (P5), amounts always formatted like `$38.25` by code, and people referred to by name rather than number, exactly as they gave it. Every message goes out lowercase with no trailing periods, however the group types; URLs keep their case. iMessage doesn't render markdown, so no asterisks or headers. Decorative emoji (👋, 🎉) only once the group uses emoji; 👍 always stays because it's an instruction.
+**Style for every message.** At most three lines in the group (lists exempt), no guilt-tripping (P5), amounts always formatted like `$38.25` by code, and people referred to by name rather than number, exactly as they gave it. Every message goes out lowercase with no trailing periods, however the group types. Member names keep the casing they were saved with ("DJ", "McKenzie"), and URLs keep theirs. iMessage doesn't render markdown, so no asterisks or headers. Tab's own decorative emoji (👋, 🎉) show only once the group uses emoji; emoji people typed (a "🍕 night" description) are never touched, and 👍 always stays because it's an instruction.
 
 ---
 
