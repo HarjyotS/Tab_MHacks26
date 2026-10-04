@@ -351,11 +351,8 @@ export function balanceReply(a: {
   return `ok so rn:\n${lines.join("\n")}${more}`;
 }
 
-// One line per expense behind a debt, with why it's that amount. Every
-// number and name comes from the database (P6).
-export type OwedLine = { description: string; amount_cents: number; why: string };
 
-// Just the amounts. "why" gets the explanation (breakdownReply).
+// Just the amounts. "@Tab breakdown" gets the explanation (breakdownCommandReply).
 export function personalBalanceReply(a: { owes: Debt[]; owed: Debt[] }): string {
   if (a.owes.length === 0 && a.owed.length === 0) return "you're square with everyone";
   const parts: string[] = [];
@@ -364,11 +361,69 @@ export function personalBalanceReply(a: { owes: Debt[]; owed: Debt[] }): string 
   return parts.join("\n");
 }
 
-export function breakdownReply(a: { lines: OwedLine[]; ledger_url?: string }): string {
-  if (a.lines.length === 0) return "nothing open for you rn";
-  const body = a.lines.slice(0, 5).map((l) => `${l.description} ${money(l.amount_cents)}: ${l.why}`).join("\n");
-  return `${body}${a.ledger_url ? `\nrest is here: ${a.ledger_url}` : ""}`;
+
+// "@Tab breakdown" (§7.8): each balance traced to the expenses behind it.
+// One line per event: the signed share (+ adds to what the headline debtor
+// owes, − is owed back), whose share of which expense and why, who paid how
+// much and when, and the message that logged it. Everything is a database row.
+export type BreakdownEvent = {
+  signed_cents: number;
+  description: string;
+  payer: string;
+  debtor: string;
+  total_cents: number;
+  when: string;
+  source?: string;
+  why: string;
+};
+export type BreakdownPair = { debtor: string; creditor: string; net_cents: number; events: BreakdownEvent[] };
+
+export function breakdownCommandReply(a: {
+  subject?: string;
+  pairs: BreakdownPair[];
+  max_pairs: number;
+  max_lines: number;
+}): { text: string; truncated: boolean } {
+  if (a.pairs.length === 0) return { text: a.subject ? `${a.subject}'s square with everyone` : "nothing open between them", truncated: false };
+  const out: string[] = [a.subject ? `here's ${a.subject}'s breakdown:` : "here's the breakdown:"];
+  let lines = 0;
+  let truncated = a.pairs.length > a.max_pairs;
+  for (const pair of a.pairs.slice(0, a.max_pairs)) {
+    if (lines >= a.max_lines) {
+      truncated = true;
+      break;
+    }
+    out.push(pairHeadline(pair));
+    for (const e of pair.events) {
+      if (lines >= a.max_lines) {
+        truncated = true;
+        break;
+      }
+      const sign = e.signed_cents >= 0 ? "+" : "−";
+      const source = e.source ? ` · ${e.source}` : "";
+      out.push(`${sign} ${money(Math.abs(e.signed_cents))} ${e.debtor}'s share of ${e.description} (${e.why}) · ${e.payer} paid ${money(e.total_cents)}, ${e.when}${source}`);
+      lines++;
+    }
+  }
+  return { text: out.join("\n"), truncated };
 }
+
+// The short form: code's headline per balance, then Grok's checked reason.
+export function breakdownSummaryReply(a: { subject?: string; pairs: BreakdownPair[]; reasons: string[]; more_url?: string }): string {
+  const out = [a.subject ? `here's ${a.subject}'s breakdown:` : "here's the breakdown:"];
+  a.pairs.forEach((p, i) => out.push(`${pairHeadline(p)}: ${a.reasons[i]}`));
+  out.push(`every line: "@tab breakdown full"${a.more_url ? `, or it's all here: ${a.more_url}` : ""}`);
+  return out.join("\n");
+}
+
+export const pairHeadline = (p: BreakdownPair) =>
+  p.net_cents === 0 ? `${p.debtor} and ${p.creditor} are even` : `${p.debtor} owes ${p.creditor} ${money(p.net_cents)}`;
+
+export const breakdownUnknown =(words: string[]) =>
+  `don't see ${listJoin(words.map((w) => w[0]!.toUpperCase() + w.slice(1)))} in this group, try "@tab breakdown" or "@tab breakdown <name>"`;
+
+// Free-form "why?" or "what's the $X from?": point to the command.
+export const breakdownHint = () => `send "@tab breakdown" and i'll show where each amount comes from`;
 
 export const helpReply = (seed: string) =>
   pick(seed, [
