@@ -9,7 +9,10 @@ export type BackendConnection = {
 
 // Connects as the backend's own identity. The token in BACKEND_SPACETIME_TOKEN
 // is that identity; the module owner grants it the `backend` role once.
-export function connectBackend(): Promise<BackendConnection> {
+// `onDisconnect` fires if an established connection drops.
+export function connectBackend(
+  onDisconnect?: (error?: Error) => void,
+): Promise<BackendConnection> {
   // `||`, not `??`: an empty value in .env means "use the default".
   const uri = process.env.SPACETIME_HOST || "http://127.0.0.1:3000";
   const database = process.env.SPACETIME_DB || "tab-local";
@@ -35,6 +38,8 @@ export function connectBackend(): Promise<BackendConnection> {
           ),
         ),
       );
+    if (onDisconnect)
+      builder = builder.onDisconnect((_ctx, error) => onDisconnect(error));
     if (token) builder = builder.withToken(token);
     builder.build();
   });

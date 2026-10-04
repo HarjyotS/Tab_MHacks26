@@ -14,6 +14,7 @@ import { witLine } from "./copy/wit.js";
 import { Memory, type BrainCtx } from "./brain/context.js";
 import { processMessage, tick } from "./brain/process.js";
 import { BACKEND_VIEWS, spacetimeStore } from "./store/spacetime.js";
+import { serial } from "./serial.js";
 
 // Structured logs, one JSON object per line (no message text).
 const log = (event: string, fields: Record<string, unknown> = {}) =>
@@ -26,7 +27,11 @@ const xai = createXaiClient(grok.apiKey, grok.baseURL);
 const t = timing();
 const { classify, kind } = createClassify();
 
-const { conn, identity, token } = await connectBackend();
+// A dropped connection can't recover in place; exit so the runner restarts us.
+const { conn, identity, token } = await connectBackend((error) => {
+  log("disconnected", { error: String(error) });
+  process.exit(1);
+});
 log("connected", { identity, gate: kind, demo_mode: t.demo });
 if (!process.env.BACKEND_SPACETIME_TOKEN) {
   log("save_token", {
@@ -67,23 +72,30 @@ const ctx: BrainCtx = {
   log,
 };
 
-// One message at a time, oldest first, so state each handler reads is current.
-let draining = false;
-async function drain() {
-  if (draining) return;
-  draining = true;
-  try {
+// One job at a time, messages oldest first, and never alongside the
+// scheduler, so the state each handler reads is current.
+const exclusive = serial();
+
+// Messages left `processing` by a crash are picked up once, at startup.
+const stuck = new Set(
+  store
+    .messages()
+    .filter((m) => m.status === "processing")
+    .map((m) => m.message_id),
+);
+
+function drain() {
+  return exclusive(async () => {
     for (;;) {
       const next = store
         .messages()
-        .filter((m) => m.status === "new")
+        .filter((m) => m.status === "new" || (m.status === "processing" && stuck.has(m.message_id)))
         .sort((a, b) => a.received_at.getTime() - b.received_at.getTime())[0];
       if (!next) break;
+      stuck.delete(next.message_id);
       await processMessage(ctx, next);
     }
-  } finally {
-    draining = false;
-  }
+  });
 }
 
 conn.db.backendMessages.onInsert(
@@ -97,7 +109,7 @@ setInterval(() => {
   void (async () => {
     try {
       await drain();
-      await tick(ctx);
+      await exclusive(() => tick(ctx));
     } catch (err) {
       log("tick_failed", { error: String(err) });
     }
