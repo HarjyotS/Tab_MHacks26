@@ -3,6 +3,8 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Outgoing, Sender, Target } from "../src/sender.ts";
+import { NotSentError } from "../src/messages-ui.ts";
+import type { Replier } from "../src/reply.ts";
 import type { Tapbacker } from "../src/tapback.ts";
 import type { Reaction } from "../src/types.ts";
 
@@ -193,7 +195,7 @@ export class FakeTapbacker implements Tapbacker {
 
   constructor(private readonly fx: FakeMessages) {}
 
-  async react(target: string, reaction: Reaction): Promise<void> {
+  async react(target: string, reaction: Reaction, _chatTitle: string): Promise<void> {
     this.calls.push({ target, reaction });
     const landedOn = this.misfireOnto ?? target;
     this.fx.message({
@@ -207,6 +209,29 @@ export class FakeTapbacker implements Tapbacker {
   }
 
   nextReact(): Promise<void> {
+    return new Promise((resolve) => this.waiters.push(resolve));
+  }
+}
+
+/** Writes the from-me inline-reply row Messages.app would have written. */
+export class FakeReplier implements Replier {
+  readonly calls: { target: string; text: string }[] = [];
+  fail = false;
+  /** Send the reply, then throw as if cleanup after Return failed. */
+  failAfterSending = false;
+  private waiters: (() => void)[] = [];
+
+  constructor(private readonly fx: FakeMessages) {}
+
+  async reply(target: string, text: string, _chatTitle: string): Promise<void> {
+    this.calls.push({ target, text });
+    if (this.fail) throw new NotSentError("NOT_SENT: Messages has no enabled Reply menu item for this message");
+    this.fx.message({ chat: this.fx.chatOf(target), fromMe: true, text, threadOriginator: target });
+    for (const wake of this.waiters.splice(0)) wake();
+    if (this.failAfterSending) throw new Error("UI script timed out after 20000 ms");
+  }
+
+  nextReply(): Promise<void> {
     return new Promise((resolve) => this.waiters.push(resolve));
   }
 }

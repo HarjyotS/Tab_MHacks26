@@ -810,11 +810,11 @@ Spectrum's local provider alone isn't enough: it drops incoming tapbacks and ret
 
 ### 10.3 What the Mac bridge can't do
 
-| Feature                   | Behavior                                                                       |
-| ------------------------- | ------------------------------------------------------------------------------ |
-| Outgoing threaded replies | `target_message_id` on a message is ignored, and the message is sent normally. |
-| Typing indicator          | Not available.                                                                 |
-| Android and SMS groups    | Not supported. The demo group must be all iPhones.                             |
+| Feature                   | Behavior                                                                                                                                                                                                                                                                                         |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Outgoing threaded replies | Sent as inline replies by driving Messages' interface (Edit → Reply to Last Message…) when an outbox row sets `target_message_id` and that message is still the newest in its chat; otherwise sent normally. The backend should set `target_message_id` whenever Tab answers a specific message. |
+| Typing indicator          | Not available.                                                                                                                                                                                                                                                                                   |
+| Android and SMS groups    | Not supported. The demo group must be all iPhones.                                                                                                                                                                                                                                               |
 
 ### 10.4 Privacy gate [CONTRACT]
 

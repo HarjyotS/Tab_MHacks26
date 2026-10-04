@@ -24,7 +24,9 @@ if (db.latestInChat(target.chat_guid!)?.guid !== target.guid) {
 const before = db.maxRowId();
 const started = Date.now();
 try {
-  await uiTapbacker().react(target.guid, reaction);
+  const title = db.chatName(target.chat_guid!);
+  if (!title) throw new Error("that chat has no name, so the probe can't confirm Messages opened it");
+  await uiTapbacker().react(target.guid, reaction, title);
 } catch (err) {
   console.error(`The UI script failed after ${Date.now() - started} ms: ${err}`);
   process.exit(1);

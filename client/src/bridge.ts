@@ -5,6 +5,8 @@ import type { Hub } from "./hub.ts";
 import { SentMatcher } from "./matcher.ts";
 import type { Outgoing, Sender, Target } from "./sender.ts";
 import type { State } from "./state.ts";
+import { NotSentError } from "./messages-ui.ts";
+import type { Replier } from "./reply.ts";
 import type { Tapbacker } from "./tapback.ts";
 import type { InboundMessage, OutboxRow } from "./types.ts";
 
@@ -26,6 +28,8 @@ export interface BridgeOptions {
   chatWaitMs: number;
   now: () => number;
   log: (line: string) => void;
+  /** Sends inline (threaded) replies when an outbox row names a target message. */
+  replier?: Replier | null;
 }
 
 const BATCH = 200;
@@ -241,6 +245,7 @@ export class Bridge {
     if (typeof content === "string") return fail(content);
 
     const key = target.kind === "group" ? target.chatGuid : target.handle;
+    if ("text" in content && row.target_message_id && (await this.deliverReply(row, key, content.text))) return;
     for (let attempt = 1; ; attempt++) {
       const expectation = this.matcher.expect(key, "text" in content ? content.text : null, this.opts.sendMatchTimeoutMs);
       try {
@@ -261,6 +266,51 @@ export class Bridge {
       });
       return;
     }
+  }
+
+  /**
+   * Sends a message as an inline reply to row.target_message_id, if that's
+   * possible: the replier is on and the target is still the newest message in
+   * its chat (Messages replies to the newest). Returns false, having sent
+   * nothing, when the caller should fall back to a normal send.
+   */
+  private async deliverReply(row: OutboxRow, key: string, text: string): Promise<boolean> {
+    const replier = this.opts.replier;
+    if (!replier || !row.target_message_id) return false;
+    const target = this.db.messageByGuid(row.target_message_id);
+    if (!target?.chat_guid || this.db.latestInChat(target.chat_guid)?.guid !== target.guid) return false;
+    // Only thread into the chat this row is meant for; a target elsewhere gets a normal send.
+    const sameChat = target.chat_style === GROUP_STYLE
+      ? target.chat_guid === key
+      : !!target.handle && normalizeHandle(target.handle) === key;
+    if (!sameChat) return false;
+    const chatTitle = this.db.chatName(target.chat_guid);
+    if (!chatTitle) return false;
+
+    const expectation = this.matcher.expect(key, text, this.opts.sendMatchTimeoutMs);
+    try {
+      await replier.reply(row.target_message_id, text, chatTitle);
+    } catch (err) {
+      if (err instanceof NotSentError) {
+        expectation.cancel();
+        this.opts.log(`[bridge] ${row.action_id} couldn't reply in thread (${err.message}); sending normally`);
+        return false;
+      }
+      // Unsure whether Return was pressed: only fall back if the reply never shows up.
+      this.opts.log(`[bridge] ${row.action_id} reply script failed after starting (${err}); checking chat.db before resending`);
+      if (!(await expectation.landed)) return false;
+    }
+    const guid = await expectation.landed;
+    if (guid && this.db.messageByGuid(guid)?.thread_originator_guid !== row.target_message_id) {
+      this.opts.log(`[bridge] ${row.action_id} was sent, but not in ${row.target_message_id}'s thread`);
+    }
+    if (!guid) this.opts.log(`[bridge] ${row.action_id} reply sent, but never showed up in chat.db`);
+    await this.hub.markOutbox(row.action_id, {
+      status: "sent",
+      sent_at: new Date(this.opts.now()),
+      ...(guid ? { sent_photon_id: guid } : {}),
+    });
+    return true;
   }
 
   /**
@@ -285,9 +335,12 @@ export class Bridge {
       return fail(`skipped: ${row.target_message_id} is no longer the newest message in its chat`);
     }
 
+    // Messages acts on whatever chat it shows, so only act once its window title proves it's this chat.
+    const chatTitle = this.db.chatName(target.chat_guid);
+    if (!chatTitle) return fail(`skipped: ${target.chat_guid} has no name, so there's no way to confirm Messages opened it`);
     const expectation = this.matcher.expect(tapbackKey(row.target_message_id), row.reaction, this.opts.tapbackVerifyMs);
     try {
-      await this.tapbacker.react(row.target_message_id, row.reaction);
+      await this.tapbacker.react(row.target_message_id, row.reaction, chatTitle);
     } catch (err) {
       expectation.cancel();
       return fail(String(err));

@@ -22,7 +22,7 @@ Photon Spectrum's cloud lines can't join group chats on the free and Pro plans: 
 | Member list and joins/leaves | ✅ from chat.db, as `member_joined` / `member_left` system messages |
 | Contact card | ✅ sent as a `Tab.vcf` file |
 | Sending tapbacks | ✅ by driving Messages' interface, on the chat's newest message only. Brings Messages to the front for about a second, then hands focus back. Each one counts as `sent` only once chat.db shows it on the right message. Tested on macOS 15.1. |
-| Threaded replies (outgoing) | ❌ sent as a normal message |
+| Threaded replies (outgoing) | ✅ by driving Messages' interface (Edit → Reply to Last Message…), when the backend sets `target_message_id` and that message is still the newest in its chat; otherwise sent as a normal message. `REPLY_MODE=off` disables it. Check it with `bun run reply-probe`. |
 | Typing indicator | ❌ |
 | Android / SMS groups | ❌ iMessage groups only |
 

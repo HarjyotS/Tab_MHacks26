@@ -46,6 +46,8 @@ export interface ChatSource {
   participants(chatGuids: string[]): Map<string, string[]>;
   messageByGuid(guid: string): RawMessage | null;
   latestInChat(chatGuid: string): RawMessage | null;
+  /** The chat's display name (what Messages shows as its window title), if it has one. */
+  chatName(chatGuid: string): string | null;
 }
 
 export const GROUP_STYLE = 43;
@@ -96,6 +98,10 @@ export class ChatDb implements ChatSource {
 
   messageByGuid(guid: string): RawMessage | null {
     return this.db.query<RawMessage, [string]>(`${this.messageSelect} WHERE m.guid = ?`).get(guid);
+  }
+
+  chatName(chatGuid: string): string | null {
+    return this.db.query<{ display_name: string | null }, [string]>("SELECT display_name FROM chat WHERE guid = ?").get(chatGuid)?.display_name || null;
   }
 
   /** The newest message in a chat from anyone, ignoring tapbacks and group events. */
