@@ -6,7 +6,7 @@ import { config } from "./config.ts";
 import { Gate } from "./gate.ts";
 import { DevHub, type Hub } from "./hub.ts";
 import { ImageStore } from "./images.ts";
-import { osascriptSender, spectrumSender } from "./sender.ts";
+import { osascriptSender, photonDmSender, spectrumSender } from "./sender.ts";
 import { spacetimeHub } from "./spacetime-hub.ts";
 import { State } from "./state.ts";
 import { uiReplier } from "./reply.ts";
@@ -68,6 +68,15 @@ if (config.hub === "spacetime") {
 }
 
 const sender = config.sendVia === "osascript" ? osascriptSender() : await spectrumSender();
+// Hackathon track: payment confirmations go through Photon's Spectrum API.
+const photon =
+  process.env.SPECTRUM_PROJECT_ID && process.env.SPECTRUM_PROJECT_SECRET && process.env.DM_VIA !== "local"
+    ? await photonDmSender(process.env.SPECTRUM_PROJECT_ID, process.env.SPECTRUM_PROJECT_SECRET).catch((err) => {
+        log(`Photon DM sender unavailable (${String(err).slice(0, 160)}); confirmations go out locally`);
+        return null;
+      })
+    : null;
+if (photon) log("Payment confirmations go out through Photon (Spectrum cloud).");
 const images = new ImageStore(config.imageDir, config.imageBaseUrl, config.imageMaxAgeMs);
 
 const tapbacker = config.tapbacks ? uiTapbacker() : null;
@@ -77,6 +86,7 @@ const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
   tabName: config.tabName,
   tabPhone: config.tabPhone,
   sendMatchTimeoutMs: config.sendMatchTimeoutMs,
+  photonDm: photon ? (handle, body) => photon.send(handle, body) : undefined,
   tapbackVerifyMs: config.tapbackVerifyMs,
   replier: config.replies ? uiReplier() : null,
   attachmentWaitMs: config.attachmentWaitMs,
