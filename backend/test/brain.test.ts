@@ -321,7 +321,7 @@ describe("adjustments (SPEC 7.5)", () => {
     });
     expect(db.expense(expenseId(m))!.split_mode).toBe("custom");
     expect(said("split_proposal")[1]).toMatch(
-      /^(ok redid it|fixed it): groceries \$63\.00: Joe \$20\.00, Kian \$20\.00, Priya \$20\.00, Jake \$3\.00$/,
+      /^(ok redid it|fixed it): groceries \$63\.00:\nJoe \$20\.00\nKian \$20\.00\nPriya \$20\.00\nJake \$3\.00$/,
     );
   });
 

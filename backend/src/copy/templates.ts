@@ -45,7 +45,11 @@ function shareLine(a: { description: string; total_cents: number; shares: Share[
     return `${a.description} ${money(a.total_cents)}: ${displayName(a.shares[0]!.person)} owes ${money(a.shares[0]!.amount_cents)}`;
   if (amounts.size === 1)
     return `${a.description} ${money(a.total_cents)} split ${a.shares.length} ways, so ${money(a.shares[0]!.amount_cents)} each`;
-  return `${a.description} ${money(a.total_cents)}: ${a.shares.map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`).join(", ")}`;
+  // Three or more uneven shares: one per line, still one message (Harjyot).
+  const each = a.shares.map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`);
+  return a.shares.length >= 3
+    ? `${a.description} ${money(a.total_cents)}:\n${each.join("\n")}`
+    : `${a.description} ${money(a.total_cents)}: ${each.join(", ")}`;
 }
 
 export function splitProposal(a: {
