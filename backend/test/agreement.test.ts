@@ -115,6 +115,16 @@ describe("agreeing in text is never an objection", () => {
     },
   );
 
+  it.each(["update it", "wait is that with tax?"])('doesn\'t count "%s" as agreement', async (text) => {
+    const { w, share, liked } = await tp(
+      { expense: { [`adjustment|${text}`]: adjust({}) }, answer: { [text]: answer({ thread_id: "q1", relevance: 0.8 }) } },
+      { [text]: ["answer", 0.8] },
+    );
+    const reply = await w.say("Kian", text);
+    expect(liked(reply)).toBe(false);
+    expect(share("Kian").responded).toBe(false);
+  });
+
   it("locks it in once everyone on the split has agreed", async () => {
     const { w, id } = await tp({ answer: { "sounds good": answer({ thread_id: "q1", relevance: 0.8, yes_no: "yes" }) } }, { "sounds good": ["answer", 0.8] });
     for (const who of ["Joe", "Kian", "Jake"] as const) await w.say(who, "sounds good");

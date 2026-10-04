@@ -484,9 +484,9 @@ export const PRESENCE =
   /\b(just|only)\s+\w+\s+(and|&)\s+\w+|\b(no ?one|nobody) else\b|\b(didn'?t|did not|wasn'?t|weren'?t)\s+(go|come|there|in)\b|\bskipped\b/i;
 
 // Words that say what to change (§7.5): who had what, who wasn't there,
-// who owes more. "got it" is just agreement.
+// who owes more, or a plain "update it". "got it" is just agreement.
 const CHANGE_WORDS =
-  /\b(had|has|have|only|just|but|except|without|minus|instead|between|didn'?t|did not|wasn'?t|was not|weren'?t|isn'?t|not|uneven|wrong|off|skip(ped)?|left|out|mine|owes?|owed|paid|pay(ing)?|cover(ed|ing)?|more|less|extra|separate(ly)?|bucks?|dollars?)\b|\bgot\b(?!\s+(it|you|u)\b)|👎/i;
+  /\b(update|change|fix|redo|adjust|edit|recalc\w*|had|has|have|only|just|but|except|without|minus|instead|between|didn'?t|did not|wasn'?t|was not|weren'?t|isn'?t|not|uneven|wrong|off|skip(ped)?|left|out|mine|owes?|owed|paid|pay(ing)?|cover(ed|ing)?|more|less|extra|separate(ly)?|bucks?|dollars?)\b|\bgot\b(?!\s+(it|you|u)\b)|👎/i;
 // A question or a pause is neither agreement nor a change.
 const HESITANT = /\?|❓|^(what|why|how|who|wait|hold on|hang on|hm+|huh|idk|um+|uh+)\b|\b(wait|not sure|idk)\b/i;
 const WAYS = /\b(?:split\s+)?(?:it\s+)?(\d+|two|three|four|five|six|seven|eight|nine|ten)\s+ways\b/gi;
