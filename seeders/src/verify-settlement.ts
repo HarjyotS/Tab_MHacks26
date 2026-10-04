@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { Timestamp } from 'spacetimedb';
 import { connect, disconnect, subscribeLedger } from './connection.js';
 
 const LEDGER_SECRET = 'tab-demo-ledger-secret-2026';
@@ -76,6 +77,39 @@ try {
   if (approvalTransfers.length !== 1) {
     throw new Error('Duplicate approval did not remain idempotent');
   }
+
+  const SECOND_EXPENSE_ID = `expense-verify-second-${Date.now()}`;
+  const SECOND_TRANSFER_ID = `${TRANSFER_ID}-second-expense`;
+  const JOE_PHONE = '+17345550102';
+  // Shares can only be set while the expense is open, so propose, split, then finalize.
+  const secondExpense = {
+    expenseId: SECOND_EXPENSE_ID, groupId: 'photon-demo-group', payerPhone: JOE_PHONE,
+    description: 'Ledger settle second share', sourceMessageId: `${SECOND_EXPENSE_ID}-source`,
+    splitMode: 'even', subtotalCents: 1000n, taxCents: 0n, tipCents: 0n,
+    feesCents: 0n, discountCents: 0n, totalCents: 1000n,
+    objectionDeadline: undefined, claimDeadline: undefined, proposalMessageId: undefined,
+    settleMessageId: APPROVAL_MESSAGE_ID,
+  };
+  await connection.reducers.upsertExpense({ ...secondExpense, status: 'proposed', finalizedAt: undefined });
+  await connection.reducers.setShare({
+    expenseId: SECOND_EXPENSE_ID, phone: JOE_PHONE, role: 'payer', status: 'locked',
+    fixedCents: undefined, responded: true, followupCount: 0, lastFollowupAt: undefined,
+  });
+  await connection.reducers.setShare({
+    expenseId: SECOND_EXPENSE_ID, phone: HARJYOT_PHONE, role: 'participant', status: 'locked',
+    fixedCents: undefined, responded: true, followupCount: 0, lastFollowupAt: undefined,
+  });
+  await connection.reducers.upsertExpense({ ...secondExpense, status: 'finalized', finalizedAt: Timestamp.now() });
+  await connection.reducers.createTransfer({
+    transferId: SECOND_TRANSFER_ID,
+    expenseId: SECOND_EXPENSE_ID,
+    fromPhone: HARJYOT_PHONE,
+    approvedByMessageId: APPROVAL_MESSAGE_ID,
+  });
+  await waitFor('the second expense transfer from the same approval', () => {
+    const transfer = connection.db.ledgerTransfers.transferId.find(SECOND_TRANSFER_ID);
+    return transfer?.status === 'pending' || transfer?.status === 'done';
+  }, 500);
 
   await waitFor('scheduled settlement completion', () => {
     const transfer = connection.db.ledgerTransfers.transferId.find(TRANSFER_ID);

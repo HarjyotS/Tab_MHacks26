@@ -33,6 +33,10 @@ npm run dev -w web
 
 The default demo ledger is `/g/tab-demo-ledger-secret-2026`. The URL redeems access for the browser's persisted anonymous SpacetimeDB identity; raw financial tables remain private.
 
+The web app connects to the shared Maincloud database by default. For local development, set `VITE_SPACETIME_HOST=ws://127.0.0.1:3000` and `VITE_SPACETIME_DB=tab-local` in `.env` before starting Vite; restart Vite after changing these values.
+
+The hosted ledger is deployed to GitHub Pages on every push to `main` that touches `web/` (`.github/workflows/pages.yml`): `https://kien-le-trung.github.io/Tab_MHacks26/g/<secret>`. Set the backend's `LEDGER_BASE_URL` to `https://kien-le-trung.github.io/Tab_MHacks26`. To mint a link by hand, run `npm run set:ledger-secret -- <group_id> <secret>` with an owner or backend token.
+
 ## Optional Nessie fixtures
 
 Set `NESSIE_API_KEY`, then provision one mock customer, checking account, and starting deposit per demo member:

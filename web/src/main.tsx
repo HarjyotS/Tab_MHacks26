@@ -6,8 +6,8 @@ import { App } from './App';
 import './styles.css';
 import '@xyflow/react/dist/style.css';
 
-const host = import.meta.env.VITE_SPACETIME_HOST ?? 'ws://127.0.0.1:3000';
-const database = import.meta.env.VITE_SPACETIME_DB ?? 'tab-local';
+const host = import.meta.env.VITE_SPACETIME_HOST ?? 'wss://maincloud.spacetimedb.com';
+const database = import.meta.env.VITE_SPACETIME_DB ?? 'tabmhacks2026-268xk';
 const tokenKey = `tab:${host}/${database}:identity`;
 const savedToken = localStorage.getItem(tokenKey);
 
@@ -19,7 +19,9 @@ let connectionBuilder = DbConnection.builder()
   });
 if (savedToken) connectionBuilder = connectionBuilder.withToken(savedToken);
 
-const secret = decodeURIComponent(location.pathname.match(/^\/g\/([^/]+)/)?.[1] ?? '');
+// Strip the deploy base (e.g. /Tab_MHacks26/ on GitHub Pages) before matching /g/<secret>.
+const path = location.pathname.slice(import.meta.env.BASE_URL.length - 1);
+const secret = decodeURIComponent(path.match(/^\/g\/([^/]+)/)?.[1] ?? '');
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
