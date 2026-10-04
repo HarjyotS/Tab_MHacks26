@@ -233,7 +233,11 @@ export async function proposeNew(
   });
   // The payer always has a share (what they consumed); everyone else either
   // participates or is opted out, so the ledger shows who was left out.
-  for (const m of members) {
+  // People in the split first: the module recomputes on every set_share and
+  // refuses an expense whose only share so far is opted out (playground:
+  // "sam owes me 15 for the tickets" failed when the payer came first).
+  const inFirst = [...members].sort((x, y) => Number(included.has(y.phone)) - Number(included.has(x.phone)));
+  for (const m of inFirst) {
     await ctx.db.set_share({
       expense_id,
       phone: m.phone,
