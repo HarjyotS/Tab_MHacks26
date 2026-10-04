@@ -1,4 +1,5 @@
 // SPEC §7.4 receipts and §7.5 itemizing, claims, and claim follow-ups.
+import { clearlyNotReceipt } from "@tab/gate";
 import type { ClaimResolution } from "../extraction/types.js";
 import { LOPSIDED_FACTOR, MAX_DMS_PER_EXPENSE } from "../config.js";
 import { extrasOf, type ReceiptRead } from "../extraction/receipt.js";
@@ -38,6 +39,14 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
     return;
   }
   if (!m.image_url) return;
+  // Grok vision already looked at it before the gate (§7.4): a meme or a
+  // selfie with no amounts in it skips the receipt read. Anything that might
+  // be a receipt is still read, so a misdescribed one isn't dropped (Joe's
+  // review on #41).
+  if (clearlyNotReceipt(ctx.memory.photos.get(m.message_id))) {
+    if (m.text && /\d/.test(m.text)) await handleExpense(ctx, m);
+    return;
+  }
   const read = await ctx.extract.receipt(m.image_url, m.text);
   const { receipt } = read;
 
@@ -48,6 +57,11 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
   }
   if (receipt.total_cents === undefined || receipt.items.length === 0) {
     await askAbout(ctx, m, T.clearerPhoto());
+    return;
+  }
+  // Items but no usable total (a $0 "Amount Due"): ask for it, never confirm $0.
+  if (receipt.total_cents <= 0) {
+    await askAbout(ctx, m, T.whatWasTotal(), read, "total");
     return;
   }
   if (read.currency !== "USD") {

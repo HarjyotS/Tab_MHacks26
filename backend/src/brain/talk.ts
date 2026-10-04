@@ -164,6 +164,25 @@ export function explainShare(ctx: BrainCtx, e: Expense, phone: string, who = "yo
   return `split ${shares.length - pinned.length} ways${after}${plus}`;
 }
 
+// Share statuses that count toward a debt (same as `debts`).
+const OWING = ["locked", "approved", "disputed"];
+
+export type OwedLine = { description: string; amount_cents: number; why: string };
+
+// The expenses behind what `phone` owes in a group, newest first: one line
+// per share they still owe, with why it's that amount. `to` narrows it to
+// one payer (lookup.ts whyOwe).
+export function owedLines(ctx: BrainCtx, group_id: string, phone: string, to?: string): (OwedLine & { to: string; expense: Expense })[] {
+  return ctx.store
+    .expenses()
+    .filter((e) => e.group_id === group_id && e.payer_phone && e.payer_phone !== phone && (!to || e.payer_phone === to))
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
+    .flatMap((e) => {
+      const s = ctx.store.shares(e.expense_id).find((x) => x.phone === phone && x.role === "participant");
+      return s && OWING.includes(s.status) ? [{ to: e.payer_phone!, expense: e, description: e.description, amount_cents: s.amount_cents, why: explainShare(ctx, e, phone) }] : [];
+    });
+}
+
 // A DM is about every group the sender is in (Harjyot's playground test:
 // a member of two groups got no answer by DM).
 export function groupsOf(ctx: BrainCtx, m: Message): string[] {

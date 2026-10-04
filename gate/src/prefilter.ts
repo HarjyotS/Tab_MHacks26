@@ -7,9 +7,9 @@ import type { Classify, ClassifyInput } from './types.js';
 // while a passed "lol" costs one call.
 
 // Amounts and the words people use for money, paying, and Tab's own commands
-// (balances, breakdowns, settling up, help).
+// (balances, breakdowns, settling up, help) and questions about spending.
 const MONEY =
-  /[$€£¥₹]|\d|💸|💰|💵|🧾|\b(pay|pays|paid|paying|payment|payback|owe|owes|owed|owing|iou|ious|venmo\w*|zelle\w*|zelled|cash ?app|paypal|apple ?pay|split\w*|cover|covers|covered|covering|bill|bills|tab|settle\w*|square|squared|tip|tips|tipped|refund\w*|cost|costs|price\w*|pricey|expensive|cheap|buck|bucks|dollar|dollars|cents?|usd|receipt\w*|charge|charged|charges|reimburs\w*|spot|spotted|front|fronted|expenses?|money|cash|card|debt|debts|balances?|breakdown|damage|total|deposit|fees?|rent|tax|loan|lend|lent|borrow\w*|chip in|pitch in|on me|my treat|bot|help)\b/i;
+  /[$€£¥₹]|\d|💸|💰|💵|🧾|\b(pay|pays|paid|paying|payment|payback|owe|owes|owed|owing|iou|ious|venmo\w*|zelle\w*|zelled|cash ?app|paypal|apple ?pay|split\w*|cover|covers|covered|covering|bill|bills|tab|settle\w*|square|squared|tip|tips|tipped|refund\w*|cost|costs|price\w*|pricey|expensive|cheap|buck|bucks|dollar|dollars|cents?|usd|receipt\w*|charge|charged|charges|reimburs\w*|spot|spotted|front|fronted|expenses?|money|cash|card|debt|debts|balances?|breakdown|damage|total|deposit|fees?|rent|tax|loan|lend|lent|borrow\w*|chip in|pitch in|on me|my treat|bot|help|spending|purchases?|came to|comes to|added up|adds up)\b/i;
 
 // Purchases often come without an amount ("grabbed dinner for everyone",
 // "dinner was on jake", "I handled the airbnb").
@@ -29,7 +29,7 @@ const NUMBER_WORDS =
 // Questions about where a number came from, "are we even?", and how to use
 // Tab ("how do we see the ledger?"), which is help.
 const QUESTIONS =
-  /\b(how much|where('?s| is| did| does)?\b.*\bfrom|are we (even|good|square)|we'?re even|close out|ledger|log|logged|how (do|does|can|should) (i|we|you|this|it))\b/i;
+  /\b(how much|where('?s| is| did| does)?\b.*\bfrom|are we (even|good|square)|we'?re even|close out|ledger|log|logged|how (do|does|can|should) (i|we|you|this|it)|what (did|does|do)\b.*\bcome to)\b/i;
 
 /** Values of GATE_PREFILTER that turn the pre-filter off; anything else (or unset) leaves it on. */
 const OFF = new Set(['off', 'false', '0', 'no']);

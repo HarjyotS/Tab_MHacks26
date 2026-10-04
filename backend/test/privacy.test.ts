@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { stubClassifier, withPrefilter, type ClassifyInput } from "@tab/gate";
 import { addThread } from "../src/brain/threads.js";
-import { GROUP, world } from "./support/harness.js";
+import * as T from "../src/copy/templates.js";
+import { GROUP, toolClient, world } from "./support/harness.js";
 
 const raw = { is_expense: true, amount_cents: 6300, amount_is_per_person: false, description: "Groceries", payer: "sender", payer_name: null, participants: "everyone", participant_names: [], exclusion_names: [], fixed: [] };
 
@@ -56,6 +57,21 @@ describe("privacy", () => {
     expect(seen.at(-1)).toMatchObject({ tab_question_open: true, message: { text: "the second one" } });
     expect(logged.at(-1)).toMatchObject({ prefiltered: false });
   });
+
+  it("never runs the money brain for a message the gate ignored, and its context holds no chatter", async () => {
+    const w = world({});
+    const t = toolClient([{ reply: "Everyone's square." }]);
+    w.ctx.ask = { client: t.client, model: "m" };
+    w.ctx.classify = withPrefilter(stubClassifier);
+    const chatter = ["lol", "who's driving", "what time is the movie", "how was the party", "who has my charger"];
+    for (const text of chatter) await w.say("Kian", text);
+    expect(t.create).not.toHaveBeenCalled();
+
+    await w.say("Priya", "who paid for the uber?");
+    expect(t.create).toHaveBeenCalledTimes(1);
+    const prompt = JSON.stringify(t.requests[0]!.messages);
+    for (const text of chatter) expect(prompt).not.toContain(text);
+  });
 });
 
 describe("what never reaches Grok (Joe's review of #35)", () => {
@@ -80,11 +96,16 @@ describe("what never reaches Grok (Joe's review of #35)", () => {
     expect(w.said("clarifying_question")).toEqual([]);
   });
 
-  it("leaves an unsure photo alone instead of sending it to receipt vision", async () => {
-    const w = world({}); // no scripted receipt: reaching Grok would throw
+  it("asks about an unsure photo instead of sending it to the receipt read", async () => {
+    // No scripted receipt: reaching the receipt read would throw. (The
+    // description before the gate is the user-authorized exception, §7.4;
+    // with none scripted here the photo just goes undescribed.)
+    const w = world({});
     w.ctx.classify = async () => ({ intent: "receipt", confidence: 0.6 });
     const m = await w.photo("Kian", "maybe-a-receipt");
     expect(m.status).toBe("done");
     expect(w.db.expenses()).toEqual([]);
+    // Never quiet on money talk: one short question, the read only on yes.
+    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual([T.confirmReceipt()]);
   });
 });
