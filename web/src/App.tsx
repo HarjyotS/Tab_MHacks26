@@ -43,10 +43,15 @@ export function App({ secret }: AppProps) {
   // Still pin everything to a single group so a stray grant can never mix ledgers.
   const group = groups[0];
   const scoped = useMemo(
-    () => scopeToGroup(group?.ledgerGroupId, {
-      members: allMembers, expenses: allExpenses, shares: allShares, items: allItems,
-      claims: allClaims, transfers: allTransfers, balances: allBalances,
-    }),
+    () => {
+      // A voided expense is gone: it, its shares and its payments stay off the page.
+      const gone = new Set(allExpenses.filter(expense => expense.status === 'void').map(expense => expense.expenseId));
+      return scopeToGroup(group?.ledgerGroupId, {
+        members: allMembers, expenses: allExpenses.filter(expense => !gone.has(expense.expenseId)),
+        shares: allShares.filter(share => !gone.has(share.expenseId)), items: allItems,
+        claims: allClaims, transfers: allTransfers.filter(transfer => !gone.has(transfer.expenseId)), balances: allBalances,
+      });
+    },
     [group?.ledgerGroupId, allMembers, allExpenses, allShares, allItems, allClaims, allTransfers, allBalances]
   );
   const { members, expenses, shares, items, claims, transfers, balances } = scoped;
