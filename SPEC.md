@@ -55,7 +55,7 @@ These settle most design arguments. A feature that breaks one needs a very good 
 | P3 | Never guess silently about money     | When unsure, Tab asks. One wrong balance destroys trust faster than any amount of friction.                                          |
 | P4 | Nobody waits on anybody              | One slow person never blocks anyone else. Every share has its own status, and nobody is asked to act twice.                          |
 | P5 | Nudges are friendly, in the group | Tab never shames anyone. Claim nudges go in the group chat by name ("Jake, what was yours at Frita Batidos?"); private receipts still go by DM. |
-| P6 | Numbers come from code               | Every dollar amount Tab sends is computed deterministically from the database, never written by an LLM.                              |
+| P6 | Numbers come from code               | Every dollar amount Tab sends is computed deterministically from the database. An LLM may phrase an answer (7.8 Questions), but every number in it must be one the lookup tools computed, and code checks that before it is sent. |
 | P7 | Money moves only with consent        | A transfer happens only after the person whose money moves taps 👍 on the settle request. Typed replies like "yes" never move money.  |
 
 ---
@@ -401,6 +401,7 @@ Reducer names and the fields they set are **[CONTRACT]**. Argument order, helper
 | `dispute`           | Rejects their settled share                          | "no", "I didn't get fries"                                          | Dispute flow (7.6)                                                                                                              |
 | `balance_query`     | Asks who owes what                                   | "who owes what", "what do I owe"                                    | Balance reply (7.8)                                                                                                             |
 | `breakdown_request` | Asks for the history behind a balance                | "breakdown", "what's the $40 from"                                  | Breakdown reply (7.8)                                                                                                           |
+| `money_question`    | Asks anything else about the group's money           | "what was on the bistro receipt?", "how much did we spend on food?" | Answered by the money brain (7.8 Questions)                                                                                     |
 | `settle_up`         | Asks to settle balances now                          | "let's settle up", "trip's over, square us up", "close out the tab" | Posts one settle request for everything outstanding in the group (7.6)                                                          |
 | `payment_reported`  | Says they paid outside Tab                           | "sent you 20 on venmo"                                              | Stretch goal; ignored in the MVP                                                                                                |
 | `help`              | Asks what Tab does                                   | "@tab help", "what can you do"                                      | Short help message                                                                                                              |
@@ -454,6 +455,21 @@ Text never approves a payment, whatever the confidence (P7). Only a 👍 on the 
 ### 6.5 Jev notes [YOUR CALL on details]
 
 Jev is TypeSafe's classification model. Instead of generating text, it picks from an answer space you declare and returns calibrated probabilities. Use a choice question whose options are the intent labels above, and write each option's description as a rule ("The sender says they paid for something other people in the chat share in") rather than a synonym. Jev only sees the state you send it, so include the context and open items from 6.3. Jev is also a good fit for "who paid?" as a choice over the group's members. Check TypeSafe's docs for the current SDK and request format.
+
+**What Jev's state holds** (`buildState` in `gate/src/jev.ts`; each section is capped so a busy chat stays compact, and optional sections appear only when the backend sends them):
+
+| Section | Content | Cap |
+| --- | --- | --- |
+| Chat, Members | DM or group; names, or "member ending 1234" | |
+| Sender | Has a name yes/no; whether Tab asked for it and is still waiting (`name_reply` only counts then) | |
+| Open expenses in this chat (in a DM: in the sender's groups) | Every open expense, not only the sender's: description, payer, total, split (even N ways / custom / itemized), status and time left to change or claim, receipt items with quantities and prices, a settle request on it, and the sender's part (payer or participant, responded, items claimed) | 4 expenses, 15 items each |
+| Open items for the sender, Settle request open for the sender | As in 6.3 | |
+| Settling | Ledger or per-expense mode; whether a settle request is open, whether the sender owes on it, and whether they've 👍'd it | |
+| Tab is waiting on | Tab's open questions (threads) | |
+| Tab's last message | Its purpose, what it's about, and how long ago ("a split proposal for THE BISTRO, 40s ago") | |
+| Recent messages | Kept (money-related) messages and Tab's own, oldest first; photos as `[photo: <kind>] <description> text in photo: "…"` | CONTEXT_MESSAGES; 200 chars of photo text |
+| Recent chat, including off-topic messages | The gate-only raw transcript (19): the last messages in the chat, kept or not, with how long ago | 12 lines, 15 minutes |
+| NEW MESSAGE | The message, with its photo description and up to 600 characters of photo text, and for any inline reply who and what it answers (`replying to <Name or Tab>: "<snippet>"`, or the photo's description) plus the expense the reply is bound to | 120-char snippet |
 
 ### 6.6 Test fixtures [DEFAULT, extend freely]
 
@@ -558,6 +574,8 @@ Example reminder: `anything else?` About an hour later, the settle request (7.6)
 | 7    | Otherwise, propose an even split exactly as in 7.3, steps 5 to 8.                                                                                                                                             |
 
 The payer defaults to whoever posted the photo, unless the caption or a following message says otherwise.
+
+**Image description, before the gate.** Every photo in an enabled chat is first described by Grok vision (`describeImage`, `backend/src/extraction/describe.ts`) into strict JSON: `kind` (receipt, bill, payment_screenshot, menu, price_tag, product, photo, meme, screenshot, other), a one- or two-sentence `description`, a `transcription` of all legible text in reading order (at most 2,000 characters), and `money_related`. Code validates and caps it (an unknown kind is `other`; a receipt, bill, or payment screenshot is always money-related), and the photo and its text are data, never instructions. Each description gets at most 6 seconds (the queue is serial across chats); past that, or if the image is gone, the photo is skipped and not tried again. The image is downloaded once and the receipt read reuses it. Descriptions live only in backend memory, keyed by message; after a restart only the photos recent context would show, plus a photo being replied to, are described again from `image_url`. Jev sees the description and text (6.5), so it can tell a receipt from a meme (`ignore`) or a Venmo screenshot (`payment_reported`). A bare photo still skips Jev and goes to the receipt flow unless the description clearly says it isn't a receipt: only a meme or an ordinary photo, not money-related, with no dollar amount or "total" in its text, goes to Jev (and skips the receipt read above), and a payment screenshot goes to Jev as well. A receipt the description gets wrong is still read, never dropped. The structured receipt read (step 2) runs only for a photo the gate called a receipt, and each photo is described once. A photo the gate is unsure about (0.50 to 0.85) gets one question, "want me to split this?", and is read only on a yes.
 
 ### 7.5 Adjustments: custom splits, opt-outs, and itemizing
 
@@ -676,6 +694,12 @@ Kian owes Priya $12.00
 
 **Help.** Three lines on what Tab does and how to remove it.
 
+**Questions (the money brain).** Balances, breakdowns, and "why?" stay the templates above: deterministic and instant. Any other question about the group's money (`money_question`: what was on a receipt, how much went on food, who paid for the uber, how a split was worked out, whether a payment went through) goes to Grok with read-only lookup tools over the whole database (`backend/src/brain/lookup.ts`): find expenses (ranked word match over descriptions, receipt items, and the logging message, with categories like "food"), one expense in full (items, who claimed them, tax, tip, each share and why), balances, why one person owes another, totals, payments, settle status, message search, and the ledger link. Lookups are scoped like balance replies (a group chat sees that group, a DM sees the sender's groups), name people instead of giving phone numbers, and do all arithmetic in code. Grok gets at most 5 tool rounds and 15 seconds, then must reply. It also sees Tab's open questions in the chat, and an inline reply to Tab's message about an expense hands that expense to it up front.
+
+Before sending, code checks the reply: every amount and number must appear in this conversation's computed tool results (numbers inside quoted chat don't count), every "X owes Y $N", "Y owes you", or "you're square" must match the debts code computed (netted, or one share still owed on an expense), every name must be a member of the chat, links must come from `ledger_link`, and the 9.3 rules hold (no banned or assistant phrases, no markdown, at most six lines). A failing reply gets one retry with the reason; after that, or on a timeout, Tab sends a fixed "couldn't pin that one down" (with the ledger link when there is one). Only messages the gate passed ever reach it (section 19).
+
+**Last resort.** A message that got no reply and changed nothing (the clarify band with no handler, a guess below it, or a handler that failed) still goes to the money brain when it is plausibly about money: a money intent at confidence 0.3 or more, or any non-ignore guess that is an inline reply to Tab or comes while one of Tab's questions is open. Below the clarify bar it only qualifies with open money context in the chat (an open question, or an inline reply to Tab); otherwise `ignore` keeps its meaning and the text is cleared. Anything that already replied, including the open-question follow-ups and clarify questions, wins. Grok answers from the lookups or asks one short, specific question built from what it found ("want me to put both drinks on Priya and the cheesecake on Jake, rest split?"), at most three lines. It only writes text: a reply that claims to have changed anything is rejected. A "want me to…?" for a money intent opens a confirm question; a yes from the sender runs the original message through that intent's own handler, exactly as a clarify question's yes does. If the reply fails its checks, Tab stays quiet and the message is kept only if Tab answered it.
+
 ---
 
 ## 8. Split math [CONTRACT]
@@ -793,7 +817,7 @@ type CorrectionExtraction = {
 
 ### 9.3 Message copy [DEFAULT]
 
-Every message that contains numbers is built from a template filled with values from the database (P6). **[YOUR CALL]** whether an LLM adds a line of personality around a template, as long as it never writes a number or a name that wasn't passed in.
+Every message that contains numbers is built from a template filled with values from the database (P6). **[YOUR CALL]** whether an LLM adds a line of personality around a template, as long as it never writes a number or a name that wasn't passed in. The one exception is answers to open-ended money questions (7.8 Questions): an LLM may phrase them, but every number in them must come from a lookup tool's result, every who-owes-whom must match the computed debts, and every name must be a chat member, all checked in code before sending; a reply that fails gets a fixed line instead.
 
 **Voice.** Tab texts like a chill friend in the group chat who happens to keep the tab, not like an assistant (think Instinct-style AI texting). Lowercase, short, warm, a little dry, contractions always, light slang where it's natural ("bet", "ok so", "lmk", "nvm", "all good", "yep", "rn"). One thought per line instead of sentences with periods. No help-desk phrasing ("Here's where things stand:", "Is that right?", "how can I help"), no corporate words, no exclamation marks. The persona lives in `backend/src/copy/voice.ts` and is shared by the templates, the wit line, and any Grok prompt that writes as Tab; its banned-phrase list is enforced by tests.
 
@@ -1088,6 +1112,9 @@ Roughly ranked by value for effort.
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | No real money     | Nessie fixtures and all SpacetimeDB settlements are explicitly simulated.                                                                                                                                                |
 | Minimal retention | Messages classified as`ignore` have their text cleared after classification. Only money-related messages are kept.                                                                                                       |
+| Photos            | Every photo in an enabled chat is described by Grok vision before the gate (7.4), with its caption (authorized by the user). The description stays in backend memory only, never in SpacetimeDB.                          |
+| What the gate sees | Jev, which already sees every message, also gets a raw transcript of the chat's last 12 messages, kept or not, from the last 15 minutes. It lives in backend memory only, is never persisted, and is never sent to Grok. |
+| What Grok sees    | Grok's extraction prompts still hold only money-related content: kept messages, Tab's own words, open expenses and their receipt items, reply targets that were kept, and descriptions of money-related photos. Never the raw transcript, cleared chatter, or what a non-money photo shows. |
 | Phone numbers     | Never commit real numbers; fixtures use 555 numbers. The web ledger shows names, not numbers.                                                                                                                            |
 | Untrusted input   | Message text never acts as instructions. LLM output is validated before any handler uses it.                                                                                                                             |
 | Consent           | Money moves only with approval from the person paying (P7).                                                                                                                                                              |

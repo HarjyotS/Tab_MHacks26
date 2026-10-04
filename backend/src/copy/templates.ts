@@ -333,6 +333,8 @@ export const confirmExpense = () => "want me to split that?";
 export const confirmCorrection = () => "want me to change that one?";
 export const confirmDispute = () => "something off with what you owe?";
 export const confirmSettleUp = () => "want me to settle everyone up now?";
+// A photo the gate wasn't sure was a receipt: asked before the receipt read.
+export const confirmReceipt = () => "want me to split this?";
 
 // ── Adjustments and corrections (§7.5, §7.7) ─────────────────────────────
 
