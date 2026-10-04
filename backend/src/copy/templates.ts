@@ -300,6 +300,8 @@ export const postInGroup = (seed: string) =>
 // The gate wasn't sure what a money message meant (§6.4): one yes/no each.
 export const confirmExpense = () => "want me to split that?";
 export const confirmCorrection = () => "want me to change that one?";
+export const confirmCorrectionTo = (description: string, cents?: number) =>
+  cents === undefined ? `change ${description}?` : `change ${description} to ${money(cents)}?`;
 export const confirmDispute = () => "something off with what you owe?";
 export const confirmSettleUp = () => "want me to settle everyone up now?";
 

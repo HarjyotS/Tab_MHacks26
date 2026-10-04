@@ -6,6 +6,31 @@ import { type BrainCtx, chatOf, say, tapback } from "./context.js";
 import { liveShares, moneyMoving, postProposal, reopen } from "./expense.js";
 import { extractInput } from "./inputs.js";
 
+// "actually the uber was $30 not $24", not sent as a reply: a correction to
+// the open expense it names, not a second Uber (playground run, #44). Joe's
+// guards (review on #44): it must read as a correction ("was/is $X" or
+// "not $X"), name the expense by a real word of its description, and not be
+// another purchase ("another uber home", "got gas too").
+const CORRECTION_SHAPE = /\b(?:was|is|were)\s+(?:actually\s+|really\s+|only\s+)?\$?\d|\bnot\s+\$?\d/i;
+const ANOTHER = /\b(another|again|too|also|second|more)\b/i;
+const STOPWORDS = new Set(["the", "for", "and", "with", "from", "that", "this", "some", "team", "everyone", "group", "house"]);
+
+const descriptionWords = (description: string) =>
+  (description.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+
+export function namesExpense(text: string, description: string): boolean {
+  return descriptionWords(description).some((w) => new RegExp(`\\b${w}s?\\b`, "i").test(text));
+}
+
+export function namedCorrectionTarget(ctx: BrainCtx, m: Message): Expense | undefined {
+  const text = m.text ?? "";
+  if (!m.group_id || m.kind !== "text" || !CORRECTION_SHAPE.test(text) || ANOTHER.test(text)) return undefined;
+  return ctx.store
+    .expenses()
+    .filter((e) => e.group_id === m.group_id && (e.status === "proposed" || e.status === "finalized") && namesExpense(text, e.description))
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+}
+
 export async function handleCorrection(
   ctx: BrainCtx,
   m: Message,
