@@ -281,7 +281,6 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
   });
 
   it("locks in a split still open for changes when someone asks to settle now", async () => {
-    db.transferKey = "approval_expense";
     const groceries = await send(JOE, "got groceries, $63");
     expect(db.expense(expenseId(groceries))!.status).toBe("proposed");
     const settle = await send(KIAN, "let's settle up");
@@ -292,8 +291,7 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
   });
 
   it("posts one request, not two, in per-expense mode", async () => {
-    db.transferKey = "approval_expense";
-    ctx.memory.settleMode.set(G, "per_expense");
+    await ctx.db.set_settle_mode({ group_id: G, settle_mode: "per_expense" });
     await send(JOE, "got groceries, $63");
     await send(KIAN, "let's settle up");
     expect(said("settle_request")).toHaveLength(1);

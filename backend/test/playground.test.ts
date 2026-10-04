@@ -134,7 +134,6 @@ describe("let's settle up with something still open", () => {
     // "settle it now lol" used to get "isn't locked in yet", and "yeah
     // lock it in" after that went nowhere.
     const w = world(script);
-    w.db.transferKey = "approval_expense";
     await w.say("Joe", "got pizza, $40");
     await w.say("Kian", "let's settle up");
     expect(w.said("balance_reply")).toEqual([]);
