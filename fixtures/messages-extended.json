@@ -1533,6 +1533,271 @@
         "intent": "expense"
       },
       "note": "A purchase verb the pre-filter must not miss (Joe's review on #28)"
+    },
+    {
+      "id": 200,
+      "note": "Playground: a ledger answer to the settle-mode question",
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense."
+        }
+      ],
+      "open_items": [],
+      "open_questions": [
+        {
+          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense.",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Kian",
+        "text": "nah we are just keeping a ledger for the long run and we will settle it every month"
+      },
+      "expect": {
+        "intent": "answer"
+      }
+    },
+    {
+      "id": 201,
+      "note": "Playground: yes to settling a receipt still waiting on claims",
+      "context": [
+        {
+          "from": "Kian",
+          "text": "let's settle up"
+        },
+        {
+          "from": "Tab",
+          "text": "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e2",
+          "description": "Frita Batidos",
+          "expense_status": "itemizing",
+          "my_share_status": "awaiting_claim"
+        }
+      ],
+      "open_questions": [
+        {
+          "text": "Still waiting on claims for Frita Batidos ($102.00). Split what's unclaimed evenly and settle now?",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Kian",
+        "text": "yeah lock it in"
+      },
+      "expect": {
+        "intent": "answer"
+      }
+    },
+    {
+      "id": 202,
+      "note": "Playground: who wasn't there, while the split is open (either reaches the adjustment)",
+      "context": [
+        {
+          "from": "Joe",
+          "text": "got pizza, $40"
+        },
+        {
+          "from": "Tab",
+          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e1",
+          "description": "Pizza",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "open_questions": [
+        {
+          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Joe",
+        "text": "priya and john didnt go it was just me and kian"
+      },
+      "expect": {
+        "one_of": [
+          "answer",
+          "split_adjustment"
+        ]
+      }
+    },
+    {
+      "id": 203,
+      "note": "An amount answering Tab's question to the sender",
+      "context": [
+        {
+          "from": "Kian",
+          "text": "venmo me for the uber"
+        },
+        {
+          "from": "Tab",
+          "text": "How much was the Uber?"
+        }
+      ],
+      "open_items": [],
+      "open_questions": [
+        {
+          "text": "How much was the Uber?",
+          "who": "Kian"
+        }
+      ],
+      "message": {
+        "from": "Kian",
+        "text": "22"
+      },
+      "expect": {
+        "intent": "answer"
+      }
+    },
+    {
+      "id": 204,
+      "note": "Someone else answering who paid",
+      "context": [
+        {
+          "from": "Priya",
+          "text": "pizza was $48 lol"
+        },
+        {
+          "from": "Tab",
+          "text": "Who paid for the Pizza?"
+        }
+      ],
+      "open_items": [],
+      "open_questions": [
+        {
+          "text": "Who paid for the Pizza?",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Joe",
+        "text": "I did, it was on my card"
+      },
+      "expect": {
+        "intent": "answer"
+      }
+    },
+    {
+      "id": 205,
+      "note": "A bystander's own new expense while a question is open is not an answer",
+      "context": [
+        {
+          "from": "Priya",
+          "text": "pizza was $48 lol"
+        },
+        {
+          "from": "Tab",
+          "text": "Who paid for the Pizza?"
+        }
+      ],
+      "open_items": [],
+      "open_questions": [
+        {
+          "text": "Who paid for the Pizza?",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "separate thing, I got the uber home, $30"
+      },
+      "expect": {
+        "intent": "expense"
+      }
+    },
+    {
+      "id": 206,
+      "note": "Playground: a how-to question replying to the settle question is help, not an answer",
+      "context": [
+        {
+          "from": "Tab",
+          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense."
+        }
+      ],
+      "open_items": [],
+      "open_questions": [
+        {
+          "text": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense.",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Jake",
+        "text": "how do we settle the bil or see the ledger?",
+        "reply_to_tab": "Got a trip coming up? I'll keep a running tab and settle everyone up at the end. Reply \"each\" if you'd rather settle after every expense."
+      },
+      "expect": {
+        "intent": "help"
+      }
+    },
+    {
+      "id": 207,
+      "note": "A tip percentage answering the receipt question",
+      "context": [
+        {
+          "from": "Tab",
+          "text": "What tip did you leave?"
+        }
+      ],
+      "open_items": [],
+      "open_questions": [
+        {
+          "text": "What tip did you leave?",
+          "who": "Joe"
+        }
+      ],
+      "message": {
+        "from": "Joe",
+        "text": "20%"
+      },
+      "expect": {
+        "intent": "answer"
+      }
+    },
+    {
+      "id": 208,
+      "note": "Chatter while a question is open stays ignore",
+      "context": [
+        {
+          "from": "Joe",
+          "text": "got pizza, $40"
+        },
+        {
+          "from": "Tab",
+          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?"
+        }
+      ],
+      "open_items": [
+        {
+          "expense_id": "e1",
+          "description": "Pizza",
+          "expense_status": "proposed",
+          "my_share_status": "proposed"
+        }
+      ],
+      "open_questions": [
+        {
+          "text": "Pizza, $40.00. Split 4 ways, that's $10.00 each.\nAnything uneven, or anyone not there?",
+          "who": "anyone"
+        }
+      ],
+      "message": {
+        "from": "Priya",
+        "text": "lol the game is on tonight"
+      },
+      "expect": {
+        "intent": "ignore"
+      }
     }
   ]
 }

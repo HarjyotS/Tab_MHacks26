@@ -15,11 +15,15 @@ describe("privacy", () => {
       calls.push({ text: input.message.text ?? "", context: input.context.map((c) => c.text ?? "") });
       return real(input, mode);
     };
+    // The answer resolver never runs while Tab has no open question.
+    const answers: string[] = [];
+    w.ctx.extract.answer = (input) => (answers.push(input.message.text ?? ""), Promise.reject(new Error("no open question")));
     const chatter = ["lol", "who's home tonight", "omw", "did anyone see my charger", "the game starts at 7", "lmaooo", "ok", "anyone want to watch a movie", "happy birthday priya!!", "5 more minutes"];
     for (const [i, text] of chatter.entries()) await w.say((["Kian", "Priya", "Jake"] as const)[i % 3], text);
     await w.say("Joe", "got groceries, $63");
 
     expect(calls).toHaveLength(1);
+    expect(answers).toEqual([]);
     expect(calls[0]!.text).toBe("got groceries, $63");
     expect(calls[0]!.context.filter((t) => chatter.includes(t))).toEqual([]);
     expect(w.said("clarifying_question")).toEqual([]);

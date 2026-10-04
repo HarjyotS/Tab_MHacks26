@@ -7,7 +7,7 @@ import {
 } from "../src/brain/process.js";
 import { finalize } from "../src/brain/settle.js";
 import type { ReceiptRead } from "../src/extraction/receipt.js";
-import { GROUP, PEOPLE, world } from "./support/harness.js";
+import { answer, GROUP, PEOPLE, world } from "./support/harness.js";
 
 // Harjyot's full review of #14 at 76c3413, finding by finding.
 const raw = (
@@ -37,6 +37,9 @@ const script = {
       payer_name: "joe",
     },
   },
+  // While "Who paid for the Pizza?" is open, Grok reads Joe's own uber as
+  // no answer to it.
+  answer: { "uber was $30, I paid": answer({ relevance: 0.05, also_new: true, also_intent: "expense" }) },
 };
 
 const finalized = async (w: ReturnType<typeof world>) => {
