@@ -44,6 +44,9 @@ const MONEY_INTENTS = new Set<Intent>([
 
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
 
+// Intents that ask Tab something rather than tell it.
+const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request"]);
+
 const YES =
   /^(yes|yep|yeah|ya|yup|sure|ok|okay|correct|right|do it|go ahead|that's right)\b/i;
 const NO = /^(no|nope|nah|wrong|not right)\b/i;
@@ -268,13 +271,19 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   // 3. Grok, for everything the parsers can't read. Only a message the gate
   //    passed, or one from the person Tab asked a question only they can
   //    answer, ever reaches it (§19, §16.3). For invites alone the gate's
-  //    own intent already reaches the same handler, so it isn't asked then
-  //    unless the gate called it an answer or it's an inline reply.
+  //    own intent already reaches the same handler ("2" to the item list is
+  //    a claim), so it isn't asked then unless the gate called it an answer.
+  //    A dispute takes only a clear amount, which the parsers read already.
   const offered = pool.filter((t) => t !== reask);
-  const asked = offered.filter((t) => !INVITES.has(t.data.kind));
-  const askerOnly = offered.some((t) => t.who === "asker" && isAsker(t, m));
-  const worth = passed && (result.intent === "answer" || replied !== undefined || asked.length > 0);
-  if (offered.length === 0 || !(worth || askerOnly)) return no;
+  // The settle-mode question stays open for hours after onboarding; the
+  // parsers read most answers to it, so it alone doesn't send every new
+  // expense to Grok.
+  const asked = offered.filter((t) => !INVITES.has(t.data.kind) && t.data.kind !== "settle_mode");
+  const askerOnly = offered.some((t) => t.who === "asker" && isAsker(t, m) && t.data.kind !== "dispute");
+  const worth = passed && (result.intent === "answer" || asked.length > 0);
+  // A question of their own ("what do i owe", "how do we settle up?") is
+  // answered as one, never read as an answer.
+  if (offered.length === 0 || ASKING.has(result.intent) || !(worth || askerOnly)) return no;
   let r: AnswerResolution;
   try {
     r = await ctx.extract.answer(extractInput(ctx, m), offered.map((t) => threadView(ctx, m, t)));
