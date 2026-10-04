@@ -284,3 +284,13 @@ test("READ_DMS=off ignores every DM, even ones addressed to Tab", async () => {
   await bridge.poll();
   expect(hub.ingested.slice(before).map((m) => m.text)).toEqual(["group still works"]);
 });
+
+test("never decodes the owner's own DMs unless Tab is waiting for a send to that person", async () => {
+  const { fx, bridge, hub, turnOn } = setup();
+  await turnOn();
+  const before = hub.ingested.length;
+  // A personal DM typed from the owner's phone: from-me, no pending send. It must be skipped untouched.
+  fx.message({ chat: fx.dm(A), handle: A, fromMe: true, text: null, attributedBody: new Uint8Array([0xff, 0x00, 0x13]) });
+  await bridge.poll();
+  expect(hub.ingested).toHaveLength(before);
+});
