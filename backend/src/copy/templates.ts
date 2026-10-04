@@ -259,6 +259,6 @@ export function breakdownReply(a: { lines: OwedLine[]; ledger_url?: string }): s
 
 export const helpReply = (seed: string) =>
   pick(seed, [
-    `I keep track of shared costs in this chat.\nTell me what you paid ("got groceries, $63") or send a receipt photo, and I'll split it.\nTo remove me, just remove me from the group.`,
-    `I'm Tab. I split shared costs so nobody has to do the math.\nSay what you paid ("got groceries, $63") or send a receipt photo.\nTo remove me, just remove me from the group.`,
+    `I keep track of shared costs in this chat.\nTell me what you paid ("got groceries, $63") or send a receipt photo, and I'll split it.\nAsk "what do I owe" anytime, or say "settle up" to square up. To remove me, just remove me from the group.`,
+    `I'm Tab. I split shared costs so nobody has to do the math.\nSay what you paid ("got groceries, $63") or send a receipt photo.\nAsk "what do I owe" to see the tab, or say "settle up" to square everyone up. To remove me, just remove me from the group.`,
   ]);

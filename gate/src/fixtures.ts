@@ -5,7 +5,7 @@ import type { ClassifyInput, ClassifyResult, GateMessage, Intent } from './types
 /** SPEC 11.3 ACT_THRESHOLD and APPROVAL_TEXT_THRESHOLD. */
 export const ACT_THRESHOLD = 0.85;
 
-type FixtureMessage = { from: string; text?: string; reply?: boolean; dm?: boolean; unnamed?: boolean };
+type FixtureMessage = { from: string; text?: string; reply?: boolean; reply_to_tab?: string; dm?: boolean; unnamed?: boolean };
 export interface Fixture {
   id: number;
   note?: string;
@@ -35,7 +35,8 @@ export function toInput(f: Fixture, members = data.members): ClassifyInput {
     is_dm: !!m.dm,
     kind: 'text',
     text: m.text,
-    ...(m.reply ? { reply_to_id: 'previous-message' } : {}),
+    ...(m.reply || m.reply_to_tab ? { reply_to_id: 'previous-message' } : {}),
+    ...(m.reply_to_tab ? { reply_to_tab: m.reply_to_tab } : {}),
   });
   return {
     message: msg(f.message),
