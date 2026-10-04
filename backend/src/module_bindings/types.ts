@@ -198,6 +198,7 @@ export const LedgerMember = __t.object("LedgerMember", {
   ledgerMemberId: __t.string(),
   ledgerGroupId: __t.string(),
   name: __t.option(__t.string()),
+  bankBalanceCents: __t.option(__t.i64()),
 });
 export type LedgerMember = __Infer<typeof LedgerMember>;
 
@@ -296,6 +297,48 @@ export const ModuleConfig = __t.object("ModuleConfig", {
   demoMode: __t.bool(),
 });
 export type ModuleConfig = __Infer<typeof ModuleConfig>;
+
+export const NessieBalances = __t.object("NessieBalances", {
+  memberId: __t.string(),
+  groupId: __t.string(),
+  balanceCents: __t.i64(),
+  syncedAt: __t.timestamp(),
+});
+export type NessieBalances = __Infer<typeof NessieBalances>;
+
+export const NessieMirror = __t.object("NessieMirror", {});
+export type NessieMirror = __Infer<typeof NessieMirror>;
+
+export const NessieMirrorItem = __t.object("NessieMirrorItem", {
+  transferId: __t.string(),
+  amountCents: __t.i64(),
+  fromAccountId: __t.string(),
+  toAccountId: __t.string(),
+  completedAt: __t.option(__t.timestamp()),
+  fromMemberId: __t.string(),
+  toMemberId: __t.string(),
+  mirrorStatus: __t.option(__t.string()),
+  withdrawnDollars: __t.i64(),
+  depositedDollars: __t.i64(),
+  attempts: __t.u32(),
+});
+export type NessieMirrorItem = __Infer<typeof NessieMirrorItem>;
+
+export const NessieMirrorProgress = __t.object("NessieMirrorProgress", {
+  transferId: __t.string(),
+  status: __t.string(),
+  fromAccountId: __t.string(),
+  toAccountId: __t.string(),
+  amountCents: __t.i64(),
+  withdrawnDollars: __t.i64(),
+  depositedDollars: __t.i64(),
+  withdrawalId: __t.option(__t.string()),
+  depositId: __t.option(__t.string()),
+  attempts: __t.u32(),
+  error: __t.option(__t.string()),
+  updatedAt: __t.timestamp(),
+});
+export type NessieMirrorProgress = __Infer<typeof NessieMirrorProgress>;
 
 export const NessieSeedProgress = __t.object("NessieSeedProgress", {
   memberId: __t.string(),

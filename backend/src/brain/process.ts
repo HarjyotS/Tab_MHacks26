@@ -23,7 +23,13 @@ import {
 } from "./settle.js";
 import { handleCorrection } from "./correction.js";
 import { handleLedger } from "./ledger.js";
-import { handleBalanceQuery, handleBreakdown, handleHelp, handleNameReply, onboardNewGroups } from "./talk.js";
+import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
+import {
+  handleBalanceQuery,
+  handleHelp,
+  handleNameReply,
+  onboardNewGroups,
+} from "./talk.js";
 import { answerQuestion } from "./ask.js";
 import { addInvite, addThread, closeThread, holdsLockIn, INVITES, isAsker, mayAnswer, openThreads, type Thread, threadForReply } from "./threads.js";
 import * as T from "../copy/templates.js";
@@ -37,6 +43,8 @@ const MONEY_INTENTS = new Set<Intent>([
   "answer", "money_question",
 ]);
 
+// A question about an amount that already exists, not a new expense.
+const AMOUNT_QUESTION = /^(why|what'?s|whats|how|where)\b.*\d|\b(from|for)\?\s*$/i;
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
 
 // Intents that ask Tab something rather than tell it.
@@ -152,24 +160,30 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
         prefiltered: result.prefiltered === true,
       });
 
-      const reply = await answerThreads(ctx, m, result, decision);
+      // "@Tab breakdown" (§7.8): the full trace of where amounts come from,
+      // checked before anything else so an open question can't swallow it.
+      // "why do I owe Priya" is the same thing for one person.
+      const whyOwe = whyOweTarget(m);
+      const breakdown = BREAKDOWN_COMMAND.test((m.text ?? "").trim()) || whyOwe !== undefined;
+      if (breakdown) await handleBreakdownCommand(ctx, whyOwe ? { ...m, text: `@tab breakdown ${whyOwe}` } : m);
+      const reply: Reply = breakdown ? { answered: false } : await answerThreads(ctx, m, result, decision);
       const answered = reply.answered;
-      // "why?" right after Tab's balance reply: the explanation. A full
-      // question the gate passed ("how much did we spend on food?") is
-      // answered as itself.
+      // "why?" right after Tab's balance reply: the short answer (Joe's rule).
+      // A full question the gate passed ("how much did we spend on food?")
+      // is answered as itself.
       const why =
-        !answered && !(decision !== "ignore" && intent === "money_question") &&
+        !breakdown && !answered && !(decision !== "ignore" && intent === "money_question") &&
         WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
-      if (why) await handleBreakdown(ctx, m);
+      if (why) await handleShortWhy(ctx, m);
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
-      const ledger = !answered && !why && wantsLedger(m, intent, decision);
+      const ledger = !breakdown && !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);
-      keep = answered || moneyRelated || why || ledger;
+      keep = breakdown || answered || moneyRelated || why || ledger;
       // Stored as an answer, so it stays in later context (§19 keeps it).
       if (answered) intent = "answer";
       if (!keep) intent = "ignore";
       let failed: unknown;
-      if (!answered && !why && !ledger) {
+      if (!breakdown && !answered && !why && !ledger) {
         try {
           if (decision === "act") await act(ctx, m, result.intent);
           else if (decision === "clarify") await clarify(ctx, m, result.intent);
@@ -270,7 +284,8 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     case "balance_query":
       return handleBalanceQuery(ctx, m);
     case "breakdown_request":
-      return handleBreakdown(ctx, m);
+      // Free-form ("what's the $90.70 from?"): only the command answers.
+      return hintBreakdown(ctx, m);
     case "money_question":
       return void (await answerQuestion(ctx, m, "money_question", bound));
     case "help":
@@ -309,6 +324,9 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     if (receipt) return handleAdjustment(ctx, m, m.text ?? "", receipt, { confirmOnly: true });
     return ctx.log("no_handler", { message_id: m.message_id, intent });
   }
+  // "whats the $90.70 from?" asks about a balance; offering to split it as a
+  // new expense would be wrong. Point to the command instead (live run).
+  if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
   // §6.4: an unsure adjustment is about an open expense, so ask rather than
   // stay silent: explain what's wrong, or confirm before applying.
   if (intent === "split_adjustment") {

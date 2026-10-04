@@ -7,6 +7,7 @@ import type { OutboxPurpose, Reaction } from "../db/types.js";
 import { compose } from "../copy/compose.js";
 import { styleFlags, styleFromFlags, type GroupStyle, type StyleFlags } from "../copy/style.js";
 import type { WitContext } from "../copy/wit.js";
+import type { SummaryInput } from "../copy/summary.js";
 import type { ExpenseMode } from "../extraction/expense.js";
 import type {
   CorrectionExtraction,
@@ -139,6 +140,8 @@ export type BrainCtx = {
   // The money brain (ask.ts): Grok with lookup tools. Absent means
   // questions get the template answers.
   ask?: AskAgent;
+  // A short reason per balance for a long "@Tab breakdown"; null falls back to the full list.
+  summarize?: (input: SummaryInput) => Promise<string[] | null>;
   timing: Timing;
   ledger?: LedgerConfig; // §12.3 links; absent means Tab posts none
   memory: Memory;

@@ -186,7 +186,9 @@ describe("the money brain answers from the database", () => {
     await w.say("Priya", "why");
     await w.say("Jake", "why do i owe joe 14");
     expect(w.said("breakdown_reply")).toHaveLength(2);
-    expect(w.said("breakdown_reply")[0]).toMatch(/pizza \$12\.00: split 4 ways\nthe bistro \$14\.00/i);
+    // "why?" gets #46's short answer; "why do i owe joe" gets that pair's breakdown.
+    expect(w.said("breakdown_reply")[0]).toMatch(/owes joe \$26\.00: the bistro \$14\.00, pizza \$12\.00\nuber to the airport \$6\.00: split 4 ways/i);
+    expect(w.said("breakdown_reply")[1]).toMatch(/jake owes joe \$14\.07\n\+ \$8\.07 jake's share of the bistro/i);
     expect(t.create).not.toHaveBeenCalled();
   });
 
@@ -453,6 +455,17 @@ describe("last resort and the rest of the brain", () => {
     const replies = w.db.outbox().filter((o) => o.target_message_id === m.message_id && o.kind !== "reaction");
     expect(replies).toHaveLength(1);
     expect(replies[0]!.text).toMatch(/change the split/i);
+    expect(t.create).not.toHaveBeenCalled();
+  });
+
+  it("\"@tab breakdown\" (#46) answers from the records, and the last resort stays out: exactly one reply", async () => {
+    const { w, agent } = setup();
+    const t = agent([{ reply: "you owe joe $26.00" }]);
+    const m = await w.say("Priya", "@tab breakdown joe");
+    const replies = w.db.outbox().filter((o) => o.target_message_id === m.message_id && o.kind !== "reaction");
+    expect(replies).toHaveLength(1);
+    expect(replies[0]!.purpose).toBe("breakdown_reply");
+    expect(replies[0]!.text).toMatch(/priya owes joe \$26\.00/i);
     expect(t.create).not.toHaveBeenCalled();
   });
 });

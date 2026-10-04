@@ -252,6 +252,46 @@ const nessie_seed_progress = table(
   }
 );
 
+/**
+ * What the Nessie mirror recorded for each settlement (SPEC 12.2). Nessie keeps
+ * whole dollars only, so the dollars recorded per leg are kept here: the mirror
+ * carries the remainder per account, and its running total never drifts more
+ * than 50 cents from SpacetimeDB. Seeder role writes; nothing depends on it.
+ */
+const nessie_mirror_progress = table(
+  {},
+  {
+    transfer_id: t.string().primaryKey(),
+    status: t.string(), // recorded | failed
+    from_account_id: t.string(),
+    to_account_id: t.string(),
+    amount_cents: t.i64(),
+    withdrawn_dollars: t.i64(),
+    deposited_dollars: t.i64(),
+    withdrawal_id: t.option(t.string()),
+    deposit_id: t.option(t.string()),
+    attempts: t.u32(),
+    error: t.option(t.string()),
+    updated_at: t.timestamp(),
+  }
+);
+
+/**
+ * Each member's balance as Nessie's records show it: the account's opening
+ * balance plus completed deposits minus completed withdrawals. Nessie's sandbox
+ * never updates an account's own balance field, so the mirror computes this
+ * from Nessie and stores it here for the ledger.
+ */
+const nessie_balances = table(
+  { indexes: [{ accessor: 'by_group', algorithm: 'btree', columns: ['group_id'] as const }] },
+  {
+    member_id: t.string().primaryKey(),
+    group_id: t.string(),
+    balance_cents: t.i64(),
+    synced_at: t.timestamp(),
+  }
+);
+
 const spacetime = schema({
   groups,
   members,
@@ -269,6 +309,8 @@ const spacetime = schema({
   ledger_secrets,
   ledger_grants,
   nessie_seed_progress,
+  nessie_mirror_progress,
+  nessie_balances,
 });
 
 export default spacetime;
@@ -730,6 +772,47 @@ export const set_nessie_ids = spacetime.reducer(
   }
 );
 
+const MIRROR_STATUSES = ['recorded', 'failed'] as const;
+
+/** The Nessie mirror's result for one settlement. Seeder role only. */
+export const record_nessie_mirror = spacetime.reducer(
+  {
+    transfer_id: t.string(), status: t.string(), withdrawn_dollars: t.i64(), deposited_dollars: t.i64(),
+    withdrawal_id: t.option(t.string()), deposit_id: t.option(t.string()), attempts: t.u32(), error: t.option(t.string()),
+  },
+  (ctx, input) => {
+    requireRole(ctx, 'seeder');
+    requireValue(input.status, MIRROR_STATUSES, 'mirror status');
+    const transfer = ctx.db.transfers.transfer_id.find(input.transfer_id);
+    if (!transfer || transfer.status !== 'done') throw new Error('Only completed transfers are mirrored');
+    const from = ctx.db.members.member_id.find(`${transfer.group_id}:${transfer.from_phone}`)?.nessie_account_id;
+    const to = ctx.db.members.member_id.find(`${transfer.group_id}:${transfer.to_phone}`)?.nessie_account_id;
+    if (!from || !to) throw new Error('Both people need Nessie accounts');
+    if (input.withdrawn_dollars < 0n || input.deposited_dollars < 0n) throw new Error('Dollars must not be negative');
+    const row = {
+      transfer_id: input.transfer_id, status: input.status, from_account_id: from, to_account_id: to,
+      amount_cents: transfer.amount_cents, withdrawn_dollars: input.withdrawn_dollars, deposited_dollars: input.deposited_dollars,
+      withdrawal_id: input.withdrawal_id, deposit_id: input.deposit_id, attempts: input.attempts, error: input.error,
+      updated_at: ctx.timestamp,
+    };
+    if (ctx.db.nessie_mirror_progress.transfer_id.find(input.transfer_id)) ctx.db.nessie_mirror_progress.transfer_id.update(row);
+    else ctx.db.nessie_mirror_progress.insert(row);
+  }
+);
+
+/** A member's balance as computed from Nessie's records. Seeder role only. */
+export const set_nessie_balance = spacetime.reducer(
+  { member_id: t.string(), balance_cents: t.i64() },
+  (ctx, input) => {
+    requireRole(ctx, 'seeder');
+    const member = ctx.db.members.member_id.find(input.member_id);
+    if (!member) throw new Error('Unknown member');
+    const row = { member_id: input.member_id, group_id: member.group_id, balance_cents: input.balance_cents, synced_at: ctx.timestamp };
+    if (ctx.db.nessie_balances.member_id.find(input.member_id)) ctx.db.nessie_balances.member_id.update(row);
+    else ctx.db.nessie_balances.insert(row);
+  }
+);
+
 export const seed_completed_transfer = spacetime.reducer(
   {
     transfer_id: t.string(), expense_id: t.string(), from_phone: t.string(),
@@ -760,6 +843,8 @@ const ledgerGroupRow = t.row('LedgerGroup', {
 });
 const ledgerMemberRow = t.row('LedgerMember', {
   ledger_member_id: t.string().primaryKey(), ledger_group_id: t.string(), name: t.option(t.string()),
+  // From Nessie's records (nessie_balances); absent until the mirror has synced it.
+  bank_balance_cents: t.option(t.i64()),
 });
 const ledgerExpenseRow = t.row('LedgerExpense', {
   expense_id: t.string().primaryKey(), ledger_group_id: t.string(), payer_ledger_member_id: t.option(t.string()),
@@ -889,6 +974,7 @@ export const ledger_members = spacetime.view(
       if (!group) return [];
       return [...ctx.db.members.by_group.filter(groupId)].map(member => ({
         ledger_member_id: member.ledger_member_id, ledger_group_id: group.ledger_id, name: member.name,
+        bank_balance_cents: ctx.db.nessie_balances.member_id.find(member.member_id)?.balance_cents,
       }));
     })
 );
@@ -1020,6 +1106,9 @@ export const client_outbox = spacetime.view(
 const nessieMirrorRow = t.row('NessieMirrorItem', {
   transfer_id: t.string().primaryKey(), amount_cents: t.i64(), from_account_id: t.string(), to_account_id: t.string(),
   completed_at: t.option(t.timestamp()),
+  // What the mirror already recorded (nessie_mirror_progress), for its rounding carry and retries.
+  from_member_id: t.string(), to_member_id: t.string(), mirror_status: t.option(t.string()),
+  withdrawn_dollars: t.i64(), deposited_dollars: t.i64(), attempts: t.u32(),
 });
 
 /**
@@ -1034,9 +1123,13 @@ export const nessie_mirror = spacetime.view(
       const from = ctx.db.members.member_id.find(`${transfer.group_id}:${transfer.from_phone}`)?.nessie_account_id;
       const to = ctx.db.members.member_id.find(`${transfer.group_id}:${transfer.to_phone}`)?.nessie_account_id;
       if (!from || !to) return [];
+      const progress = ctx.db.nessie_mirror_progress.transfer_id.find(transfer.transfer_id);
       return [{
         transfer_id: transfer.transfer_id, amount_cents: transfer.amount_cents, from_account_id: from, to_account_id: to,
         completed_at: transfer.completed_at,
+        from_member_id: `${transfer.group_id}:${transfer.from_phone}`, to_member_id: `${transfer.group_id}:${transfer.to_phone}`,
+        mirror_status: progress?.status, withdrawn_dollars: progress?.withdrawn_dollars ?? 0n,
+        deposited_dollars: progress?.deposited_dollars ?? 0n, attempts: progress?.attempts ?? 0,
       }];
     });
   }

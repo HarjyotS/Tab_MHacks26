@@ -1,6 +1,6 @@
 // SPEC §7.2 onboarding and names, and §7.8 queries.
 import * as T from "../copy/templates.js";
-import type { Debt, OwedLine } from "../copy/templates.js";
+import type { Debt } from "../copy/templates.js";
 import { listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
 import { ledgerUrl } from "./ledger.js";
@@ -137,7 +137,7 @@ const PERSONAL = /\b(i|me|my|am i)\b/i;
 
 // Why someone's share of an expense is what it is, in words, built only from
 // the database (P6): the split mode, pinned amounts, claims, and extras.
-export function explainShare(ctx: BrainCtx, e: Expense, phone: string): string {
+export function explainShare(ctx: BrainCtx, e: Expense, phone: string, who = "you"): string {
   const shares = ctx.store.shares(e.expense_id).filter((s) => s.status !== "opted_out");
   const members = activeMembers(ctx, e.group_id);
   const nameOf = (p: string) => members.find((m) => m.phone === p)?.name ?? `…${p.slice(-4)}`;
@@ -158,7 +158,7 @@ export function explainShare(ctx: BrainCtx, e: Expense, phone: string): string {
     return `${parts.join(", ") || "even share"}${plus}`;
   }
   const mine = shares.find((s) => s.phone === phone);
-  if (e.split_mode === "custom" && mine?.fixed_cents !== undefined) return "what you had";
+  if (e.split_mode === "custom" && mine?.fixed_cents !== undefined) return `what ${who} had`;
   const pinned = shares.filter((s) => s.fixed_cents !== undefined && s.phone !== phone);
   const after = pinned.length ? ` after ${listJoin(pinned.map((s) => `${nameOf(s.phone)}'s ${money(s.fixed_cents!)}`))}` : "";
   return `split ${shares.length - pinned.length} ways${after}${plus}`;
@@ -166,6 +166,8 @@ export function explainShare(ctx: BrainCtx, e: Expense, phone: string): string {
 
 // Share statuses that count toward a debt (same as `debts`).
 const OWING = ["locked", "approved", "disputed"];
+
+export type OwedLine = { description: string; amount_cents: number; why: string };
 
 // The expenses behind what `phone` owes in a group, newest first: one line
 // per share they still owe, with why it's that amount. `to` narrows it to
@@ -213,22 +215,6 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message) {
         ledger_url: all.length > 6 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
       });
   await say(ctx, { chat: chatOf(m), purpose: "balance_reply", id: `balance_reply:${m.message_id}`, reply_to: m.message_id, text });
-}
-
-export async function handleBreakdown(ctx: BrainCtx, m: Message) {
-  const groups = groupsOf(ctx, m);
-  if (groups.length === 0) return;
-  const lines = groups.flatMap((g) => owedLines(ctx, g, m.sender_phone));
-  await say(ctx, {
-    chat: chatOf(m),
-    purpose: "breakdown_reply",
-    id: `breakdown_reply:${m.message_id}`, reply_to: m.message_id,
-    text: T.breakdownReply({
-      lines,
-      // Past five lines the rest is on the ledger (§7.8).
-      ledger_url: lines.length > 5 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
-    }),
-  });
 }
 
 export async function handleHelp(ctx: BrainCtx, m: Message) {

@@ -13,6 +13,7 @@ import { extractCorrection } from "./extraction/correction.js";
 import { resolveAnswer } from "./extraction/answer.js";
 import { imageAsDataUrl } from "./extraction/image.js";
 import { witLine } from "./copy/wit.js";
+import { summarizeBreakdown } from "./copy/summary.js";
 import { Memory, type BrainCtx } from "./brain/context.js";
 import { processMessage, tick } from "./brain/process.js";
 import { BACKEND_VIEWS, spacetimeStore } from "./store/spacetime.js";
@@ -73,6 +74,7 @@ const ctx: BrainCtx = {
   wit: (w) => witLine(xai, grok.model, w),
   // The money brain: Grok with read-only lookup tools (brain/ask.ts).
   ask: { client: xai, model: grok.model },
+  summarize: (s) => summarizeBreakdown(xai, grok.model, s, (why, reason) => log("summary_dropped", { why, reason })),
   timing: t,
   ledger: ledgerConfig(),
   memory: new Memory(),
