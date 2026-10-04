@@ -405,7 +405,7 @@ async function holdOpen(ctx: BrainCtx, expense: Expense) {
 
 // §7.5: "If an item is named without a price and a receipt exists, match it
 // to a line item." Only one clear match counts; anything else is asked.
-function priceFromReceipt(
+export function priceFromReceipt(
   extracted: Extracted<ExpenseExtraction>,
   items: LineItem[],
 ): Extracted<ExpenseExtraction> {

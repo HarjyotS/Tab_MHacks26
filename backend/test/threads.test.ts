@@ -165,8 +165,9 @@ describe("free-form answers (Grok resolves them)", () => {
     await onboarded(w);
     gateSays(w, { [text]: ["help", 0.7] }); // Jev's live verdict on the reply
     const question = w.db.out.get("settle_mode:trip")!;
-    await sayIn(w, "trip", PEOPLE.Kian, text, { reply_to_id: question.sent_photon_id });
-    expect(w.db.outbox().filter((o) => o.purpose === "help_reply")).toHaveLength(1);
+    const asked = await sayIn(w, "trip", PEOPLE.Kian, text, { reply_to_id: question.sent_photon_id });
+    // It mentions the ledger, so the ledger handler (#32) answers it.
+    expect(w.db.out.has(`ledger_link:${asked.message_id}`)).toBe(true);
     expect(calls).toEqual([]); // a question of their own is never read as an answer
     expect(settleModeReply(w)).toBeUndefined();
     await sayIn(w, "trip", PEOPLE.Kian, "each");

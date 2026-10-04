@@ -5,7 +5,7 @@ import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
-import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, proposeNew } from "./expense.js";
+import { applyAdjustment, groupFor, handleAdjustment, handleExpense, liveShares, priceFromReceipt, proposeNew } from "./expense.js";
 import { extractInput } from "./inputs.js";
 import { askReceipt, claimFollowups, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
@@ -534,10 +534,13 @@ async function answerExpense(ctx: BrainCtx, m: Message, t: Thread, answer: strin
   if (p.kind !== "expense" && p.kind !== "adjustment") return false;
   const text = `${p.text}\n${answer}`;
   const mode = p.kind === "expense" ? "new" : "adjustment";
-  const retry = await ctx.extract.expense(
+  const extracted = await ctx.extract.expense(
     extractInput(ctx, { ...p.source, text }),
     mode,
   );
+  // "it's the cheesecake on the receipt": an item named in the answer is
+  // priced from the receipt, as in the first message (§7.5).
+  const retry = p.kind === "adjustment" ? priceFromReceipt(extracted, ctx.store.lineItems(p.expense_id)) : extracted;
   if (retry.problems.length >= p.problems.length) return false; // didn't help
   closeThread(ctx, chatOf(m), t);
   if (p.kind === "adjustment") {

@@ -287,6 +287,28 @@ describe("an item named without a price (SPEC 7.5)", () => {
     expect(w.db.expense(id)!.status).toBe("proposed");
   });
 
+  it("prices an answer that names the item from the receipt", async () => {
+    const ANSWER = "oh it's the cheesecake on the receipt";
+    const w = world({
+      receipt: { bistro: BISTRO },
+      expense: {
+        [`adjustment|${PIE}`]: adjustment([], [{ name: "Priya", amount_cents: null, item: "key lime pie" }]),
+        [`adjustment|${PIE}\n${ANSWER}`]: adjustment([], [{ name: "Priya", amount_cents: null, item: "cheesecake" }]),
+      },
+    });
+    await w.photo("Priya", "bistro");
+    const id = w.db.expenses()[0]!.expense_id;
+    await w.say("Priya", PIE);
+    expect(w.said("clarifying_question")).toHaveLength(1);
+    await w.say("Priya", ANSWER);
+    expect(w.said("clarifying_question")).toHaveLength(1); // nothing more to ask
+    expect(w.db.shares(id).find((s) => s.phone === PEOPLE.Priya)!.fixed_cents).toBe(799);
+    // Answered, so the split can lock in again on schedule.
+    w.advance(60_000); // past the demo deadline, well inside the question TTL
+    await tick(w.ctx);
+    expect(w.db.expense(id)!.status).toBe("finalized");
+  });
+
   const items = (rows: [string, number, number][]): LineItem[] =>
     rows.map(([description, quantity, amount_cents], i) => ({
       item_id: `i${i}`, expense_id: "e", position: i + 1, description, quantity, amount_cents,
