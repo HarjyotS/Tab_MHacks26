@@ -1,11 +1,13 @@
-// Fractional shares (§7.5). Harjyot's playground: after "alex wasnt there", "priyas fatass had
+// Fractional shares (§7.5) and never asking the same question twice in a
+// row. Harjyot's playground: after "alex wasnt there", "priyas fatass had
 // half of the pizza" got "how much was Priya's half of the pizza?", and
 // every answer got the same question again.
 import { describe, expect, it } from "vitest";
 import { stubClassifier, type Intent } from "@tab/gate";
 import { processMessage } from "../src/brain/process.js";
+import { openThreads } from "../src/brain/threads.js";
 import { fractionIn } from "../src/brain/expense.js";
-import { answer, PEOPLE, world, type Script } from "./support/harness.js";
+import { answer, GROUP, PEOPLE, world, type Script } from "./support/harness.js";
 
 const raw = (cents: number | null, description: string | null, over: object = {}) => ({
   is_expense: true,
@@ -201,5 +203,33 @@ describe('"how much was …?" answered with a fraction', () => {
     await say(SAM, HALF);
     await say(SAM, reply);
     expect(shares()).toEqual({ [SAM]: 1200, [PRIYA]: 2400, [ALEX]: "out", [JORDAN]: 1200 });
+  });
+});
+
+describe("never the same question twice in a row", () => {
+  const FRIES = "jake had the fries";
+  const script: Script = {
+    expense: {
+      "new|got dinner, $60": raw(6000, "Dinner"),
+      [`adjustment|${FRIES}`]: adjust({ fixed: [had("jake", "the fries")] }),
+      [`adjustment|${FRIES}\n${FRIES}`]: adjust({ fixed: [had("jake", "the fries")] }),
+      [`adjustment|${FRIES}\n5`]: adjust({ fixed: [{ name: "jake", amount_cents: 500, item: "the fries", only: false }] }),
+    },
+  };
+
+  it("rephrases once with an example, then stops asking, and still takes the answer", async () => {
+    const w = world(script);
+    w.ctx.classify = async (input) =>
+      input.message.text === FRIES ? { intent: "split_adjustment", confidence: 0.9 } : stubClassifier(input);
+    const dinner = await w.say("Joe", "got dinner, $60");
+    const id = `exp_${dinner.message_id}`;
+    for (let i = 0; i < 4; i++) await w.say("Kian", FRIES);
+    const asked = w.db.outbox().filter((o) => o.purpose === "clarifying_question" && o.expense_id === id).map((o) => o.text!);
+    expect(asked).toEqual(["how much were Jake's fries?", "how much should Jake pay? like $15.00"]);
+    for (let i = 1; i < asked.length; i++) expect(asked[i]).not.toBe(asked[i - 1]);
+    // The question is still open: an amount answers it.
+    expect(openThreads(w.ctx, { group_id: GROUP }).some((t) => t.data.kind === "adjustment")).toBe(true);
+    await w.say("Kian", "5");
+    expect(w.db.shares(id).find((s) => s.phone === PEOPLE.Jake)!.amount_cents).toBe(500);
   });
 });

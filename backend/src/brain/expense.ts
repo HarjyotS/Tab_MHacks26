@@ -47,20 +47,27 @@ async function ask(
   description?: string,
 ) {
   const group_id = groupFor(ctx, m);
-  const q = T.clarifyingQuestion(problems[0]!, {
-    description,
-    people: group_id ? people(ctx, group_id) : [],
-  });
+  const problem = problems[0]!;
+  const who = group_id ? people(ctx, group_id) : [];
+  const q = T.clarifyingQuestion(problem, { description, people: who });
   const id = `clarify:${m.message_id}`;
   const expense_id = "expense_id" in pending ? pending.expense_id : undefined;
-  await tapback(ctx, m, "question");
-  await say(ctx, {
+  // Their share now, as an example amount if Tab has to ask again.
+  const example_cents =
+    problem.kind === "missing_item_price" && expense_id
+      ? ctx.store.shares(expense_id).find((s) => s.phone === problem.phone && s.status !== "opted_out")?.amount_cents
+      : undefined;
+  const sent = await say(ctx, {
     chat: chatOf(m),
     purpose: "clarifying_question",
     id, reply_to: m.message_id,
     text: q,
     expense_id,
+    rephrase: T.rephraseQuestion(problem, { description, people: who, example_cents }),
   });
+  // Asked already (say): nothing goes out, but the open question now
+  // carries this message, so the answer applies to the newest change.
+  if (sent) await tapback(ctx, m, "question");
   // A missing fact (who paid, how much) anyone in the chat may know; a
   // confirmation is only the sender's to give.
   addThread(ctx, chatOf(m), {
@@ -396,14 +403,14 @@ export async function handleAdjustment(
     await holdOpen(ctx, expense);
     const id = `clarify:${m.message_id}`;
     const text = T.pinnedOverTotal({ total_cents: base, name });
-    await tapback(ctx, m, "question", expense.expense_id);
-    await say(ctx, {
+    const sent = await say(ctx, {
       chat: chatOf(m),
       purpose: "clarifying_question",
       id, reply_to: m.message_id,
       text,
       expense_id: expense.expense_id,
     });
+    if (sent) await tapback(ctx, m, "question", expense.expense_id);
     addInvite(ctx, chatOf(m), { id, text, kind: "adjust_open", expense_id: expense.expense_id });
     return;
   }
@@ -417,8 +424,8 @@ export async function handleAdjustment(
       : T.confirmSplitChange({ description: expense.description, ...whoIsLeft(ctx, expense, result, m.sender_phone) });
     await holdOpen(ctx, expense);
     const id = `clarify:${m.message_id}`;
-    await tapback(ctx, m, "question", expense.expense_id);
-    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
+    const sent = await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
+    if (sent) await tapback(ctx, m, "question", expense.expense_id);
     addThread(ctx, chatOf(m), {
       id,
       text: question,

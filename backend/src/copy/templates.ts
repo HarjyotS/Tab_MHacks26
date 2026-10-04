@@ -282,6 +282,30 @@ export function clarifyingQuestion(
   }
 }
 
+// The same question once more, said differently, when the first didn't land
+// (Tab never asks the exact same thing twice in a row). Undefined when there
+// is no better way to put it: Tab just stops asking.
+export function rephraseQuestion(
+  p: Problem,
+  ctx: { description?: string; people: Person[]; example_cents?: number },
+): string | undefined {
+  const thing = ctx.description ? `the ${ctx.description}` : "it";
+  switch (p.kind) {
+    case "missing_item_price": {
+      const person = ctx.people.find((x) => x.phone === p.phone);
+      const example = ctx.example_cents ? ` like ${money(ctx.example_cents)}` : "";
+      return `how much should ${person ? displayName(person) : "they"} pay?${example}`;
+    }
+    case "missing_amount":
+    case "ungrounded_amount":
+      return `what did ${thing} cost all in? just the number works`;
+    case "missing_payer":
+      return `who covered ${thing}? just a name works`;
+    default:
+      return undefined;
+  }
+}
+
 export const duplicateReceiptQuestion = () =>
   "wait is this the same one as earlier?";
 export const foreignCurrencyQuestion = () => "how much was that in dollars?";
