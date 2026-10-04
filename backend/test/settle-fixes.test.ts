@@ -103,7 +103,7 @@ describe("one 👍 pays every share the request covers", () => {
     w.db.completeTransfers();
     await w.wait(1000);
     expect(w.said("payment_receipt")).toEqual([
-      "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries through capital one nessie (sandbox, no real money moved)\nyou're all square",
+      "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries (simulated, no real money moved)\nyou're all square",
     ]);
   });
 });
@@ -118,7 +118,7 @@ describe("every approver gets their own payment DM (SPEC #15)", () => {
       .filter((o) => o.purpose === "payment_receipt")
       .map((o) => [o.to_phone, o.text]);
   const paid = (to: string, label: string) =>
-    `done, you paid ${to} for ${label} through capital one nessie (sandbox, no real money moved)\nyou're all square`;
+    `done, you paid ${to} for ${label} (simulated, no real money moved)\nyou're all square`;
 
   it("per expense: three debtors tap in turn, and each gets one DM with their own amount", async () => {
     const w = world(script);
@@ -160,7 +160,7 @@ describe("every approver gets their own payment DM (SPEC #15)", () => {
       w.db.completeTransfers();
       await w.wait(1000);
     }
-    const both = "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries through capital one nessie (sandbox, no real money moved)\nyou're all square";
+    const both = "done, you paid Joe $10.00 and Priya $15.00 for pizza and groceries (simulated, no real money moved)\nyou're all square";
     expect(receipts(w)).toEqual([
       [PEOPLE.Kian, both],
       [PEOPLE.Jake, both],

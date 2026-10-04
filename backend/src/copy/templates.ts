@@ -180,9 +180,12 @@ export const settleModeQuestion = () =>
 
 // SPEC #15: one DM once all of a person's approved transfers are done.
 // SPEC §7.6: it must say the settlement is simulated.
-export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: number }[]; label?: string; allSquare: boolean }): string {
+// "through capital one nessie" only when the Nessie mirror is recording
+// settlements (NESSIE_RECEIPTS=on); otherwise the plain SPEC 7.6 line.
+export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: number }[]; label?: string; allSquare: boolean; nessie?: boolean }): string {
   const what = listJoin(a.paid.map((p) => `${displayName(p.payee)} ${money(p.amount_cents)}`));
-  return `done, you paid ${what}${a.label ? ` for ${a.label}` : ""} through capital one nessie (sandbox, no real money moved)${a.allSquare ? "\nyou're all square" : ""}`;
+  const how = a.nessie ? " through capital one nessie (sandbox, no real money moved)" : " (simulated, no real money moved)";
+  return `done, you paid ${what}${a.label ? ` for ${a.label}` : ""}${how}${a.allSquare ? "\nyou're all square" : ""}`;
 }
 
 // §7.6: a friendly nudge in the group by name (P5). Money moves only on a
