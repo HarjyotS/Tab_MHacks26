@@ -444,7 +444,7 @@ export function moneyMoving(ctx: BrainCtx, e: Expense): boolean {
 // §7.7, finalized with nothing paid: back to proposed, so the module will
 // recompute again. The old settle request stops covering it, and everyone
 // gets a fresh objection window from the updated proposal.
-async function reopen(ctx: BrainCtx, e: Expense): Promise<Expense> {
+export async function reopen(ctx: BrainCtx, e: Expense): Promise<Expense> {
   await ctx.db.upsert_expense({ ...e, status: "proposed", settle_message_id: undefined, finalized_at: undefined });
   for (const s of ctx.store.shares(e.expense_id).filter((x) => x.status === "locked" || x.status === "disputed"))
     await ctx.db.set_share({ ...s, status: "proposed", responded: false, followup_count: 0 });

@@ -19,6 +19,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
+import { handleCorrection } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import {
   handleBalanceQuery,
@@ -172,8 +173,9 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return handleReceipt(ctx, m);
     case "claim":
       return handleClaim(ctx, m, boundIf("itemizing"));
-    // Not built yet: correction (§7.7). payment_reported is ignored in the
-    // MVP; ignore needs nothing.
+    case "correction":
+      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : undefined);
+    // payment_reported is ignored in the MVP; ignore needs nothing.
     default:
       ctx.log("intent_not_handled", { message_id: m.message_id, intent });
   }

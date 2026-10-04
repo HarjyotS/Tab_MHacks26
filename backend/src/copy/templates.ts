@@ -136,6 +136,10 @@ export function ledgerLink(links: { name?: string; url: string }[]): string {
 
 export const noLedger = () => "The web ledger isn't set up yet.";
 
+// §7.7: a receipt's total comes from its items.
+export const receiptTotalFixed = (description: string) =>
+  `${description} is split by the receipt's items, so I can't change the total. Tell me what's off with an item instead.`;
+
 // One line confirming the settle-mode answer (SPEC #15).
 export const settleModeSet = (mode: "ledger" | "per_expense") =>
   mode === "ledger"

@@ -8,6 +8,7 @@ import { Memory, type BrainCtx } from "../../src/brain/context.js";
 import { processMessage, tick } from "../../src/brain/process.js";
 import { extractExpense } from "../../src/extraction/expense.js";
 import { resolveClaim } from "../../src/extraction/claim.js";
+import { extractCorrection } from "../../src/extraction/correction.js";
 import type { ReceiptRead } from "../../src/extraction/receipt.js";
 import type { ChatClient } from "../../src/grok/structured.js";
 import type { Message } from "../../src/store/types.js";
@@ -45,6 +46,8 @@ export type Script = {
   claim?: Record<string, object>;
   // image_url → what Grok vision reads
   receipt?: Record<string, ReceiptRead>;
+  // correction text → raw correction extraction
+  correction?: Record<string, object>;
 };
 
 export function world(
@@ -78,6 +81,11 @@ export function world(
         const out = script.claim?.[input.message.text ?? ""];
         if (!out) throw missing("claim", input.message.text ?? "");
         return resolveClaim(grok(out), "m", input, items);
+      },
+      correction: (input) => {
+        const out = script.correction?.[input.message.text ?? ""];
+        if (!out) throw missing("correction", input.message.text ?? "");
+        return extractCorrection(grok(out), "m", input);
       },
       receipt: async (url) => {
         const read = script.receipt?.[url];

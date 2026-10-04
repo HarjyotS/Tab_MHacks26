@@ -9,6 +9,7 @@ import { styleFlags, styleFromFlags, type GroupStyle, type StyleFlags } from "..
 import type { WitContext } from "../copy/wit.js";
 import type { ExpenseMode } from "../extraction/expense.js";
 import type {
+  CorrectionExtraction,
   ExpenseExtraction,
   Extracted,
   ExtractInput,
@@ -117,6 +118,7 @@ export type Extractors = {
   // `image_url` comes from the client; main.ts fetches it for Grok.
   receipt: (image_url: string, caption?: string) => Promise<ReceiptRead>;
   claim: (input: ExtractInput, items: ClaimItem[]) => Promise<Extracted<ClaimResolution>>;
+  correction: (input: ExtractInput) => Promise<Extracted<CorrectionExtraction>>;
 };
 
 export type BrainCtx = {
