@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
+  BaseEdge,
   Controls,
+  EdgeLabelRenderer,
   MarkerType,
   ReactFlow,
   type Edge,
+  type EdgeProps,
   type Node,
 } from '@xyflow/react';
+import { centers, extent, layoutEdges, PILL_H, pillWidth, type Person, type Pt } from './graphLayout';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
 import type {
@@ -143,7 +147,7 @@ export function App({ secret }: AppProps) {
             {balances.length === 0 && !pulse ? (
               <div className="empty-state"><span>✓</span><strong>Everyone is square</strong><small>No outstanding balances</small></div>
             ) : (
-              <ReactFlow nodes={graph.nodes} edges={graph.edges} fitView minZoom={0.65} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}>
+              <ReactFlow nodes={graph.nodes} edges={graph.edges} edgeTypes={EDGE_TYPES} fitView fitViewOptions={{ padding: 0.12 }} minZoom={0.65} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}>
                 <Background color="#d7dfda" gap={22} size={1} />
                 <Controls showInteractive={false} />
               </ReactFlow>
@@ -210,30 +214,68 @@ function ExpenseDetail({ expense, shares, items, claims, transfers, names }: {
   );
 }
 
+// A debt arrow drawn from graphLayout's precomputed path, with its amount on
+// a solid pill so lines never run through the text.
+type MoneyEdgeData = { path: string; labelAt: Pt; text: string; settled?: boolean };
+function MoneyEdge({ id, data, markerEnd, style }: EdgeProps) {
+  const d = data as MoneyEdgeData;
+  return (
+    <>
+      <BaseEdge id={id} path={d.path} markerEnd={markerEnd} style={style} />
+      <EdgeLabelRenderer>
+        <div className={`edge-label${d.settled ? ' settled' : ''}`} style={{ transform: `translate(-50%, -50%) translate(${d.labelAt.x}px, ${d.labelAt.y}px)` }}>
+          {d.text}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
+}
+const EDGE_TYPES = { money: MoneyEdge };
+
 function buildGraph(
   members: readonly LedgerMember[], balances: readonly LedgerBalance[], pulse: Pulse | undefined, names: Map<string, string>
 ): { nodes: Node[]; edges: Edge[] } {
-  const radius = 165;
-  const nodes: Node[] = members.map((member, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(members.length, 1) - Math.PI / 2;
+  const spots = centers(members.length).centers;
+  const at = new Map<string, Person>(members.map((member, i) => [member.ledgerMemberId, { center: spots[i]!, name: member.name ?? 'Unnamed' }]));
+  const nodes: Node[] = members.map(member => {
+    const { center: c, name } = at.get(member.ledgerMemberId)!;
+    const w = pillWidth(name);
     return {
       id: member.ledgerMemberId,
-      position: { x: 210 + Math.cos(angle) * radius, y: 180 + Math.sin(angle) * radius },
-      data: { label: <div className="person-node"><span>{(member.name ?? '?').slice(0, 1).toUpperCase()}</span><strong>{member.name ?? 'Unnamed'}</strong></div> },
+      position: { x: c.x - w / 2, y: c.y - PILL_H / 2 },
+      style: { width: w, height: PILL_H },
+      data: { label: <div className="person-node">{name}</div> },
       className: pulse && (pulse.from === member.ledgerMemberId || pulse.to === member.ledgerMemberId) ? 'graph-node pulse' : 'graph-node',
     };
   });
-  const edges: Edge[] = balances.map(balance => ({
-    id: balance.edgeId, source: balance.fromLedgerMemberId, target: balance.toLedgerMemberId,
-    label: `${names.get(balance.fromLedgerMemberId)} owes ${formatMoney(balance.amountCents)}`,
+  const debts = balances
+    .filter(balance => at.has(balance.fromLedgerMemberId) && at.has(balance.toLedgerMemberId))
+    .map(balance => ({
+      id: balance.edgeId, from: at.get(balance.fromLedgerMemberId)!, to: at.get(balance.toLedgerMemberId)!,
+      label: formatMoney(balance.amountCents), balance,
+    }));
+  const settled = pulse && at.has(pulse.from) && at.has(pulse.to)
+    ? [{ id: `settled-${pulse.transferId}`, from: at.get(pulse.from)!, to: at.get(pulse.to)!, label: `Paid ${formatMoney(pulse.amount)}` }]
+    : [];
+  const placed = layoutEdges([...debts, ...settled], [...at.values()]);
+  // Two invisible corners around every arrow and label: fitView only sees nodes.
+  const { min, max } = extent([...at.values()], placed);
+  for (const [id, p] of [['bounds-min', min], ['bounds-max', max]] as const)
+    nodes.push({ id, position: p, data: { label: null }, className: 'bounds-node', style: { width: 1, height: 1 }, selectable: false, focusable: false });
+  const edges: Edge[] = debts.map((debt, i) => ({
+    id: debt.id, type: 'money', source: debt.balance.fromLedgerMemberId, target: debt.balance.toLedgerMemberId,
+    data: { path: placed[i]!.path, labelAt: placed[i]!.label, text: debt.label },
+    ariaLabel: `${names.get(debt.balance.fromLedgerMemberId)} owes ${names.get(debt.balance.toLedgerMemberId)} ${debt.label}`,
     markerEnd: { type: MarkerType.ArrowClosed, color: '#ee5d3f' },
-    style: { stroke: '#ee5d3f', strokeWidth: 2.5 }, labelStyle: { fill: '#28322d', fontWeight: 700, fontSize: 12 },
+    style: { stroke: '#ee5d3f', strokeWidth: 2.5 },
   }));
-  if (pulse) edges.push({
-    id: `settled-${pulse.transferId}`, source: pulse.from, target: pulse.to, animated: true,
-    label: `Settled ${formatMoney(pulse.amount)}`, markerEnd: { type: MarkerType.ArrowClosed, color: '#2ba879' },
-    className: 'settled-edge', style: { stroke: '#2ba879', strokeWidth: 4 },
-    labelStyle: { fill: '#157153', fontWeight: 800, fontSize: 13 },
-  });
+  if (pulse && settled.length) {
+    const p = placed[debts.length]!;
+    edges.push({
+      id: settled[0]!.id, type: 'money', source: pulse.from, target: pulse.to, animated: true, className: 'settled-edge',
+      data: { path: p.path, labelAt: p.label, text: settled[0]!.label, settled: true },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#2ba879' }, style: { stroke: '#2ba879', strokeWidth: 4 },
+    });
+  }
   return { nodes, edges };
 }
