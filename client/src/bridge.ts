@@ -20,6 +20,8 @@ export interface BridgeOptions {
   tabPhone?: string;
   /** How long to wait for a sent message to show up in chat.db. */
   sendMatchTimeoutMs: number;
+  /** Payment confirmations through Photon's hosted line; falls back to the local send on error. */
+  photonDm?: (handle: string, text: string) => Promise<void>;
   /** How long to wait for a tapback to show up on its target in chat.db. */
   tapbackVerifyMs: number;
   /** How long to wait for a photo to finish downloading before giving up on it. */
@@ -251,6 +253,16 @@ export class Bridge {
     const content = this.contentFor(row);
     if (typeof content === "string") return fail(content);
 
+    if (this.opts.photonDm && target.kind === "dm" && row.purpose === "payment_receipt" && "text" in content) {
+      try {
+        await this.opts.photonDm(target.handle, content.text);
+        await this.hub.markOutbox(row.action_id, { status: "sent", sent_at: new Date(this.opts.now()) });
+        this.opts.log(`[bridge] ${row.action_id} sent through Photon`);
+        return;
+      } catch (err) {
+        this.opts.log(`[bridge] ${row.action_id} Photon send failed (${String(err).slice(0, 160)}); sending locally`);
+      }
+    }
     const key = target.kind === "group" ? target.chatGuid : target.handle;
     if ("text" in content && row.target_message_id && (await this.deliverReply(row, key, content.text))) return;
     for (let attempt = 1; ; attempt++) {
