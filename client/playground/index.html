@@ -6,120 +6,171 @@
 <title>Tab Playground</title>
 <style>
   :root {
-    --bg: #f5f5f7; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --line: #e3e3e8;
-    --them: #e9e9eb; --tab: #0a84ff; --tab-text: #fff; --chip: #f0f0f3;
+    --bg: #eceef2; --panel: #ffffff; --text: #1d1d1f; --muted: #6e6e73; --line: #e1e1e6;
+    --screen: #ffffff; --bezel: #d4d6dc; --input: #f2f2f5;
+    --me: #0a84ff; --me-text: #ffffff; --them: #e9e9eb; --them-text: #1d1d1f;
+    --tab: #7b4ddb; --tab-text: #ffffff; --tab-soft: #efe8fc; --chip: #f0f0f3;
     --act: #1a7f37; --clarify: #b26b00; --ignore: #8a8a8e; --err: #c62828;
+    --shadow: 0 8px 28px rgba(0, 0, 0, .10), 0 1px 3px rgba(0, 0, 0, .08);
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #111113; --panel: #1c1c1e; --text: #f2f2f7; --muted: #98989f; --line: #2c2c2e;
-      --them: #2c2c2e; --tab: #0a84ff; --chip: #2a2a2d; --act: #3fb950; --clarify: #e3a008; --ignore: #8e8e93; --err: #ff6b6b; }
+    :root {
+      --bg: #0c0c0e; --panel: #1c1c1e; --text: #f2f2f7; --muted: #98989f; --line: #2c2c2e;
+      --screen: #000000; --bezel: #3a3a3c; --input: #1c1c1e;
+      --them: #26262a; --them-text: #f2f2f7; --tab: #8e63f0; --tab-soft: #2a2140; --chip: #232326;
+      --act: #3fb950; --clarify: #e3a008; --ignore: #8e8e93; --err: #ff6b6b;
+      --shadow: 0 8px 28px rgba(0, 0, 0, .5);
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; font: 14px/1.4 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; background: var(--bg); color: var(--text); }
-  header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
-  header h1 { font-size: 16px; margin: 0 8px 0 0; }
+  html, body { height: 100%; }
+  body { margin: 0; display: flex; flex-direction: column; font: 14px/1.35 -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+  button, input { font: inherit; color: inherit; }
+  button { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 4px 10px; cursor: pointer; }
+  button:hover { border-color: var(--me); }
+  button:disabled { opacity: .5; cursor: default; }
+
+  /* ---- header ---- */
+  header { display: flex; gap: 10px 14px; align-items: center; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+  header h1 { font-size: 16px; margin: 0; }
   header .meta { color: var(--muted); font-size: 12px; }
-  button, select, input[type=text] { font: inherit; color: inherit; }
-  button { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 5px 10px; cursor: pointer; }
-  button:hover { border-color: var(--tab); }
-  button.primary { background: var(--tab); color: #fff; border-color: var(--tab); }
-  main { display: grid; grid-template-columns: minmax(0, 1fr) 380px; height: calc(100vh - 53px); }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; height: auto; } }
-  #chat { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); }
-  #messages { flex: 1; overflow-y: auto; padding: 16px; display: flex; flex-direction: column; gap: 10px; }
-  .row { display: flex; flex-direction: column; max-width: 75%; }
-  .row.them { align-self: flex-start; }
-  .row.tab { align-self: flex-end; align-items: flex-end; }
-  .who { font-size: 11px; color: var(--muted); margin: 0 10px 2px; }
-  .bubble { position: relative; padding: 8px 12px; border-radius: 18px; white-space: pre-wrap; word-wrap: break-word; background: var(--them); }
-  .tab .bubble { background: var(--tab); color: var(--tab-text); }
-  .bubble img { max-width: 220px; border-radius: 10px; display: block; }
-  .quote { font-size: 11px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 6px; margin: 0 10px 3px; max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .reacts { position: absolute; top: -12px; right: -8px; display: flex; gap: 2px; }
-  .tab .reacts { left: -8px; right: auto; }
-  .reacts span { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 0 5px; font-size: 12px; }
-  .actions { display: flex; gap: 4px; margin: 3px 6px 0; opacity: .25; transition: opacity .15s; }
-  .row:hover .actions { opacity: 1; }
-  .actions button { padding: 1px 6px; font-size: 12px; border-radius: 6px; }
-  .chip { display: inline-flex; gap: 6px; align-items: center; margin: 3px 8px 0; font-size: 11px; background: var(--chip); border-radius: 6px; padding: 2px 7px; cursor: pointer; color: var(--muted); }
-  .chip b { color: var(--text); font-weight: 600; }
+  header .spacer { flex: 1; }
+  .legend { font-size: 11px; color: var(--muted); }
   .d-act { color: var(--act) !important; } .d-clarify { color: var(--clarify) !important; } .d-ignore { color: var(--ignore) !important; } .d-error { color: var(--err) !important; }
+
+  /* ---- layout ---- */
+  main { flex: 1; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) 340px; }
+  body.noaside main { grid-template-columns: minmax(0, 1fr); }
+  body.noaside aside { display: none; }
+  #phones { overflow: auto; padding: 14px; container-type: inline-size; }
+  .grid { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); }
+  .phone { height: min(700px, calc(100dvh - 90px)); min-height: 460px; }
+  @container (min-width: 540px) {
+    .grid:not([data-n="1"]) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  }
+  @container (min-width: 1040px) {
+    .grid[data-n="3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid[data-n="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid[data-n="3"], .grid[data-n="4"] { height: 100%; }
+    .grid[data-n="3"] .phone, .grid[data-n="4"] .phone { height: 100%; }
+  }
+  @media (max-width: 760px) {
+    body { height: auto; }
+    main { display: block; }
+    #phones { overflow: visible; padding: 12px 16px; }
+    .phone { height: 640px; }
+  }
+
+  /* ---- phone frame ---- */
+  .phone { display: flex; flex-direction: column; background: var(--screen); border: 6px solid var(--bezel); border-radius: 30px; overflow: hidden; box-shadow: var(--shadow); min-width: 0; }
+  .ph-head { display: flex; align-items: center; gap: 8px; padding: 8px 10px 7px; border-bottom: 1px solid var(--line); background: var(--panel); }
+  .avatar { width: 28px; height: 28px; border-radius: 50%; display: grid; place-items: center; font-weight: 600; font-size: 13px; color: #fff; background: var(--me); flex: none; }
+  .ph-who { min-width: 0; flex: 1; line-height: 1.15; }
+  .ph-who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ph-who span { font-size: 11px; color: var(--muted); }
+  .seg { display: flex; background: var(--chip); border-radius: 8px; padding: 2px; flex: none; }
+  .seg button { border: 0; background: transparent; padding: 3px 8px; font-size: 12px; border-radius: 6px; color: var(--muted); position: relative; }
+  .seg button.on { background: var(--panel); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--err); color: #fff; font-size: 10px; line-height: 16px; text-align: center; }
+  .pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .pane[hidden] { display: none; }
+  .dm-title { font-size: 11px; color: var(--muted); text-align: center; padding: 4px; background: var(--tab-soft); }
+  .msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 10px 8px; display: flex; flex-direction: column; gap: 6px; }
+  .empty { color: var(--muted); font-size: 12px; text-align: center; margin: auto 10px; }
+
+  /* ---- bubbles ---- */
+  .row { display: flex; flex-direction: column; max-width: 86%; align-self: flex-start; align-items: flex-start; }
+  .row.me { align-self: flex-end; align-items: flex-end; }
+  .row.gap { margin-top: 6px; }
+  .who { font-size: 11px; color: var(--muted); margin: 0 10px 1px; }
+  .row.tab .who { color: var(--tab); font-weight: 600; }
+  .bubble { position: relative; padding: 7px 11px; border-radius: 17px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--them); color: var(--them-text); }
+  .row.me .bubble { background: var(--me); color: var(--me-text); }
+  .row.tab .bubble { background: var(--tab); color: var(--tab-text); }
+  .row.reacted { margin-top: 10px; }
+  .bubble img { max-width: 100%; max-height: 220px; border-radius: 10px; display: block; margin-bottom: 2px; }
+  .quote { font-size: 11px; color: var(--muted); border-left: 2px solid var(--line); padding-left: 6px; margin: 0 10px 3px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .reacts { position: absolute; top: -13px; right: -6px; display: flex; gap: 2px; }
+  .row.me .reacts { right: auto; left: -6px; }
+  .reacts span { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 0 5px; font-size: 12px; line-height: 18px; }
+  .actions { display: flex; gap: 3px; margin: 3px 4px 0; opacity: .3; transition: opacity .15s; flex-wrap: wrap; }
+  .row:hover .actions, .row:focus-within .actions { opacity: 1; }
+  .actions button { padding: 0 6px; font-size: 12px; border-radius: 6px; line-height: 20px; }
+  .actions button.on { background: var(--tab-soft); border-color: var(--tab); }
+  .chip { display: inline-flex; flex-wrap: wrap; gap: 0 5px; align-items: center; margin: 3px 6px 0; font-size: 10.5px; background: var(--chip); border: 0; border-radius: 6px; padding: 1px 6px; cursor: pointer; color: var(--muted); text-align: left; }
+  .chip b { color: var(--text); font-weight: 600; }
   .purpose { font-size: 10px; color: var(--muted); margin: 2px 10px 0; text-transform: uppercase; letter-spacing: .04em; }
-  pre.events { font-size: 11px; background: var(--chip); padding: 8px; border-radius: 8px; max-width: 520px; overflow: auto; margin: 4px 8px 0; }
-  #composer { border-top: 1px solid var(--line); background: var(--panel); padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
-  #composer .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  #text { flex: 1; min-width: 180px; padding: 8px 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--bg); }
-  #replying { font-size: 12px; color: var(--muted); }
-  .presets button { font-size: 12px; padding: 3px 8px; }
-  aside { overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; background: var(--panel); }
+  pre.events { font-size: 10.5px; background: var(--chip); padding: 6px 8px; border-radius: 8px; max-width: 100%; max-height: 240px; overflow: auto; margin: 4px 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+  /* ---- composer ---- */
+  .composer { border-top: 1px solid var(--line); background: var(--panel); padding: 6px 8px 8px; display: flex; flex-direction: column; gap: 6px; }
+  .replying { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--muted); background: var(--chip); border-radius: 8px; padding: 3px 4px 3px 8px; }
+  .replying[hidden] { display: none; }
+  .replying span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .replying button { padding: 0 6px; font-size: 11px; }
+  .presets { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+  .presets button { flex: none; font-size: 11px; padding: 2px 7px; border-radius: 12px; color: var(--muted); }
+  .line { display: flex; gap: 6px; align-items: center; }
+  .line input[type=text] { flex: 1; min-width: 0; padding: 7px 12px; border-radius: 18px; border: 1px solid var(--line); background: var(--input); outline: none; }
+  .line input[type=text]:focus { border-color: var(--me); }
+  .cam { cursor: pointer; font-size: 18px; line-height: 1; padding: 2px; }
+  .cam input { display: none; }
+  .send { background: var(--me); color: #fff; border-color: var(--me); border-radius: 16px; padding: 5px 12px; }
+  .pane.dm .send { background: var(--tab); border-color: var(--tab); }
+
+  /* ---- side panel ---- */
+  aside { overflow-y: auto; padding: 12px 14px; display: flex; flex-direction: column; gap: 14px; background: var(--panel); border-left: 1px solid var(--line); }
+  @media (max-width: 760px) { aside { border-left: 0; border-top: 1px solid var(--line); } }
   aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 0 0 6px; }
   .card { border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; margin-bottom: 8px; }
-  .card .title { display: flex; justify-content: space-between; font-weight: 600; }
-  .status { font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 10px; background: var(--chip); color: var(--muted); }
+  .card .title { display: flex; justify-content: space-between; gap: 8px; font-weight: 600; }
+  .status { font-size: 11px; font-weight: 500; padding: 1px 7px; border-radius: 10px; background: var(--chip); color: var(--muted); white-space: nowrap; }
   table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 4px; }
   td { padding: 2px 0; border-top: 1px solid var(--line); }
   td.r { text-align: right; font-variant-numeric: tabular-nums; }
   .muted { color: var(--muted); font-size: 12px; }
   #log div { font: 11px ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); border-top: 1px solid var(--line); padding: 3px 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .legend { font-size: 11px; color: var(--muted); }
 </style>
 </head>
 <body>
 <header>
   <h1>Tab Playground</h1>
   <span class="meta" id="meta">connecting…</span>
-  <span style="flex:1"></span>
+  <span class="spacer"></span>
   <span class="legend">Triggers: <b class="d-act">act</b> ≥ 0.85 · <b class="d-clarify">clarify</b> 0.50–0.85 · <b class="d-ignore">ignore</b> &lt; 0.50</span>
+  <button id="allnames" title="Every phone sends &quot;I'm {name}&quot; to the group">Everyone: I'm {name}</button>
   <button id="newchat">New chat…</button>
+  <button id="toggleaside">Hide ledger</button>
 </header>
 <main>
-  <section id="chat">
-    <div id="messages"></div>
-    <div id="composer">
-      <div class="line presets" id="presets"></div>
-      <div class="line">
-        <select id="sender"></select>
-        <label class="muted"><input type="checkbox" id="dm" /> DM Tab</label>
-        <span id="replying"></span>
-      </div>
-      <div class="line">
-        <input type="text" id="text" placeholder="Type as the selected member…" autocomplete="off" />
-        <label class="muted" title="Send a photo (the text box is the caption)">📷 <input type="file" id="file" accept="image/*" style="width:90px" /></label>
-        <button class="primary" id="send">Send</button>
-      </div>
-    </div>
-  </section>
+  <section id="phones"><div class="grid" id="grid" data-n="0"><div class="empty">Connecting to the playground server…</div></div></section>
   <aside>
     <div><h2>Expenses</h2><div id="ledger" class="muted">None yet. Try "got pizza for everyone, $48".</div></div>
-    <div><h2>Tab's DMs</h2><div id="dms" class="muted">None yet.</div></div>
     <div><h2>Backend log</h2><div id="log" class="muted"></div></div>
   </aside>
 </main>
 <script>
 const $ = (id) => document.getElementById(id);
 const EMOJI = { love: "❤️", like: "👍", dislike: "👎", laugh: "😂", emphasize: "‼️", question: "❓" };
-const money = (c) => "$" + (c / 100).toFixed(2);
-const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[ch]));
-let S = null, replyTo = null, open = new Set(), stick = true;
-
+const TAPBACKS = ["like", "dislike", "question", "love"];
 const PRESETS = [
   "I'm {name}", "got pizza for everyone, $48", "not even, {other} only had a $3 diet coke", "I wasn't there",
-  "Venmo me for the Uber", "23", "what do I owe", "why", "let's settle up", "yes", "lmao", "He owes me 500",
+  "Venmo me for the Uber", "what do I owe", "let's settle up", "lmao", "yes", "why",
 ];
-function renderPresets() {
-  const me = S?.members.find((m) => m.phone === $("sender").value);
-  const other = S?.members.find((m) => m.phone !== $("sender").value);
-  $("presets").innerHTML = '<span class="muted">Try:</span> ' + PRESETS.map((p) =>
-    `<button data-p="${esc(p)}">${esc(p.replace("{name}", me?.name ?? "Alex").replace("{other}", other?.name ?? "Sam"))}</button>`).join("");
-}
-$("presets").addEventListener("click", (e) => {
-  const p = e.target.dataset?.p; if (!p) return;
-  const me = S?.members.find((m) => m.phone === $("sender").value);
-  const other = S?.members.find((m) => m.phone !== $("sender").value);
-  $("text").value = p.replace("{name}", me?.name ?? "Alex").replace("{other}", other?.name ?? "Sam");
-  $("text").focus();
-});
+const DM_PRESETS = ["what do I owe", "who owes me", "why", "thanks"];
+const money = (c) => "$" + (c / 100).toFixed(2);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
+const store = {
+  get(k) { try { return localStorage.getItem(k); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, v); } catch {} },
+};
 
+let S = null;          // latest /state
+let shellKey = "";     // groupId + member phones the phone shells were built for
+const phones = new Map(); // phone -> per-phone UI state
+const open = new Set();   // `${phone}|${itemId}` whose events JSON is expanded
+
+// ---------- helpers ----------
 function decisionOf(item) {
   const ev = item.events?.find((e) => e.event === "classified");
   if (ev?.decision) return ev.decision;
@@ -127,88 +178,270 @@ function decisionOf(item) {
   if (item.confidence == null) return null;
   return item.confidence >= 0.85 ? "act" : item.confidence >= 0.5 ? "clarify" : "ignore";
 }
+const memberOf = (phone) => S?.members.find((m) => m.phone === phone);
+function otherOf(phone) {
+  const ms = S?.members ?? [], i = ms.findIndex((m) => m.phone === phone);
+  return ms.length > 1 ? ms[(i + 1) % ms.length] : null;
+}
+const fill = (p, phone) => p.replaceAll("{name}", memberOf(phone)?.name ?? "Alex").replaceAll("{other}", otherOf(phone)?.name ?? "Sam");
+function isDmWith(item, phone) {
+  if (!item.dm) return false;
+  if (item.from === phone) return true;
+  if (item.from !== "tab") return false;
+  if (item.to) return item.to === phone;
+  return item.name === `Tab → ${memberOf(phone)?.name} (DM)`; // older server without `to`
+}
+const snippet = (i) => i ? `${i.from === "tab" ? "Tab" : (memberOf(i.from)?.name ?? i.name)}: ${i.text || (i.kind === "image" ? "[photo]" : "")}` : "";
+
+// ---------- phone shells (built once per chat; never re-rendered by polling) ----------
+function buildShells() {
+  const grid = $("grid"), ms = S.members.slice(0, 4);
+  grid.dataset.n = String(ms.length);
+  phones.clear(); open.clear();
+  grid.innerHTML = ms.length ? "" : '<div class="empty">No members in this chat.</div>';
+  for (const m of ms) {
+    const el = document.createElement("div");
+    el.className = "phone";
+    el.innerHTML = `
+      <div class="ph-head">
+        <div class="avatar">${esc((m.name || "?").slice(0, 1).toUpperCase())}</div>
+        <div class="ph-who"><b class="nm">${esc(m.name)}</b><span>··${esc(m.phone.slice(-4))}</span></div>
+        <div class="seg"><button class="on" data-view="group">Group</button><button data-view="dm">DM Tab<span class="badge" hidden></span></button></div>
+      </div>
+      ${["group", "dm"].map((v) => `
+      <div class="pane ${v}" data-pane="${v}" ${v === "dm" ? "hidden" : ""}>
+        ${v === "dm" ? '<div class="dm-title">Private messages with Tab</div>' : ""}
+        <div class="msgs"></div>
+        <div class="composer">
+          <div class="replying" hidden><span></span><button data-cancel>✕ cancel</button></div>
+          <div class="presets">${(v === "group" ? PRESETS : DM_PRESETS).map((p) => `<button data-preset="${esc(p)}">${esc(fill(p, m.phone))}</button>`).join("")}</div>
+          <div class="line">
+            <input type="text" autocomplete="off" placeholder="${v === "group" ? `Text as ${esc(m.name)}` : "DM Tab privately"}" />
+            ${v === "group" ? '<label class="cam" title="Send a photo (the text box becomes the caption)">📷<input type="file" accept="image/*" /></label>' : ""}
+            <button class="send">Send</button>
+          </div>
+        </div>
+      </div>`).join("")}`;
+    grid.appendChild(el);
+    const ui = { phone: m.phone, el, view: "group", dmSeen: 0, panes: {} };
+    for (const v of ["group", "dm"]) {
+      const pane = el.querySelector(`[data-pane="${v}"]`);
+      ui.panes[v] = { el: pane, msgs: pane.querySelector(".msgs"), input: pane.querySelector("input[type=text]"),
+        file: pane.querySelector("input[type=file]"), replyBar: pane.querySelector(".replying"), sendBtn: pane.querySelector(".send"),
+        replyTo: null, html: "" };
+    }
+    for (const v of ["group", "dm"]) {
+      // A photo that finishes loading after render shouldn't leave a pinned list short of the bottom.
+      const p = ui.panes[v];
+      p.msgs.addEventListener("load", () => { if (p.pinned) p.msgs.scrollTop = p.msgs.scrollHeight; }, true);
+      p.msgs.addEventListener("scroll", () => { p.pinned = p.msgs.scrollHeight - p.msgs.scrollTop - p.msgs.clientHeight < 40; });
+    }
+    wire(ui);
+    phones.set(m.phone, ui);
+  }
+}
+
+function setReply(ui, v, id) {
+  const p = ui.panes[v];
+  p.replyTo = id;
+  p.replyBar.hidden = !id;
+  if (id) {
+    const item = S.items.find((i) => i.id === id);
+    p.replyBar.querySelector("span").textContent = `↪ Replying to ${snippet(item) || "message"}`;
+    p.input.focus();
+  }
+}
+
+function wire(ui) {
+  ui.el.addEventListener("click", async (e) => {
+    const t = e.target.closest("[data-view],[data-toggle],[data-reply],[data-react],[data-cancel],[data-preset],.send");
+    if (!t) return;
+    const paneEl = t.closest("[data-pane]"), v = paneEl?.dataset.pane;
+    if (t.dataset.view) {
+      ui.view = t.dataset.view;
+      ui.el.querySelectorAll("[data-view]").forEach((b) => b.classList.toggle("on", b.dataset.view === ui.view));
+      for (const k of ["group", "dm"]) ui.panes[k].el.hidden = k !== ui.view;
+      renderPhone(ui, true);
+      ui.panes[ui.view].input.focus();
+    } else if (t.dataset.toggle) {
+      const k = `${ui.phone}|${t.dataset.toggle}`;
+      open.has(k) ? open.delete(k) : open.add(k);
+      renderPhone(ui);
+    } else if (t.dataset.reply) {
+      setReply(ui, v, t.dataset.reply);
+    } else if (t.hasAttribute("data-cancel")) {
+      setReply(ui, v, null);
+    } else if (t.dataset.react) {
+      t.disabled = true;
+      await post("/react", { phone: ui.phone, target: t.dataset.target, reaction: t.dataset.react });
+      poll();
+    } else if (t.dataset.preset) {
+      const inp = ui.panes[v].input;
+      inp.value = fill(t.dataset.preset, ui.phone);
+      inp.focus();
+    } else if (t.classList.contains("send")) {
+      send(ui, v);
+    }
+  });
+  for (const v of ["group", "dm"]) {
+    const p = ui.panes[v];
+    p.input.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); send(ui, v); } });
+    if (p.file) p.file.addEventListener("change", () => sendImage(ui));
+  }
+}
+
+// ---------- sending ----------
+async function post(path, body) {
+  try {
+    const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
+    const j = await r.json();
+    if (j.error) alert(j.error);
+    return j;
+  } catch (err) { alert(String(err)); return {}; }
+}
+async function send(ui, v) {
+  const p = ui.panes[v], text = p.input.value.trim();
+  if (!text || p.busy) return;
+  p.busy = true; p.sendBtn.disabled = true;
+  try {
+    await post("/send", { phone: ui.phone, text, reply_to: p.replyTo || undefined, dm: v === "dm" });
+    p.input.value = ""; setReply(ui, v, null); p.stickNext = true;
+  } finally { p.busy = false; p.sendBtn.disabled = false; p.input.focus(); }
+  poll();
+}
+async function sendImage(ui) {
+  const p = ui.panes.group, file = p.file.files[0];
+  if (!file) return;
+  const f = new FormData();
+  f.append("file", file); f.append("phone", ui.phone); f.append("caption", p.input.value.trim());
+  try {
+    const j = await (await fetch("/image", { method: "POST", body: f })).json();
+    if (j.error) alert(j.error); else { p.input.value = ""; p.stickNext = true; }
+  } catch (err) { alert(String(err)); }
+  p.file.value = "";
+  poll();
+}
+
+// ---------- rendering message lists ----------
+function bubbleHtml(i, ui, ctx) {
+  const tab = i.from === "tab", me = i.from === ui.phone;
+  const cls = tab ? "tab" : me ? "me" : "them";
+  const prev = ctx.prev;
+  const newRun = !prev || prev.from !== i.from;
+  const who = !me && newRun ? `<div class="who">${tab ? "Tab" : esc(memberOf(i.from)?.name ?? i.name)}</div>` : "";
+  const target = i.reply_to ? ctx.byId[i.reply_to] : null;
+  const quote = target ? `<div class="quote">↪ ${esc(snippet(target))}</div>` : "";
+  const rs = ctx.reactsOn[i.id] ?? [];
+  const groups = {};
+  for (const r of rs) (groups[r.reaction] ??= []).push(r.from === "tab" ? "Tab" : (memberOf(r.from)?.name ?? r.name));
+  const rx = Object.entries(groups).map(([k, names]) => `<span title="${esc(names.join(", "))}">${EMOJI[k] ?? esc(k)}${names.length > 1 ? " " + names.length : ""}</span>`).join("");
+  const body = i.kind === "image" ? `<img src="${esc(i.image_url)}" alt="photo" />${i.text ? esc(i.text) : ""}` : esc(i.text);
+
+  let extra = "";
+  if (!tab) {
+    let chip;
+    if (i.status === "new" || i.status === "processing") chip = `<span class="chip">⏳ ${esc(i.status)}…</span>`;
+    else {
+      const ev = i.events?.find((e) => e.event === "classified");
+      const intent = ev?.intent ?? i.intent, conf = ev?.confidence ?? i.confidence, d = decisionOf(i);
+      chip = `<button class="chip" data-toggle="${esc(i.id)}" title="click for the backend's events"><b>${esc(intent ?? "—")}</b>${conf != null ? `<span>${Number(conf).toFixed(2)}</span>` : ""}${d ? `<b class="d-${esc(d)}">${esc(d)}</b>` : ""}${i.textCleared ? "<span>· text cleared after handling</span>" : ""}${i.error ? `<b class="d-error">${esc(i.error)}</b>` : ""}</button>`;
+    }
+    const k = `${ui.phone}|${i.id}`;
+    extra = chip + (open.has(k) ? `<pre class="events">${esc(JSON.stringify(i.events?.length ? i.events : { intent: i.intent, confidence: i.confidence, status: i.status, error: i.error }, null, 2))}</pre>` : "");
+  } else if (i.purpose || (i.status && i.status !== "sent")) {
+    extra = `<div class="purpose">${esc(i.purpose ?? "")}${i.status && i.status !== "sent" ? " · " + esc(i.status) : ""}${i.error ? " · " + esc(i.error) : ""}</div>`;
+  }
+  const mine = new Set(rs.filter((r) => r.from === ui.phone).map((r) => r.reaction));
+  const taps = tab && !i.dm ? TAPBACKS.map((r) => `<button class="${mine.has(r) ? "on" : ""}" data-react="${r}" data-target="${esc(i.id)}" title="${esc(memberOf(ui.phone)?.name)} reacts ${r}">${EMOJI[r]}</button>`).join("") : "";
+  const actions = `<div class="actions"><button data-reply="${esc(i.id)}" title="Reply in thread">↩ reply</button>${taps}</div>`;
+  return `<div class="row ${cls}${newRun && prev ? " gap" : ""}${rx ? " reacted" : ""}">${who}${quote}<div class="bubble">${rx ? `<div class="reacts">${rx}</div>` : ""}${body}</div>${extra}${actions}</div>`;
+}
+
+function renderPhone(ui, forceBottom = false) {
+  if (!S) return;
+  const ctx = renderPhone.ctx;
+  // DM badge: Tab DMs this member hasn't looked at yet.
+  const dmItems = S.items.filter((i) => i.kind !== "reaction" && isDmWith(i, ui.phone));
+  const tabDms = dmItems.filter((i) => i.from === "tab").length;
+  if (ui.view === "dm") ui.dmSeen = tabDms;
+  const badge = ui.el.querySelector(".badge"), unseen = tabDms - ui.dmSeen;
+  badge.hidden = unseen <= 0; badge.textContent = String(unseen);
+  const nm = ui.el.querySelector(".nm"), name = memberOf(ui.phone)?.name ?? "";
+  if (nm.textContent !== name) nm.textContent = name;
+
+  const v = ui.view, p = ui.panes[v];
+  const list = v === "group" ? S.items.filter((i) => i.kind !== "reaction" && !i.dm) : dmItems;
+  let prev = null;
+  const html = list.map((i) => { const h = bubbleHtml(i, ui, { ...ctx, prev }); prev = i; return h; }).join("")
+    || `<div class="empty">${v === "group" ? "Starting a chat… Tab should post its intro and ask for names." : "No DMs with Tab yet."}</div>`;
+  const box = p.msgs;
+  const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+  if (html !== p.html) {
+    const top = box.scrollTop;
+    box.innerHTML = html; p.html = html;
+    box.scrollTop = top;
+  }
+  if (forceBottom || atBottom || p.stickNext) { box.scrollTop = box.scrollHeight; p.stickNext = false; p.pinned = true; }
+}
 
 function render() {
   if (!S) return;
   $("meta").textContent = `chat ${S.groupId} · onboarding ${S.onboarding ?? "…"} · ${S.backendLog ? "backend log on" : "no backend log (decisions estimated)"}`;
-  const sel = $("sender"), cur = sel.value;
-  sel.innerHTML = S.members.map((m) => `<option value="${m.phone}">${esc(m.name)} (${m.phone.slice(-4)})</option>`).join("");
-  if (cur && S.members.some((m) => m.phone === cur)) sel.value = cur;
+  const key = S.groupId + "|" + S.members.slice(0, 4).map((m) => m.phone).join(",");
+  const fresh = key !== shellKey;
+  if (fresh) { shellKey = key; buildShells(); }
 
   const byId = Object.fromEntries(S.items.map((i) => [i.id, i]));
   const reactsOn = {};
   for (const i of S.items) if (i.kind === "reaction" && i.reply_to) (reactsOn[i.reply_to] ??= []).push(i);
-  const box = $("messages");
-  stick = box.scrollHeight - box.scrollTop - box.clientHeight < 60;
-  box.innerHTML = S.items.filter((i) => i.kind !== "reaction" && !i.dm).map((i) => {
-    const tab = i.from === "tab";
-    const q = i.reply_to && byId[i.reply_to] ? `<div class="quote">↪ ${esc(byId[i.reply_to].name)}: ${esc(byId[i.reply_to].text || "[photo]")}</div>` : "";
-    const rx = (reactsOn[i.id] ?? []).map((r) => `<span title="${esc(r.name)}">${EMOJI[r.reaction] ?? r.reaction}</span>`).join("");
-    const body = i.kind === "image" ? `<img src="${esc(i.image_url)}" alt="photo" />${i.text ? esc(i.text) : ""}` : esc(i.text);
-    let extra = "";
-    if (!tab) {
-      const d = decisionOf(i);
-      const chip = i.status === "new" || i.status === "processing" ? `<span class="chip">⏳ ${i.status}…</span>`
-        : (() => {
-            const ev = i.events?.find((e) => e.event === "classified");
-            const intent = ev?.intent ?? i.intent, conf = ev?.confidence ?? i.confidence;
-            return `<span class="chip" data-toggle="${esc(i.id)}" title="click for the backend's events"><b>${esc(intent ?? "—")}</b> ${conf != null ? Number(conf).toFixed(2) : ""} <b class="d-${d}">${d ?? ""}</b>${i.textCleared ? " · text cleared after handling" : ""}${i.error ? ` <b class="d-error">${esc(i.error)}</b>` : ""}</span>`;
-          })();
-      extra = chip + (open.has(i.id) ? `<pre class="events">${esc(JSON.stringify(i.events.length ? i.events : { intent: i.intent, confidence: i.confidence, status: i.status }, null, 2))}</pre>` : "");
-    } else {
-      extra = `<div class="purpose">${esc(i.purpose)}${i.status !== "sent" ? " · " + esc(i.status) : ""}</div>`;
-    }
-    const actions = `<div class="actions"><button data-reply="${esc(i.id)}">↩ reply</button>${tab ? ["like", "dislike", "question", "love"].map((r) => `<button data-react="${r}" data-target="${esc(i.id)}">${EMOJI[r]}</button>`).join("") : ""}</div>`;
-    return `<div class="row ${tab ? "tab" : "them"}"><div class="who">${esc(i.name)}</div>${q}<div class="bubble">${rx ? `<div class="reacts">${rx}</div>` : ""}${body}</div>${extra}${actions}</div>`;
-  }).join("") || '<div class="muted">Starting a chat… Tab should post its intro and ask for names.</div>';
-  if (stick) box.scrollTop = box.scrollHeight;
+  renderPhone.ctx = { byId, reactsOn };
+  for (const ui of phones.values()) renderPhone(ui, fresh);
+  renderSide();
+}
 
-  const dms = S.items.filter((i) => i.dm && i.kind !== "reaction");
-  $("dms").innerHTML = dms.length ? dms.map((i) => `<div class="card"><div class="muted">${esc(i.name)}${i.purpose ? " · " + esc(i.purpose) : ""}</div>${esc(i.text)}${i.from !== "tab" && i.intent ? `<div class="muted">${esc(i.intent)} ${i.confidence?.toFixed(2) ?? ""}</div>` : ""}</div>`).join("") : "None yet.";
-
+function renderSide() {
   $("ledger").innerHTML = S.expenses.length ? S.expenses.map((e) => `<div class="card">
       <div class="title"><span>${esc(e.description)} · ${money(e.total)}</span><span class="status">${esc(e.status)}</span></div>
       <div class="muted">paid by ${esc(e.payer ?? "?")} · ${esc(e.mode)}</div>
       <table>${e.shares.map((s) => `<tr><td>${esc(s.name)}${s.role === "payer" ? " (payer)" : ""}</td><td class="muted">${esc(s.status)}</td><td class="r">${money(s.amount)}</td></tr>`).join("")}</table>
-      ${e.items.length ? `<table>${e.items.map((it) => `<tr><td>${it.n}. ${esc(it.description)}</td><td class="muted">${esc(it.claimedBy.join(", ") || "unclaimed")}</td><td class="r">${money(it.amount)}</td></tr>`).join("")}</table>` : ""}
+      ${e.items.length ? `<table>${e.items.map((it) => `<tr><td>${esc(it.n)}. ${esc(it.description)}</td><td class="muted">${esc(it.claimedBy.join(", ") || "unclaimed")}</td><td class="r">${money(it.amount)}</td></tr>`).join("")}</table>` : ""}
       ${e.transfers.length ? `<div class="muted">${e.transfers.map((t) => `${esc(t.from)} → ${esc(t.to)} ${money(t.amount)} (${esc(t.status)})`).join("<br>")}</div>` : ""}
     </div>`).join("") : 'None yet. Try "got pizza for everyone, $48".';
-
   $("log").innerHTML = S.log.slice().reverse().map((e) => `<div title="${esc(JSON.stringify(e))}">${esc((e.at ?? "").slice(11, 19))} ${esc(e.event)} ${esc(e.intent ?? "")} ${e.decision ? esc(e.decision) : ""} ${e.error ? esc(e.error) : ""}</div>`).join("") || (S.backendLog ? "No events yet." : "Start the playground with PLAYGROUND_BACKEND_LOG to see backend events.");
-  renderPresets();
 }
 
-$("messages").addEventListener("click", async (e) => {
-  const t = e.target.closest("[data-toggle],[data-reply],[data-react]"); if (!t) return;
-  if (t.dataset.toggle) { open.has(t.dataset.toggle) ? open.delete(t.dataset.toggle) : open.add(t.dataset.toggle); render(); }
-  if (t.dataset.reply) { replyTo = t.dataset.reply; $("replying").innerHTML = `↪ replying in thread <button id="cancelreply">cancel</button>`; $("text").focus(); }
-  if (t.dataset.react) { await post("/react", { phone: $("sender").value, target: t.dataset.target, reaction: t.dataset.react }); poll(); }
-});
-document.addEventListener("click", (e) => { if (e.target.id === "cancelreply") { replyTo = null; $("replying").textContent = ""; } });
-
-async function post(path, body) {
-  const r = await fetch(path, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-  const j = await r.json(); if (j.error) alert(j.error); return j;
-}
-async function send() {
-  const text = $("text").value.trim(), file = $("file").files[0];
-  if (!text && !file) return;
-  if (file) {
-    const f = new FormData(); f.append("file", file); f.append("phone", $("sender").value); f.append("caption", text);
-    await fetch("/image", { method: "POST", body: f }); $("file").value = "";
-  } else {
-    await post("/send", { phone: $("sender").value, text, reply_to: replyTo, dm: $("dm").checked });
-  }
-  $("text").value = ""; replyTo = null; $("replying").textContent = ""; poll();
-}
-$("send").onclick = send;
-$("text").addEventListener("keydown", (e) => { if (e.key === "Enter") send(); });
+// ---------- header controls ----------
 $("newchat").onclick = async () => {
-  const names = prompt("Members for the new chat (comma-separated):", "Alex, Sam, Priya");
+  const names = prompt("Members for the new chat (comma-separated):", "Alex, Sam, Priya, Jordan");
   if (names == null) return;
-  S = await post("/new-chat", { names: names.split(",") }); open.clear(); render();
+  const j = await post("/new-chat", { names: names.split(",") });
+  if (j && j.members) { S = j; render(); }
 };
-async function poll() { try { S = await (await fetch("/state")).json(); render(); } catch { $("meta").textContent = "playground server not reachable"; } }
+$("allnames").onclick = async () => {
+  if (!S) return;
+  const btn = $("allnames"); btn.disabled = true;
+  try { for (const m of S.members.slice(0, 4)) { await post("/send", { phone: m.phone, text: `I'm ${m.name}` }); } }
+  finally { btn.disabled = false; }
+  for (const ui of phones.values()) ui.panes.group.stickNext = true;
+  poll();
+};
+function setAside(hidden) {
+  document.body.classList.toggle("noaside", hidden);
+  $("toggleaside").textContent = hidden ? "Show ledger" : "Hide ledger";
+  store.set("tab-playground-aside", hidden ? "hidden" : "shown");
+}
+$("toggleaside").onclick = () => setAside(!document.body.classList.contains("noaside"));
+setAside(store.get("tab-playground-aside") === "hidden");
+
+// ---------- polling ----------
+let polling = false;
+async function poll() {
+  if (polling) return;
+  polling = true;
+  try { S = await (await fetch("/state")).json(); render(); }
+  catch { $("meta").textContent = "playground server not reachable"; }
+  finally { polling = false; }
+}
 poll(); setInterval(poll, 1000);
 </script>
 </body>

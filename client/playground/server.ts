@@ -48,6 +48,7 @@ const DEFAULT_MEMBERS: Member[] = [
   { phone: "+15555550111", name: "Alex" },
   { phone: "+15555550112", name: "Sam" },
   { phone: "+15555550113", name: "Priya" },
+  { phone: "+15555550114", name: "Jordan" },
 ];
 let members: Member[] = [];
 let groupId = "";
@@ -84,13 +85,17 @@ async function newChat(list: Member[]) {
 await newChat(DEFAULT_MEMBERS);
 
 // Deliver Tab's outbox the way the bridge would, recording a fake message id.
+// Only rows for the simulated chat or its members: a real bridge sharing this database
+// must never have its messages swallowed here.
 const delivering = new Set<string>();
+const ours = (r: { groupId?: string; toPhone?: string }) =>
+  (!!r.groupId && r.groupId === groupId) || (!!r.toPhone && members.some((m) => m.phone === r.toPhone));
 setInterval(async () => {
   for (const r of conn.db.clientOutbox.iter()) {
-    if (r.status !== "queued" || r.sendAfter.toDate() > new Date() || delivering.has(r.actionId)) continue;
+    if (r.status !== "queued" || r.sendAfter.toDate() > new Date() || delivering.has(r.actionId) || !ours(r)) continue;
     delivering.add(r.actionId);
     await conn.reducers.markOutbox({ actionId: r.actionId, status: "sent", sentPhotonId: `tab-${r.actionId}`, error: undefined })
-      .catch((e: unknown) => console.error("mark_outbox", e));
+      .catch((e: unknown) => { delivering.delete(r.actionId); console.error("mark_outbox", e); });
   }
 }, 300);
 
@@ -133,7 +138,7 @@ function state() {
     })),
     ...out.filter((o) => o.kind !== "contact_card").map((o) => ({
       id: o.sentPhotonId ?? `tab-${o.actionId}`, from: "tab", name: o.toPhone ? `Tab → ${nameOf(o.toPhone)} (DM)` : "Tab",
-      dm: !!o.toPhone, kind: o.kind === "reaction" ? "reaction" : "text", text: o.text ?? "", reaction: o.reaction,
+      dm: !!o.toPhone, to: o.toPhone, kind: o.kind === "reaction" ? "reaction" : "text", text: o.text ?? "", reaction: o.reaction,
       reply_to: o.targetMessageId, at: o.createdAt.toDate().getTime(), purpose: o.purpose, status: o.status, error: o.error,
     })),
   ].sort((a, b) => a.at - b.at);
@@ -157,10 +162,15 @@ function state() {
 }
 
 // ---- http ------------------------------------------------------------------------------
+// Local only: these calls run as the module owner. Bind to loopback and refuse cross-site POSTs.
+const ALLOWED_ORIGINS = new Set([`http://localhost:${PORT}`, `http://127.0.0.1:${PORT}`]);
 Bun.serve({
+  hostname: "127.0.0.1",
   port: PORT,
   async fetch(req) {
     const url = new URL(req.url);
+    const origin = req.headers.get("origin");
+    if (req.method === "POST" && origin && !ALLOWED_ORIGINS.has(origin)) return new Response("forbidden origin", { status: 403 });
     try {
       if (url.pathname === "/") return new Response(Bun.file(join(import.meta.dir, "index.html")));
       if (url.pathname === "/state") return Response.json(state());
@@ -200,4 +210,4 @@ Bun.serve({
     }
   },
 });
-console.log(`Tab playground on http://localhost:${PORT}  (database ${DB} at ${HOST}${BACKEND_LOG ? `, backend log ${BACKEND_LOG}` : ", no backend log"})`);
+console.log(`Tab playground on http://127.0.0.1:${PORT}  (database ${DB} at ${HOST}${BACKEND_LOG ? `, backend log ${BACKEND_LOG}` : ", no backend log"})`);
