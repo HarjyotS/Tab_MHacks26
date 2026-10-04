@@ -24,9 +24,9 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
   dispute:
     'The expense is already final and a settle request is open for the sender, and they refuse to pay or say their amount is wrong ("no", "I didn\'t get fries").',
   balance_query: 'The sender asks who owes what, or how much they owe or are owed.',
-  breakdown_request: 'The sender asks which expenses make up a balance, or where an amount came from.',
+  breakdown_request: 'The sender asks which expenses make up a balance, where an amount came from, or why they owe someone a specific amount.',
   money_question:
-    'The sender asks a question about the group\'s money that is not just who owes what: what something cost, what was on a receipt, who paid for something, how a split was worked out, how much was spent in total or on something, what is left to settle or who has not paid yet, or whether a payment went through ("what was on the bistro receipt?", "how much did we spend on food?", "who paid for the uber?"). It asks; it does not report a new purchase.',
+    'The sender asks Tab to look something up in the group\'s past expenses that is not a balance or where a balance came from: what was on a receipt, who paid for a purchase, how a past split was worked out, how much the group spent on something, who has not paid a settle request yet, or whether a payment went through ("what was on the bistro receipt?", "how much did we spend on food?", "who paid for the uber?"). It is always a question from the sender, never an answer to Tab\'s own question and never an amount on its own.',
   payment_reported:
     'The sender says they already sent money to someone outside Tab, including payment-app verbs ("sent you 20 on venmo", "venmo\'d you", "zelled you for the uber", "paid Priya back on cashapp"). Asking to be paid is not this.',
   settle_up:
@@ -38,6 +38,9 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
   ignore:
     'Anything else: chatter, jokes, reactions, plans, claims that someone owes money with no purchase named, or instructions aimed at Tab that are not about a real shared purchase.',
 };
+
+/** Questions about the group's money; the backend sends all of them to the money brain. */
+export const QUESTION_INTENTS: readonly Intent[] = ['balance_query', 'breakdown_request', 'money_question'];
 
 const INSTRUCTIONS =
   'You are reading one new message in a group chat that has Tab, a bot that tracks shared costs. ' +
@@ -133,6 +136,14 @@ export function jevClassifier(options: {
     const answer = ((await response.json()) as JevResponse).answers?.intent;
     const choice = answer?.choice as Intent | undefined;
     if (!choice || !(INTENTS as readonly string[]).includes(choice)) throw new Error(`Jev returned no usable intent`);
-    return { intent: choice, confidence: answer?.probabilities?.[choice] ?? answer?.confidence ?? 0 };
+    const p = answer?.probabilities;
+    // The backend answers every kind of question the same way (the money
+    // brain), so "is this a question about our money?" is what the act bar
+    // measures: their probabilities add up.
+    const confidence =
+      p && QUESTION_INTENTS.includes(choice)
+        ? Math.min(1, QUESTION_INTENTS.reduce((sum, i) => sum + (p[i] ?? 0), 0))
+        : (p?.[choice] ?? answer?.confidence ?? 0);
+    return { intent: choice, confidence };
   };
 }

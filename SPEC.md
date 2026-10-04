@@ -55,7 +55,7 @@ These settle most design arguments. A feature that breaks one needs a very good 
 | P3 | Never guess silently about money     | When unsure, Tab asks. One wrong balance destroys trust faster than any amount of friction.                                          |
 | P4 | Nobody waits on anybody              | One slow person never blocks anyone else. Every share has its own status, and nobody is asked to act twice.                          |
 | P5 | Nudges are friendly, in the group | Tab never shames anyone. Claim nudges go in the group chat by name ("Jake, what was yours at Frita Batidos?"); private receipts still go by DM. |
-| P6 | Numbers come from code               | Every dollar amount Tab sends is computed deterministically from the database, never written by an LLM.                              |
+| P6 | Numbers come from code               | Every dollar amount Tab sends is computed deterministically from the database. An LLM may phrase an answer (7.8 Questions), but every number in it must be one the lookup tools computed, and code checks that before it is sent. |
 | P7 | Money moves only with consent        | A transfer happens only after the person whose money moves taps 👍 on the settle request. Typed replies like "yes" never move money.  |
 
 ---
@@ -401,6 +401,7 @@ Reducer names and the fields they set are **[CONTRACT]**. Argument order, helper
 | `dispute`           | Rejects their settled share                          | "no", "I didn't get fries"                                          | Dispute flow (7.6)                                                                                                              |
 | `balance_query`     | Asks who owes what                                   | "who owes what", "what do I owe"                                    | Balance reply (7.8)                                                                                                             |
 | `breakdown_request` | Asks for the history behind a balance                | "breakdown", "what's the $40 from"                                  | Breakdown reply (7.8)                                                                                                           |
+| `money_question`    | Asks anything else about the group's money           | "what was on the bistro receipt?", "how much did we spend on food?" | Answered by the money brain (7.8 Questions)                                                                                     |
 | `settle_up`         | Asks to settle balances now                          | "let's settle up", "trip's over, square us up", "close out the tab" | Posts one settle request for everything outstanding in the group (7.6)                                                          |
 | `payment_reported`  | Says they paid outside Tab                           | "sent you 20 on venmo"                                              | Stretch goal; ignored in the MVP                                                                                                |
 | `help`              | Asks what Tab does                                   | "@tab help", "what can you do"                                      | Short help message                                                                                                              |
@@ -672,6 +673,10 @@ Everyone else is square.
 
 **Help.** Three lines on what Tab does and how to remove it.
 
+**Questions (the money brain).** `money_question`, `balance_query`, `breakdown_request`, and "why?" after an answer go to Grok with read-only lookup tools over the whole database (`backend/src/brain/lookup.ts`): find expenses (ranked word match over descriptions, receipt items, and the logging message, with categories like "food"), one expense in full (items, who claimed them, tax, tip, each share and why), balances, why one person owes another, totals, payments, settle status, message search, and the ledger link. Lookups are scoped like balance replies (a group chat sees that group, a DM sees the sender's groups), name people instead of giving phone numbers, and do all arithmetic in code. Grok gets at most 5 tool rounds and 25 seconds, then must reply. An inline reply to Tab's message about an expense hands that expense to Grok up front.
+
+Before sending, code checks the reply: every amount and number must appear in this conversation's tool results, every name must be a member of the chat, and the 9.3 rules hold (no banned or assistant phrases, no markdown, at most six lines). A failing reply gets one retry with the reason; after that, or on a timeout, the balance and breakdown templates answer, and any other question gets a fixed "couldn't pin that one down" (with the ledger link when there is one). Only messages the gate passed ever reach it (section 19).
+
 ---
 
 ## 8. Split math [CONTRACT]
@@ -789,7 +794,7 @@ type CorrectionExtraction = {
 
 ### 9.3 Message copy [DEFAULT]
 
-Every message that contains numbers is built from a template filled with values from the database (P6). **[YOUR CALL]** whether an LLM adds a line of personality around a template, as long as it never writes a number or a name that wasn't passed in.
+Every message that contains numbers is built from a template filled with values from the database (P6). **[YOUR CALL]** whether an LLM adds a line of personality around a template, as long as it never writes a number or a name that wasn't passed in. The one exception is answers to questions (7.8 Questions): an LLM may phrase them, but every number in them must come from a lookup tool's result and every name from the chat's members, checked in code before sending; a reply that fails falls back to a template.
 
 Style for every message: at most three lines in the group, friendly and plain, no guilt-tripping, amounts always formatted like `$38.25`, and people referred to by name rather than number. iMessage doesn't render markdown, so no asterisks or headers. Emoji sparingly **[YOUR CALL]**.
 

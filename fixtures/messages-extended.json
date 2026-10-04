@@ -1900,6 +1900,123 @@
       "expect": {
         "intent": "split_adjustment"
       }
+    },
+    {
+      "id": 185,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "what was on the bistro receipt?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: a receipt's items"
+    },
+    {
+      "id": 186,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "how much did we spend on food?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: a code-computed total"
+    },
+    {
+      "id": 187,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "who paid for the uber?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: who paid"
+    },
+    {
+      "id": 188,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "who still hasn't paid?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: settle status"
+    },
+    {
+      "id": 189,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "how much has priya spent this trip"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: one person's spending"
+    },
+    {
+      "id": 190,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "what's left to settle"
+      },
+      "expect": {
+        "intent": "balance_query"
+      },
+      "note": "What's left to settle is a balance question; the money brain answers every question intent"
+    },
+    {
+      "id": 191,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "how was the pizza split"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: how a split was worked out"
+    },
+    {
+      "id": 192,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "did my payment to jake go through?"
+      },
+      "expect": {
+        "intent": "money_question"
+      },
+      "note": "Money brain: payment status"
+    },
+    {
+      "id": 193,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "why do i owe jake 12"
+      },
+      "expect": {
+        "intent": "breakdown_request"
+      },
+      "note": "Money brain: why a debt is what it is"
     }
   ]
 }
