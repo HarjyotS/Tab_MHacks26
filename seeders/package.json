@@ -12,7 +12,8 @@
     "grant:role": "tsx src/grant-role.ts",
     "verify:settlement": "tsx src/verify-settlement.ts",
     "verify:access": "tsx src/verify-ledger-access.ts",
-    "verify:backend-access": "tsx src/verify-backend-access.ts"
+    "verify:backend-access": "tsx src/verify-backend-access.ts",
+    "verify:settle-fixes": "tsx src/verify-settle-fixes.ts"
   },
   "dependencies": {
     "dotenv": "^17.2.3",

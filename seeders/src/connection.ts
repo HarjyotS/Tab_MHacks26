@@ -60,6 +60,7 @@ export function subscribeBackend(connection: DbConnection): Promise<Subscription
       .subscribe([
         tables.backendMessages,
         tables.backendGroups,
+        tables.backendGroupSettings,
         tables.backendMembers,
         tables.backendOutbox,
         tables.backendExpenses,

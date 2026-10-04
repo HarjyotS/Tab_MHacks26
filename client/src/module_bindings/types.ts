@@ -16,6 +16,15 @@ export type BackendClaims = __Infer<typeof BackendClaims>;
 export const BackendExpenses = __t.object("BackendExpenses", {});
 export type BackendExpenses = __Infer<typeof BackendExpenses>;
 
+export const BackendGroupSetting = __t.object("BackendGroupSetting", {
+  groupId: __t.string(),
+  settleMode: __t.string(),
+});
+export type BackendGroupSetting = __Infer<typeof BackendGroupSetting>;
+
+export const BackendGroupSettings = __t.object("BackendGroupSettings", {});
+export type BackendGroupSettings = __Infer<typeof BackendGroupSettings>;
+
 export const BackendGroups = __t.object("BackendGroups", {});
 export type BackendGroups = __Infer<typeof BackendGroups>;
 
@@ -98,6 +107,13 @@ export const Expenses = __t.object("Expenses", {
   finalizedAt: __t.option(__t.timestamp()),
 });
 export type Expenses = __Infer<typeof Expenses>;
+
+export const GroupSettings = __t.object("GroupSettings", {
+  groupId: __t.string(),
+  settleMode: __t.string(),
+  updatedAt: __t.timestamp(),
+});
+export type GroupSettings = __Infer<typeof GroupSettings>;
 
 export const Groups = __t.object("Groups", {
   groupId: __t.string(),

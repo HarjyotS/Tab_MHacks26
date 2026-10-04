@@ -45,6 +45,7 @@ import MarkOutboxReducer from "./mark_outbox_reducer";
 import RecomputeExpenseReducer from "./recompute_expense_reducer";
 import RedeemLedgerAccessReducer from "./redeem_ledger_access_reducer";
 import RemoveClaimReducer from "./remove_claim_reducer";
+import ResolveDisputeReducer from "./resolve_dispute_reducer";
 import SeedCompletedTransferReducer from "./seed_completed_transfer_reducer";
 import SetDemoModeReducer from "./set_demo_mode_reducer";
 import SetGroupStatusReducer from "./set_group_status_reducer";
@@ -53,6 +54,7 @@ import SetLineItemsReducer from "./set_line_items_reducer";
 import SetMemberNameReducer from "./set_member_name_reducer";
 import SetMessageResultReducer from "./set_message_result_reducer";
 import SetNessieIdsReducer from "./set_nessie_ids_reducer";
+import SetSettleModeReducer from "./set_settle_mode_reducer";
 import SetShareReducer from "./set_share_reducer";
 import UpsertExpenseReducer from "./upsert_expense_reducer";
 
@@ -61,6 +63,7 @@ import UpsertExpenseReducer from "./upsert_expense_reducer";
 // Import all table schema definitions
 import BackendClaimsRow from "./backend_claims_table";
 import BackendExpensesRow from "./backend_expenses_table";
+import BackendGroupSettingsRow from "./backend_group_settings_table";
 import BackendGroupsRow from "./backend_groups_table";
 import BackendLineItemsRow from "./backend_line_items_table";
 import BackendMembersRow from "./backend_members_table";
@@ -97,6 +100,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, BackendExpensesRow),
+  backendGroupSettings: __table({
+    name: 'backend_group_settings',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendGroupSettingsRow),
   backendGroups: __table({
     name: 'backend_groups',
     indexes: [
@@ -231,6 +241,7 @@ const reducersSchema = __reducers(
   __reducerSchema("recompute_expense", RecomputeExpenseReducer),
   __reducerSchema("redeem_ledger_access", RedeemLedgerAccessReducer),
   __reducerSchema("remove_claim", RemoveClaimReducer),
+  __reducerSchema("resolve_dispute", ResolveDisputeReducer),
   __reducerSchema("seed_completed_transfer", SeedCompletedTransferReducer),
   __reducerSchema("set_demo_mode", SetDemoModeReducer),
   __reducerSchema("set_group_status", SetGroupStatusReducer),
@@ -239,6 +250,7 @@ const reducersSchema = __reducers(
   __reducerSchema("set_member_name", SetMemberNameReducer),
   __reducerSchema("set_message_result", SetMessageResultReducer),
   __reducerSchema("set_nessie_ids", SetNessieIdsReducer),
+  __reducerSchema("set_settle_mode", SetSettleModeReducer),
   __reducerSchema("set_share", SetShareReducer),
   __reducerSchema("upsert_expense", UpsertExpenseReducer),
 );
@@ -253,6 +265,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "backend_claims": Omit<typeof tablesSchema.schemaType.tables["backendClaims"], "accessorName"> & { readonly accessorName: "backend_claims" };
     /** @deprecated Use `backendExpenses` instead. This alias will be removed in the next major version. */
     readonly "backend_expenses": Omit<typeof tablesSchema.schemaType.tables["backendExpenses"], "accessorName"> & { readonly accessorName: "backend_expenses" };
+    /** @deprecated Use `backendGroupSettings` instead. This alias will be removed in the next major version. */
+    readonly "backend_group_settings": Omit<typeof tablesSchema.schemaType.tables["backendGroupSettings"], "accessorName"> & { readonly accessorName: "backend_group_settings" };
     /** @deprecated Use `backendGroups` instead. This alias will be removed in the next major version. */
     readonly "backend_groups": Omit<typeof tablesSchema.schemaType.tables["backendGroups"], "accessorName"> & { readonly accessorName: "backend_groups" };
     /** @deprecated Use `backendLineItems` instead. This alias will be removed in the next major version. */
@@ -307,6 +321,7 @@ const REMOTE_MODULE = {
 const tableAccessorAliases = {
   "backend_claims": "backendClaims",
   "backend_expenses": "backendExpenses",
+  "backend_group_settings": "backendGroupSettings",
   "backend_groups": "backendGroups",
   "backend_line_items": "backendLineItems",
   "backend_members": "backendMembers",
@@ -348,6 +363,8 @@ export type DbView = __DbViewBase & {
   readonly "backend_claims": __DbViewBase["backendClaims"];
   /** @deprecated Use `backendExpenses` instead. This alias will be removed in the next major version. */
   readonly "backend_expenses": __DbViewBase["backendExpenses"];
+  /** @deprecated Use `backendGroupSettings` instead. This alias will be removed in the next major version. */
+  readonly "backend_group_settings": __DbViewBase["backendGroupSettings"];
   /** @deprecated Use `backendGroups` instead. This alias will be removed in the next major version. */
   readonly "backend_groups": __DbViewBase["backendGroups"];
   /** @deprecated Use `backendLineItems` instead. This alias will be removed in the next major version. */
@@ -390,6 +407,8 @@ export type Tables = __TablesBase & {
   readonly "backend_claims": __TablesBase["backendClaims"];
   /** @deprecated Use `backendExpenses` instead. This alias will be removed in the next major version. */
   readonly "backend_expenses": __TablesBase["backendExpenses"];
+  /** @deprecated Use `backendGroupSettings` instead. This alias will be removed in the next major version. */
+  readonly "backend_group_settings": __TablesBase["backendGroupSettings"];
   /** @deprecated Use `backendGroups` instead. This alias will be removed in the next major version. */
   readonly "backend_groups": __TablesBase["backendGroups"];
   /** @deprecated Use `backendLineItems` instead. This alias will be removed in the next major version. */
