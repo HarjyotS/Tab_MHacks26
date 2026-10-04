@@ -8,7 +8,8 @@
     "chats": "bun src/chats.ts",
     "tapback-probe": "bun src/tapback-probe.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "playground": "bun playground/server.ts"
   },
   "dependencies": {
     "@spectrum-ts/imessage-local": "12.10.1",
