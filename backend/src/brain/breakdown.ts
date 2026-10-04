@@ -36,7 +36,7 @@ function pairEvents(ctx: BrainCtx, group_id: string, a: string, b: string): Even
   const name = nameIn(ctx, group_id);
   const tz = ctx.store.group(group_id)?.timezone ?? GROUP_TIMEZONE;
   const events: Event[] = [];
-  for (const e of ctx.store.expenses().filter((x) => x.group_id === group_id && x.payer_phone)) {
+  for (const e of ctx.store.expenses().filter((x) => x.group_id === group_id && x.payer_phone && x.status !== "void")) {
     const [debtor, sign] = e.payer_phone === b ? [a, 1] : e.payer_phone === a ? [b, -1] : [undefined, 0];
     if (!debtor) continue;
     const share = ctx.store.shares(e.expense_id).find((s) => s.phone === debtor && s.role === "participant");
@@ -167,6 +167,14 @@ export async function handleBreakdownCommand(ctx: BrainCtx, m: Message) {
 
   const sections = buildSections(ctx, group_id, pairs);
   const subject = pairs.length === 1 ? undefined : name(m.sender_phone);
+  // Short by default (Harjyot: the full trace is "a lil much"): one line
+  // per balance with the expenses behind it. "@tab breakdown full" gets
+  // every line. Live chats only (ctx.eyes), like the other demo-time changes.
+  if (ctx.eyes && !wantsFull(m)) {
+    if (sections.length === 0) return reply(T.breakdownCommandReply({ subject, pairs: sections, max_pairs: MAX_PAIRS, max_lines: MAX_LINES }).text);
+    const lines = T.shortWhyLines(sections.slice(0, MAX_PAIRS), "");
+    return reply([...lines, 'every line: "@tab breakdown full"'].join("\n"));
+  }
   const shown = T.breakdownCommandReply({ subject, pairs: sections, max_pairs: MAX_PAIRS, max_lines: MAX_LINES });
   const url = shown.truncated ? await ledgerUrl(ctx, group_id) : undefined;
 

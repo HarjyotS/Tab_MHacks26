@@ -258,6 +258,20 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       group_id: m.group_id,
       error: String(err),
     });
+    // Live chats: a 👀 already went out, so never leave it hanging when
+    // Grok times out (live run: 3 × 15 s, then silence).
+    if (ctx.eyes && m.kind !== "reaction")
+      await ctx.db
+        .enqueue_outbox({
+          action_id: `oops:${m.message_id}`,
+          kind: m.group_id ? "group_message" : "dm",
+          group_id: m.group_id,
+          to_phone: m.group_id ? undefined : m.sender_phone,
+          text: "my brain lagged on that one, say it again?",
+          purpose: "other",
+          send_after: ctx.now(),
+        })
+        .catch(() => {});
     await ctx.db.set_message_result({
       message_id: m.message_id,
       // A failure before the message proved money-related clears its text.
@@ -335,7 +349,10 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       if (bound && bound.status !== "void") return handleCorrection(ctx, m, bound);
       const candidates = correctionCandidates(ctx, m);
       if (candidates.length > 1) return askWhichCorrection(ctx, m);
-      return handleCorrection(ctx, m, candidates[0]);
+      const target = candidates[0];
+      // Nothing it names is on the tab, and it states a purchase: a new expense.
+      if (!target && STATES_PURCHASE.test(m.text ?? "") && !clearlyCorrects(m.text ?? "")) return handleExpense(ctx, m);
+      return handleCorrection(ctx, m, target);
     }
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
@@ -351,7 +368,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
 // sender is the payer, so Tab asks one question, not two.
 const FAIRLY_SURE = 0.75;
 
-async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`, confidence = 0) {
+async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:${m.message_id}`, confidence = 0): Promise<unknown> {
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
@@ -371,6 +388,14 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   const candidates = intent === "expense" || intent === "correction" ? correctionCandidates(ctx, m) : [];
   if (candidates.length > 1) return askWhichCorrection(ctx, m);
   if (candidates[0]) return confirmCorrectionOf(ctx, m, candidates[0], id);
+  // "just paid for 47 uber" with no uber on the tab (live run, right after a
+  // demo reset): there's nothing to change, so it's a new expense. Stated
+  // outright ("paid", an amount) it's logged; otherwise Tab asks to split it.
+  // An unsure "expense" that plainly states a purchase is logged too: the
+  // split message is the confirmation, and it invites objections.
+  if (ctx.eyes && intent === "expense" && STATES_PURCHASE.test(m.text ?? "") && !AMOUNT_QUESTION.test(m.text ?? "")) return act(ctx, m, "expense");
+  if (intent === "correction" && !repliedExpense(ctx, m))
+    return STATES_PURCHASE.test(m.text ?? "") ? act(ctx, m, "expense") : clarify(ctx, m, "expense", id, confidence);
   // "whats the $90.70 from?" asks about a balance; offering to split it as a
   // new expense would be wrong. Point to the command instead (live run).
   if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
@@ -1184,3 +1209,7 @@ function amountAfterPhoto(ctx: BrainCtx, m: Message): string | undefined {
   const what = note && "description" in note && typeof note.description === "string" && note.description ? `the photo (${note.description.slice(0, 80)})` : "the receipt in my photo";
   return `i paid $${amount} for ${what}, split it with everyone`;
 }
+
+// "just paid for 47 uber", "got dinner 60", "i covered the tickets, $40".
+const STATES_PURCHASE = /^(?=.*\d)(?=.*\b(paid|pay(?:ed)?|got|bought|covered|spent|grabbed|picked up)\b)/i;
+

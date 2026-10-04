@@ -233,7 +233,11 @@ export async function proposeNew(
   });
   // The payer always has a share (what they consumed); everyone else either
   // participates or is opted out, so the ledger shows who was left out.
-  for (const m of members) {
+  // People in the split first: the module recomputes on every set_share and
+  // refuses an expense whose only share so far is opted out (playground:
+  // "sam owes me 15 for the tickets" failed when the payer came first).
+  const inFirst = [...members].sort((x, y) => Number(included.has(y.phone)) - Number(included.has(x.phone)));
+  for (const m of inFirst) {
     await ctx.db.set_share({
       expense_id,
       phone: m.phone,
@@ -334,8 +338,17 @@ export async function handleAdjustment(
   opts: { confirmOnly?: boolean } = {},
 ): Promise<void> {
   const group_id = groupFor(ctx, m);
+  // "the pool cabana was just tanuj and joe": the expense it names, even an
+  // older locked-in one, before the newest open one (live run).
+  const said = text.toLowerCase();
+  const named = target
+    ? undefined
+    : ctx.store
+        .expenses()
+        .filter((e) => e.group_id === group_id && (e.status === "proposed" || e.status === "finalized") && e.description.length >= 4 && said.includes(e.description.toLowerCase()))
+        .sort((x, y) => y.created_at.getTime() - x.created_at.getTime())[0];
   const expense =
-    target ?? latestOpen(ctx, group_id, ["proposed"]) ?? latestOpen(ctx, group_id, ["finalized"]);
+    target ?? named ?? latestOpen(ctx, group_id, ["proposed"]) ?? latestOpen(ctx, group_id, ["finalized"]);
   if (!expense) return;
   // §7.7: a locked-in expense changes only while no money is moving.
   const locked = expense.status === "finalized";
@@ -353,7 +366,27 @@ export async function handleAdjustment(
     extractInput(ctx, { ...m, text }),
     "adjustment",
   );
-  const { result, problems } = priceChange(ctx, expense, extracted);
+  let { result, problems } = priceChange(ctx, expense, extracted);
+  // "just tanuj and joe" says who was in it, not what they had: everyone
+  // else is out, and nobody needs a price ("how much was Joe's pool cabana?").
+  // No amount or fraction in the words means nobody's share was stated, even when
+  // the item ("pool cabana") got priced as the whole expense for each of them.
+  // Only when what each of them "had" is the expense itself: "alex had both
+  // drinks" on a receipt is still Alex's item.
+  const whole = (item: string | undefined) => {
+    const i = (item ?? "").toLowerCase().trim();
+    const d = expense.description.toLowerCase().trim();
+    return i.length === 0 || i.includes(d) || d.includes(i);
+  };
+  if (
+    PRESENCE.test(text) && result.fixed.length > 0 && !/\d|\$/.test(text) && !fractionIn(text) &&
+    result.fixed.every((f) => f.amount_cents === undefined || whole(f.item))
+  ) {
+    const inIt = new Set(result.fixed.map((f) => f.phone));
+    const out = activeMembers(ctx, expense.group_id).map((x) => x.phone).filter((p) => !inIt.has(p));
+    result = { ...result, fixed: [], exclusions: [...new Set([...result.exclusions, ...out])] };
+    problems = problems.filter((p) => p.kind !== "missing_item_price");
+  }
   const unknown = problems.filter(
     (p) => p.kind === "unknown_name" || p.kind === "missing_item_price",
   );
@@ -426,7 +459,8 @@ export async function handleAdjustment(
   // right after Priya's half): nothing to change, so nothing to confirm.
   if (changesNothing(ctx, expense, result, text)) return keepSplit(ctx, m, expense, true);
   // Reopening a locked-in expense is always confirmed first.
-  if (opts.confirmOnly || locked) {
+  // A locked-in expense named outright, by someone the gate is sure about, just changes.
+  if (opts.confirmOnly || (locked && !named)) {
     const question = locked
       ? T.reopenToChange(expense.description)
       : T.confirmSplitChange({ description: expense.description, ...whoIsLeft(ctx, expense, result, m.sender_phone) });

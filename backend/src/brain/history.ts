@@ -11,7 +11,7 @@ import * as T from "../copy/templates.js";
 import { GROUP_TIMEZONE } from "../config.js";
 import type { Expense, Message, Outbox, Share, Transfer } from "../store/types.js";
 import { type BrainCtx, chatOf, say } from "./context.js";
-import { hintBreakdown, shortWhyFor } from "./breakdown.js";
+import { handleBreakdownCommand, hintBreakdown, shortWhyFor } from "./breakdown.js";
 import { explainShare, groupsOf, handleBalanceQuery, myDebts } from "./talk.js";
 
 // ── Reading the question ─────────────────────────────────────────────────
@@ -274,7 +274,8 @@ export async function handleBreakdownQuestion(ctx: BrainCtx, m: Message) {
     if (lines.length === 0) return reply(historyFallback(ctx, m) ?? T.shortWhyReply([]));
     if (asksWhatFor(m.text)) return reply(T.shortWhyReply(lines));
   }
-  return hintBreakdown(ctx, m);
+  // The breakdown is short now, so a free-form ask just gets it.
+  return ctx.eyes ? handleBreakdownCommand(ctx, { ...m, text: "@tab breakdown" }) : hintBreakdown(ctx, m);
 }
 
 // "what was it for" as a money question or a last resort: answered from the

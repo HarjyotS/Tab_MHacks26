@@ -165,8 +165,13 @@ export type BrainCtx = {
 
 // ── Reading chat state ───────────────────────────────────────────────────
 
+// TAB_GONE: phone endings of people who left a chat ("6453,1234"). The
+// module has no way to mark a member as left yet (left_at is never set), so
+// until it does, this keeps them out of new splits.
+const GONE = (process.env.TAB_GONE ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+
 export function activeMembers(ctx: BrainCtx, group_id: string) {
-  return ctx.store.members(group_id).filter((m) => !m.left_at);
+  return ctx.store.members(group_id).filter((m) => !m.left_at && !GONE.some((end) => m.phone.endsWith(end)));
 }
 
 // Names Tab keeps the way they were saved: the group's members, or in a DM,
@@ -313,7 +318,9 @@ export async function say(
 
 // 👀 right away, while Grok reads the message (live chats only).
 export async function eyes(ctx: BrainCtx, m: { message_id: string; group_id?: string; sender_phone: string }): Promise<void> {
-  if (!ctx.eyes) return;
+  // Off unless TAB_EYES_MSG=on: Harjyot wants 👀 as a tapback, not a message in
+  // the chat, and replies take about two seconds on the fast model anyway.
+  if (!ctx.eyes || process.env.TAB_EYES_MSG !== "on") return;
   await ctx.db.enqueue_outbox({
     action_id: `eyes:${m.message_id}`,
     kind: m.group_id ? "group_message" : "dm",

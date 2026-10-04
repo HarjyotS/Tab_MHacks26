@@ -81,7 +81,7 @@ describe("fractions of the expense are shares, computed in code", () => {
     expect(shares()).toEqual({ [SAM]: 1200, [PRIYA]: 2400, [ALEX]: "out", [JORDAN]: 1200 });
     expect(w.db.expense(id)!.split_mode).toBe("custom");
     expect(asked()).toEqual([]);
-    expect(w.said("split_proposal").at(-1)).toMatch(/: pizza \$48\.00: Sam \$12\.00, Priya \$24\.00, Jordan \$12\.00$/);
+    expect(w.said("split_proposal").at(-1)).toMatch(/: pizza \$48\.00:\nSam \$12\.00\nPriya \$24\.00\nJordan \$12\.00$/);
   });
 
   it("asks nothing when the next message only says the same split again", async () => {
