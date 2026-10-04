@@ -201,18 +201,6 @@ function renders(seed: string): {
       amounts: [3825],
     },
     {
-      purpose: "balance_reply",
-      group: true,
-      text: T.askFallback(),
-      amounts: [],
-    },
-    {
-      purpose: "balance_reply",
-      group: true,
-      text: T.askFallback("https://tab-ledger.vercel.app/g/abc"),
-      amounts: [],
-    },
-    {
       purpose: "help_reply",
       group: true,
       text: T.helpReply(seed),

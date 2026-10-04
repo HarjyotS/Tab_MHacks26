@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { checkReply, type Facts } from "../src/brain/ask.js";
+import { askFallback, checkReply, type Facts } from "../src/brain/ask.js";
+import { bannedPhraseIn, MARKDOWN } from "../src/copy/voice.js";
 import { createLookup } from "../src/brain/lookup.js";
 import { DEFAULT_STYLE } from "../src/copy/style.js";
 import { GROUP, PEOPLE, toolClient, world, type AgentStep } from "./support/harness.js";
@@ -58,6 +59,8 @@ describe("checkReply (P6 and §9.3 on the agent's words)", () => {
 
   it("rejects banned phrases, markdown, refs, too many lines, and emoji in a chat that doesn't use them", () => {
     expect(check("Kian and Priya still haven't paid.")).toBe("banned_phrase");
+    expect(check("Here's where things stand: The Bistro was $47.07")).toBe("banned_phrase");
+    expect(check("The Bistro was $47.07. Let me know if that's off")).toBe("banned_phrase");
     expect(check("**$47.07** at The Bistro")).toBe("markdown");
     expect(check("That's e1, $47.07.")).toBe("ref");
     expect(check(["a", "b", "c", "d", "e", "f", "g"].join("\n"))).toBe("lines");
@@ -69,6 +72,14 @@ describe("checkReply (P6 and §9.3 on the agent's words)", () => {
     expect(check("Joe and Sam split it.")).toBe("outsider");
     expect(check("Joe and Marcus split it.")).toBe("name");
     expect(check("Marcus split it.")).toBeNull(); // a sentence can start with any word
+  });
+
+  it("the fixed fallback line follows the same rules", () => {
+    for (const text of [askFallback(), askFallback("https://tab-ledger.vercel.app/g/abc")]) {
+      expect(bannedPhraseIn(text)).toBeUndefined();
+      expect(MARKDOWN.test(text.replace(/https?:\/\/\S+/, ""))).toBe(false);
+      expect(text).not.toMatch(/\$/);
+    }
   });
 
   it("only allows a link a tool returned", () => {
@@ -84,7 +95,7 @@ describe("the money brain answers from the database", () => {
     const reply = "The Bistro, $47.07 total:\nBurger Deluxe $14.99 (Kian)\nCaesar Salad $9.99 (you)\n2 soft drinks $5.98 (you and Jake)\nCheesecake $7.99, shared\nPlus $3.12 tax and $5.00 tip.";
     const t = agent([{ call: [{ name: "find_expenses", args: { query: "bistro" } }] }, { call: [{ name: "expense_detail", args: { ref: "e1" } }] }, { reply }]);
     const ask = await w.say("Priya", "what was on the bistro receipt?");
-    expect(w.said("balance_reply")).toEqual([reply]);
+    expect(w.said("balance_reply")).toEqual([reply.toLowerCase()]);
     expect(w.db.outbox().find((o) => o.purpose === "balance_reply")!.target_message_id).toBe(ask.message_id);
     expect(toolText(t, 2)).toMatch(/CHEESECAKE/);
     expect(logs).toEqual([expect.objectContaining({ kind: "money_question", outcome: "sent", tools: ["find_expenses", "expense_detail"] })]);
@@ -97,7 +108,7 @@ describe("the money brain answers from the database", () => {
     const t = agent([{ call: [{ name: "totals", args: { query: "food" } }] }, { reply }]);
     await w.say("Kian", "how much did we spend on food?");
     expect(toolText(t, 1)).toMatch(/"total_spent":"\$158\.07"/);
-    expect(w.said("balance_reply")).toEqual([reply]);
+    expect(w.said("balance_reply")).toEqual([reply.toLowerCase()]);
   });
 
   it("why do i owe joe 14 uses only Joe's expenses, and goes out as a breakdown", async () => {
@@ -106,7 +117,7 @@ describe("the money brain answers from the database", () => {
     const t = agent([{ call: [{ name: "why_owe", args: { from: "me", to: "joe" } }] }, { reply }]);
     await w.say("Jake", "why do i owe joe 14");
     expect(toolText(t, 1)).not.toMatch(/Groceries|Kian|Priya/);
-    expect(w.said("breakdown_reply")).toEqual([reply]);
+    expect(w.said("breakdown_reply")).toEqual([reply.toLowerCase()]);
   });
 
   it("who still hasn't paid? retries a banned phrase once, then sends the fixed answer", async () => {
@@ -114,7 +125,7 @@ describe("the money brain answers from the database", () => {
     const good = "Kian ($15.00) and Priya ($14.00) haven't tapped 👍 on The Bistro yet.\nJake's $8.07 is on its way.";
     const t = agent([{ call: [{ name: "settle_status" }] }, { reply: "Kian and Priya still haven't paid." }, { reply: good }]);
     await w.say("Joe", "who still hasn't paid?");
-    expect(w.said("balance_reply")).toEqual([good]);
+    expect(w.said("balance_reply")).toEqual([good.toLowerCase()]);
     const feedback = t.requests[2]!.messages.at(-1)!;
     expect(feedback).toMatchObject({ role: "tool", content: expect.stringMatching(/Don't say "still haven't"/) });
     expect(logs.map((l) => l.outcome)).toEqual(["rejected", "sent"]);
@@ -124,7 +135,7 @@ describe("the money brain answers from the database", () => {
     const { w, agent, logs } = setup();
     agent([{ call: [{ name: "totals", args: { query: "food" } }] }, { reply: "About $160.00 on food." }, { reply: "Roughly $150.00." }]);
     await w.say("Kian", "how much did we spend on food?");
-    expect(w.said("balance_reply")).toEqual(["Couldn't pin that one down."]);
+    expect(w.said("balance_reply")).toEqual(["couldn't pin that one down"]);
     expect(logs.map((l) => [l.outcome, l.rejected])).toEqual([["rejected", "amount"], ["rejected", "amount"]]);
   });
 
@@ -133,14 +144,14 @@ describe("the money brain answers from the database", () => {
     w.ctx.ledger = { baseUrl: "https://tab-ledger.vercel.app", key: "k".repeat(32) };
     agent([{ fail: "500" }]);
     await w.say("Kian", "how much did we spend on food?");
-    expect(w.said("balance_reply")[0]).toMatch(/^Couldn't pin that one down\. Everything's on the ledger: https:\/\/tab-ledger\.vercel\.app\/g\//);
+    expect(w.said("balance_reply")[0]).toMatch(/^couldn't pin that one down\. it's all on the ledger: https:\/\/tab-ledger\.vercel\.app\/g\//);
   });
 
   it("what do i owe: the agent answers, and the template answers when it fails or is slow", async () => {
     const { w, agent } = setup();
     agent([{ call: [{ name: "balances", args: { person: "me" } }] }, { reply: "You owe Joe $26.00 and Jake $6.00." }]);
     await w.say("Priya", "what do i owe");
-    expect(w.said("balance_reply")).toEqual(["You owe Joe $26.00 and Jake $6.00."]);
+    expect(w.said("balance_reply")).toEqual(["you owe joe $26.00 and jake $6.00."]);
 
     const slow = setup();
     slow.agent([{ call: [{ name: "balances", args: { person: "me" } }], advance: 26_000 }, { reply: "too late" }]);
@@ -153,7 +164,7 @@ describe("the money brain answers from the database", () => {
     const { w } = setup();
     await w.say("Priya", "what do i owe");
     await w.say("Kian", "how much did we spend on food?");
-    expect(w.said("balance_reply")).toEqual(["You owe Joe $26.00 and Jake $6.00.", "Couldn't pin that one down."]);
+    expect(w.said("balance_reply")).toEqual(["You owe Joe $26.00 and Jake $6.00.", "couldn't pin that one down"]);
   });
 
   it("respects the round budget: after 5 tool rounds it must reply", async () => {
@@ -170,7 +181,7 @@ describe("the money brain answers from the database", () => {
     const t = agent([{ call: [{ name: "find_expenses", args: { query: "sushi" } }] }, { reply: "No sushi on your tab." }]);
     await w.dm("Priya", "how much was the sushi?");
     expect(toolText(t, 1)).toMatch(/"count":0/);
-    expect(w.db.outbox().find((o) => o.purpose === "balance_reply")).toMatchObject({ kind: "dm", to_phone: PEOPLE.Priya, text: "No sushi on your tab." });
+    expect(w.db.outbox().find((o) => o.purpose === "balance_reply")).toMatchObject({ kind: "dm", to_phone: PEOPLE.Priya, text: "no sushi on your tab." });
   });
 
   it("an inline reply to Tab's message about an expense hands that expense to the agent", async () => {
@@ -184,7 +195,7 @@ describe("the money brain answers from the database", () => {
     const user = String(t.requests[0]!.messages[1]!.content);
     expect(user).toMatch(/<expense_they_replied_to>[\s\S]*"description":"Pizza"/);
     expect(user).toMatch(/<replying_to_tab>"Pizza, \$48\.00/);
-    expect(w.said("balance_reply")).toEqual(["Even, split 4 ways: $12.00 each."]);
+    expect(w.said("balance_reply")).toEqual(["even, split 4 ways: $12.00 each."]);
   });
 
   it("why? after an answer explains it, through the agent", async () => {
@@ -194,7 +205,7 @@ describe("the money brain answers from the database", () => {
     const t = agent([{ call: [{ name: "why_owe", args: { from: "me", to: "joe" } }] }, { reply: "The Bistro $14.00 and Pizza $12.00." }]);
     await w.say("Priya", "why");
     expect(String(t.requests[0]!.messages[1]!.content)).toMatch(/This follows Tab's last answer/);
-    expect(w.said("breakdown_reply")).toEqual(["The Bistro $14.00 and Pizza $12.00."]);
+    expect(w.said("breakdown_reply")).toEqual(["the bistro $14.00 and pizza $12.00."]);
   });
 
   it("matches the group's style after checking", async () => {

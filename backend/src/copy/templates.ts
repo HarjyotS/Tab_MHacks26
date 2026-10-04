@@ -299,10 +299,6 @@ export function breakdownReply(a: { lines: OwedLine[]; ledger_url?: string }): s
   return `${body}${a.ledger_url ? `\nEverything else: ${a.ledger_url}` : ""}`;
 }
 
-// A question the money brain couldn't answer with checked numbers (P6).
-export const askFallback = (ledger_url?: string) =>
-  ledger_url ? `Couldn't pin that one down. Everything's on the ledger: ${ledger_url}` : "Couldn't pin that one down.";
-
 export const helpReply = (seed: string) =>
   pick(seed, [
     `I keep track of shared costs in this chat.\nTell me what you paid ("got groceries, $63") or send a receipt photo, and I'll split it.\nAsk "what do I owe" anytime, or say "settle up" to square up. To remove me, just remove me from the group.`,
