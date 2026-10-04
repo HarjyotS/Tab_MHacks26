@@ -80,11 +80,16 @@ describe("what never reaches Grok (Joe's review of #35)", () => {
     expect(w.said("clarifying_question")).toEqual([]);
   });
 
-  it("leaves an unsure photo alone instead of sending it to receipt vision", async () => {
-    const w = world({}); // no scripted receipt: reaching Grok would throw
+  it("asks about an unsure photo instead of sending it to the receipt read", async () => {
+    // No scripted receipt: reaching the receipt read would throw. (The
+    // description before the gate is the user-authorized exception, §7.4;
+    // with none scripted here the photo just goes undescribed.)
+    const w = world({});
     w.ctx.classify = async () => ({ intent: "receipt", confidence: 0.6 });
     const m = await w.photo("Kian", "maybe-a-receipt");
     expect(m.status).toBe("done");
     expect(w.db.expenses()).toEqual([]);
+    // Never quiet on money talk: one short question, the read only on yes.
+    expect(w.said("clarifying_question").map((q) => q.toLowerCase())).toEqual(["want me to split this?"]);
   });
 });
