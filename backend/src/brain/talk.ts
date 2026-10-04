@@ -223,6 +223,7 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message, more?: (mine
     ? [T.personalBalanceReply({ ...mine, pending: groups.flatMap((g) => pendingFor(ctx, g, m.sender_phone)) }), ...(more?.(mine) ?? [])].join("\n")
     : T.balanceReply({
         debts: all,
+        pending: pendingDebts(ctx, groups),
         // Past six lines the rest is on the ledger (§7.8).
         ledger_url: all.length > 6 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
       });
@@ -256,5 +257,30 @@ function pendingFor(ctx: BrainCtx, group_id: string, phone: string): T.Pending[]
     }
   }
   return out;
+}
+
+// What open splits would come to, netted per pair like `debts`: proposed
+// expenses, and receipts still being claimed (shares already worked out).
+export function pendingDebts(ctx: BrainCtx, groups: string[]): Debt[] {
+  const out: Debt[] = [];
+  for (const group_id of groups) {
+    const members = activeMembers(ctx, group_id);
+    const person = (phone: string) => ({ phone, name: members.find((x) => x.phone === phone)?.name });
+    const owed = new Map<string, number>();
+    for (const e of ctx.store.expenses()) {
+      if (e.group_id !== group_id || !e.payer_phone || (e.status !== "proposed" && e.status !== "itemizing")) continue;
+      for (const sh of ctx.store.shares(e.expense_id)) {
+        if (sh.phone === e.payer_phone || sh.status === "opted_out" || sh.amount_cents <= 0) continue;
+        const key = `${sh.phone}>${e.payer_phone}`;
+        owed.set(key, (owed.get(key) ?? 0) + sh.amount_cents);
+      }
+    }
+    for (const [key, cents] of owed) {
+      const [from, to] = key.split(">") as [string, string];
+      const net = cents - (owed.get(`${to}>${from}`) ?? 0);
+      if (net > 0) out.push({ from: person(from), to: person(to), amount_cents: net });
+    }
+  }
+  return out.sort((a, b) => b.amount_cents - a.amount_cents);
 }
 

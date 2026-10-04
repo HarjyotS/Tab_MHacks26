@@ -610,3 +610,18 @@ describe("personal balance with a split that isn't locked in", () => {
     expect(T.personalBalanceReply({ owes: [], owed: [] })).toBe("you're square with everyone");
   });
 });
+
+describe("group balance with splits that aren't locked in", () => {
+  const p = (name: string) => ({ phone: `+1555${name}`, name });
+  it("shows what open splits come to instead of 'square'", () => {
+    expect(T.balanceReply({ debts: [], pending: [{ from: p("Alex"), to: p("Jordan"), amount_cents: 5610 }] }))
+      .toBe("nothing's locked in yet, but as it stands:\nAlex owes Jordan $56.10\nsay \"settle up\" when you're ready");
+  });
+  it("adds open splits after locked-in debts", () => {
+    expect(T.balanceReply({ debts: [{ from: p("Sam"), to: p("Priya"), amount_cents: 500 }], pending: [{ from: p("Alex"), to: p("Jordan"), amount_cents: 5610 }] }))
+      .toBe("ok so rn: Sam owes Priya $5.00\nnot locked in yet: Alex owes Jordan $56.10");
+  });
+  it("is square only when nothing is open either", () => {
+    expect(T.balanceReply({ debts: [] })).toBe("everyone's square rn");
+  });
+});

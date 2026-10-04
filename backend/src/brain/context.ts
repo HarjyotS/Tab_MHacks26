@@ -57,6 +57,9 @@ export type Pending =
       // expenses are the thread's expense_ids.
       // act: an unsure money intent (§6.4 clarify band), acted on on yes.
       then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act";
+      // then "expense": the gate was fairly sure (just under the act bar),
+      // so the person who said it and says yes is taken as the payer.
+      sender_paid?: boolean;
       intent?: Intent;
       extraction?: Extracted<ExpenseExtraction>;
       expense_id?: string;
