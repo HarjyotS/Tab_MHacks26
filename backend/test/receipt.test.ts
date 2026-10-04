@@ -377,7 +377,7 @@ describe("claims and finalizing (SPEC 7.5)", () => {
       [PEOPLE.Jake]: 637,
     });
     expect(w.said("settle_request")[0]).toContain(
-      "ok here's what's owed to joe for frita batidos:\nkian $63.75, priya $25.50, jake $6.37\n",
+      "cool, here's what's owed to Joe for frita batidos:\nKian $63.75, Priya $25.50, Jake $6.37\n",
     );
   });
 
@@ -405,13 +405,13 @@ describe("claims and finalizing (SPEC 7.5)", () => {
     await w.wait(21_000); // demo: 2h → 20s
     expect(nudges()).toHaveLength(1);
     expect(nudges()[0]).toMatchObject({ kind: "group_message", group_id: "house" });
-    expect(nudges()[0]!.text).toMatch(/^jake,? what('d you get| was yours) at frita batidos\? numbers.*"even"/);
+    expect(nudges()[0]!.text).toMatch(/^Jake,? what('d you get| was yours) at frita batidos\? numbers.*"even"/);
 
     await w.wait(121_000); // +12h → +120s
-    expect(nudges()[1]!.text).toMatch(/^jake,? (still|no rush, just) need yours for frita batidos.*numbers or "even"$/);
+    expect(nudges()[1]!.text).toMatch(/^Jake,? (still|no rush, just) need yours for frita batidos.*numbers or "even"$/);
 
     await w.wait(300_000); // 44h → 440s
-    expect(nudges()[2]!.text).toMatch(/^last call jake: in \d+ seconds i'll put you down for \$\d+\.\d{2} for frita batidos/);
+    expect(nudges()[2]!.text).toMatch(/^last call Jake: in \d+ seconds i'll put you down for \$\d+\.\d{2} for frita batidos/);
     expect(w.db.outbox().filter((o) => o.kind === "dm")).toEqual([]); // no DMs at all
 
     await w.wait(41_000); // 48h → 480s: deadline

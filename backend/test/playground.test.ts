@@ -124,7 +124,7 @@ describe("balance questions by DM", () => {
     ).toMatchObject({
       kind: "dm",
       to_phone: PEOPLE.Kian,
-      text: "you owe joe $10.00",
+      text: "you owe Joe $10.00",
     });
   });
 });

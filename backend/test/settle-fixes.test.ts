@@ -71,7 +71,7 @@ describe("settle mode is stored in the module (set_settle_mode)", () => {
     await w.wait(31_000);
     const requests = w.said("settle_request");
     expect(requests).toHaveLength(1);
-    expect(requests[0]).toContain("ok here's what's owed to priya for groceries:\njoe $15.00, kian $15.00, jake $15.00\n");
+    expect(requests[0]).toContain("cool, here's what's owed to Priya for groceries:\nJoe $15.00, Kian $15.00, Jake $15.00\n");
   });
 
   it("rejects an unknown group or mode, like the module", async () => {
@@ -103,7 +103,7 @@ describe("one 👍 pays every share the request covers", () => {
     w.db.completeTransfers();
     await w.wait(1000);
     expect(w.said("payment_receipt")).toEqual([
-      "done, you paid joe $10.00 and priya $15.00 (simulated, no real money moved)\nyou're all square",
+      "done, you paid Joe $10.00 and Priya $15.00 (simulated, no real money moved)\nyou're all square",
     ]);
   });
 });
@@ -130,7 +130,7 @@ describe("disputes are resolved with resolve_dispute (SPEC 7.6)", () => {
     });
     const fresh = w.db.outbox().filter((o) => o.purpose === "settle_request").at(-1)!;
     expect(fresh.action_id).not.toBe(`settle_request:${p}`);
-    expect(fresh.text).toContain("\nkian $4.00, jake $10.00\n");
+    expect(fresh.text).toContain("cool, here's what's owed to Joe for pizza:\nKian $4.00, Jake $10.00\n");
     expect(w.db.expense(p)!.settle_message_id).toBe(fresh.action_id);
     expect(w.db.outbox().find((o) => o.action_id.startsWith("dispute_resolved:"))).toMatchObject({
       kind: "dm",

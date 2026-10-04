@@ -64,7 +64,7 @@ describe("unsure adjustments (SPEC 6.4 clarify band)", () => {
     await w.say("Joe", "got pizza, $48");
     await w.say("Kian", "jake actually owes 10,000");
     expect(w.said("clarifying_question")).toEqual([
-      "that's more than the $48.00 total, what'd jake actually have?",
+      "that's more than the $48.00 total, what'd Jake actually have?",
     ]);
   });
 

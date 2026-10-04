@@ -130,7 +130,7 @@ describe("several open questions at once", () => {
     await w.say("Kian", "22"); // the older question, after a newer one was asked
     expect(w.db.expense(`exp_${ride.message_id}`)).toMatchObject({ status: "proposed", total_cents: 2200 });
     await w.say("Priya", "yes");
-    expect(w.said("clarifying_question").at(-1)!.toLowerCase()).toBe("who got the pizza?");
+    expect(w.said("clarifying_question").at(-1)!.toLowerCase()).toBe("who paid for the pizza?");
     expect(w.db.expense(`exp_${pizza.message_id}`)!.status).toBe("needs_info");
   });
 
@@ -219,7 +219,7 @@ describe("free-form answers (Grok resolves them)", () => {
     const pizza = await w.say("Priya", "pizza was $48 lol");
     expect(w.said("clarifying_question")).toEqual(["want me to split that?"]);
     const both = await w.say("Priya", text);
-    expect(w.said("clarifying_question").slice(1)).toEqual(["who got the pizza?", "want me to split that?"]);
+    expect(w.said("clarifying_question").slice(1)).toEqual(["who paid for the pizza?", "want me to split that?"]);
     expect(w.db.expense(`exp_${pizza.message_id}`)!.status).toBe("needs_info");
     // The rest of an `answer` asks before acting (Joe's review on #35).
     expect(w.db.expense(`exp_${both.message_id}`)).toBeUndefined();

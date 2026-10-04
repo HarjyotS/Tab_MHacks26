@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { OutboxPurpose } from "../src/db/types.js";
 import { money } from "../src/copy/format.js";
-import { applyStyle, DEFAULT_STYLE, detectStyle } from "../src/copy/style.js";
+import { applyStyle, deco, DEFAULT_STYLE, detectStyle } from "../src/copy/style.js";
 import { compose, fitsGroupLimit } from "../src/copy/compose.js";
 import { rejectWit, witAllowed, type WitContext } from "../src/copy/wit.js";
 import { BANNED_PHRASES, bannedPhraseIn, MARKDOWN } from "../src/copy/voice.js";
@@ -84,7 +84,7 @@ function renders(seed: string): {
     {
       purpose: "objection_reminder",
       group: true,
-      text: T.objectionReminder(seed),
+      text: T.objectionReminder(),
       amounts: [],
     },
     {
@@ -244,7 +244,15 @@ function renders(seed: string): {
     { purpose: "clarifying_question", group: true, text: T.whatsUneven(), amounts: [] },
     { purpose: "clarifying_question", group: true, text: T.pinnedOverTotal({ total_cents: 4800, name: "Jake" }), amounts: [4800] },
     { purpose: "clarifying_question", group: true, text: T.reopenToChange("Pizza"), amounts: [] },
-    { purpose: "clarifying_question", group: true, text: T.confirmSplitChange("Pizza"), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmSplitChange({ description: "Pizza" }), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmSplitChange({ description: "Pizza", only: ["you", "Priya"] }), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmSplitChange({ description: "Pizza", without: ["Jake"] }), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.notLockedYet([{ description: "Frita Batidos", total_cents: 10200 }]), amounts: [10200] },
+    { purpose: "clarifying_question", group: true, text: T.answerFollowup(T.whatTip(), false), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.answerFollowup("how much were Alex's drinks?", true), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmCorrection(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmDispute(), amounts: [] },
+    { purpose: "clarifying_question", group: true, text: T.confirmSettleUp(), amounts: [] },
     { purpose: "clarifying_question", group: true, text: T.whichToCorrect(), amounts: [] },
     { purpose: "clarifying_question", group: true, text: T.correctionUnclear("Pizza"), amounts: [] },
     { purpose: "clarifying_question", group: true, text: T.totalUnderPinned(500), amounts: [500] },
@@ -436,13 +444,21 @@ describe("group style", () => {
     expect(detectStyle(["got groceries 🛒", "ok"]).emoji).toBe(true);
   });
 
-  it("shows decorative emoji only once the group has, but always keeps 👍", () => {
-    expect(applyStyle("hey i'm tab 👋\nand that's everyone square 🎉", DEFAULT_STYLE)).toBe(
+  it("shows Tab's decorative emoji only once the group has, and never touches people's own", () => {
+    expect(applyStyle(`hey i'm tab ${deco("👋")}\nand that's everyone square ${deco("🎉")}`, DEFAULT_STYLE)).toBe(
       "hey i'm tab\nand that's everyone square",
     );
     expect(applyStyle("tap 👍 to pay", DEFAULT_STYLE)).toBe("tap 👍 to pay");
+    expect(applyStyle(`everyone's square on 🍕 night ${deco("🎉")}`, DEFAULT_STYLE)).toBe("everyone's square on 🍕 night");
     const emoji = { ...DEFAULT_STYLE, emoji: true };
-    expect(applyStyle("everyone's square 🎉", emoji)).toBe("everyone's square 🎉");
+    expect(applyStyle(`everyone's square ${deco("🎉")}`, emoji)).toBe("everyone's square 🎉");
+  });
+
+  it("keeps member names the way they were saved, but not inside URLs or other words", () => {
+    expect(applyStyle("DJ and McKenzie owe Joe $5.00. Joey too", DEFAULT_STYLE, ["DJ", "McKenzie", "Joe"])).toBe(
+      "DJ and McKenzie owe Joe $5.00. joey too",
+    );
+    expect(applyStyle("Ledger: https://tab.tech/g/joeXYZ", DEFAULT_STYLE, ["Joe"])).toBe("ledger: https://tab.tech/g/joeXYZ");
   });
 
   it("drops trailing periods, but never inside amounts", () => {

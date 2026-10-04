@@ -189,7 +189,7 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
     await tick(ctx);
     await tick(ctx);
     expect(said("objection_reminder")).toHaveLength(1);
-    expect(said("objection_reminder")[0]).toMatch(/^(anything else on this one\?|we all good on this one\?)$/);
+    expect(said("objection_reminder")[0]).toBe("anything else?");
 
     advance(10_000);
     await tick(ctx);
@@ -199,7 +199,7 @@ describe("reminder and lock-in in DEMO_MODE (M2)", () => {
       true,
     );
     expect(said("settle_request")[0]).toContain(
-      "ok here's what's owed to joe for groceries:\nkian $15.75, priya $15.75, jake $15.75\n",
+      "cool, here's what's owed to Joe for groceries:\nKian $15.75, Priya $15.75, Jake $15.75\n",
     );
   });
 
@@ -234,7 +234,7 @@ describe("settling, per-expense mode (SPEC 7.6)", () => {
     expect(db.outbox().find((o) => o.purpose === "payment_receipt")).toMatchObject({
       kind: "dm",
       to_phone: KIAN,
-      text: "done, you paid joe $15.75 for groceries (simulated, no real money moved)\nyou're all square",
+      text: "done, you paid Joe $15.75 for groceries (simulated, no real money moved)\nyou're all square",
     });
   });
 
@@ -266,9 +266,9 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
     // Tab texts in lowercase by default; the tap line varies.
     const [head, joe, priya] = said("settle_request")[0]!.split("\n");
     expect([head, joe, priya]).toEqual([
-      "ok here's the tab:",
-      "owed to joe: kian $15.75, priya $15.75, jake $15.75",
-      "owed to priya: joe $10.00, kian $10.00, jake $10.00",
+      "cool, here's what's owed:",
+      "owed to Joe: Kian $15.75, Priya $15.75, Jake $15.75",
+      "owed to Priya: Joe $10.00, Kian $10.00, Jake $10.00",
     ]);
     const request = `settle_request:${G}:${settle.message_id}`;
     expect(db.expense(expenseId(pizza))!.settle_message_id).toBe(request);
@@ -278,7 +278,7 @@ describe("settling, ledger mode (SPEC 7.6, default)", () => {
     for (const who of [PRIYA, JAKE, JOE]) await react(who, request);
     db.completeTransfers();
     await tick(ctx);
-    expect(said("payment_receipt")).toContain("done, you paid joe $15.75 and priya $10.00 (simulated, no real money moved)\nyou're all square");
+    expect(said("payment_receipt")).toContain("done, you paid Joe $15.75 and Priya $10.00 (simulated, no real money moved)\nyou're all square");
     expect(said("all_square")).toHaveLength(1);
     expect(["and that's everyone square", "everyone's square, nice"]).toContain(said("all_square")[0]);
   });
@@ -321,7 +321,7 @@ describe("adjustments (SPEC 7.5)", () => {
     });
     expect(db.expense(expenseId(m))!.split_mode).toBe("custom");
     expect(said("split_proposal")[1]).toMatch(
-      /^(ok redid it|fixed it|bet, redid it): groceries \$63\.00: joe \$20\.00, kian \$20\.00, priya \$20\.00, jake \$3\.00$/,
+      /^(ok redid it|fixed it): groceries \$63\.00: Joe \$20\.00, Kian \$20\.00, Priya \$20\.00, Jake \$3\.00$/,
     );
   });
 
@@ -356,7 +356,7 @@ describe("Tab's questions (SPEC 7.3 step 2)", () => {
     await send(PRIYA, "pizza was $48 lol");
     expect(said("clarifying_question")).toEqual(["want me to split that?"]); // the stub is unsure (0.6)
     await send(PRIYA, "yes");
-    expect(said("clarifying_question")[1]).toBe("who got the pizza?");
+    expect(said("clarifying_question")[1]).toBe("who paid for the pizza?");
     expect(db.expenses()[0]).toMatchObject({
       status: "needs_info",
       total_cents: 4800,

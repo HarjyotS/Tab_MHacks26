@@ -36,10 +36,10 @@ describe("what do i owe", () => {
     await w.say("Kian", "not even, jake only had a $3 diet coke");
     await w.wait(41_000);
     await w.say("Priya", "what do i owe");
-    expect(w.said("balance_reply")).toEqual(["you owe joe $15.00"]);
+    expect(w.said("balance_reply")).toEqual(["you owe Joe $15.00"]);
     await w.say("Priya", "why");
     expect(w.said("breakdown_reply")).toEqual([
-      "pizza $15.00: split 3 ways after jake's $3.00",
+      "pizza $15.00: split 3 ways after Jake's $3.00",
     ]);
   });
 
