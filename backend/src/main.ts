@@ -12,6 +12,7 @@ import { resolveClaim } from "./extraction/claim.js";
 import { extractCorrection } from "./extraction/correction.js";
 import { resolveAnswer } from "./extraction/answer.js";
 import { imageAsDataUrl } from "./extraction/image.js";
+import { describeImage } from "./extraction/describe.js";
 import { witLine } from "./copy/wit.js";
 import { Memory, type BrainCtx } from "./brain/context.js";
 import { processMessage, tick } from "./brain/process.js";
@@ -69,6 +70,8 @@ const ctx: BrainCtx = {
     claim: (input, items) => resolveClaim(xai, grok.model, input, items),
     correction: (input) => extractCorrection(xai, grok.model, input),
     answer: (input, threads) => resolveAnswer(xai, grok.model, input, threads),
+    // Every photo in an enabled chat, before the gate (§7.4, §19).
+    describe: async (url, caption) => describeImage(xai, grok.model, await imageAsDataUrl(url), caption),
   },
   wit: (w) => witLine(xai, grok.model, w),
   timing: t,

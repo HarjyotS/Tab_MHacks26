@@ -10,6 +10,7 @@ import { extractExpense } from "../../src/extraction/expense.js";
 import { resolveClaim } from "../../src/extraction/claim.js";
 import { extractCorrection } from "../../src/extraction/correction.js";
 import { resolveAnswer } from "../../src/extraction/answer.js";
+import { describeImage } from "../../src/extraction/describe.js";
 import type { ReceiptRead } from "../../src/extraction/receipt.js";
 import type { ChatClient } from "../../src/grok/structured.js";
 import type { Message } from "../../src/store/types.js";
@@ -52,6 +53,9 @@ export type Script = {
   // message text → raw answer resolution; thread_id "q1" is the newest
   // question offered (answer.ts). Use `answer()` below for the defaults.
   answer?: Record<string, object>;
+  // image_url → raw image description { kind, description, transcription,
+  // money_related }. Missing: the photo goes undescribed, as when it's gone.
+  describe?: Record<string, object>;
 };
 
 // A raw answer resolution with everything null except what's given.
@@ -115,6 +119,11 @@ export function world(
         const out = script.answer?.[input.message.text ?? ""];
         if (!out) throw missing("answer", input.message.text ?? "");
         return resolveAnswer(grok(out), "m", input, threads);
+      },
+      describe: (url, caption) => {
+        const out = script.describe?.[url];
+        if (!out) throw missing("describe", url);
+        return describeImage(grok(out), "m", url, caption);
       },
     },
     timing: timing({ DEMO_MODE: "true" }),
