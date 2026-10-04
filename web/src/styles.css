@@ -71,3 +71,10 @@ footer { text-align: center; padding: 24px 0 0; color: #849088; font-size: 11px;
 @keyframes breathe { 50% { transform: scale(1.09); box-shadow: 0 7px 30px #ee5d3f78; } }
 @media (max-width: 900px) { .dashboard-grid { grid-template-columns: 1fr; } .hero { align-items: flex-start; } .hero-total { text-align: left; } .detail-columns { grid-template-columns: 1fr; } }
 @media (max-width: 620px) { .shell { width: min(100% - 20px, 1400px); } .hero { display: block; padding-top: 30px; } .hero-total { margin-top: 22px; } .stats { grid-template-columns: 1fr; } .graph-wrap { height: 380px; } .live { font-size: 0; } }
+/* Bank balances from the Nessie mirror. */
+.bank { background: #f8faf8; border: 1px solid #dfe5e1; border-radius: 16px; padding: 14px 20px; margin-bottom: 14px; }
+.bank .eyebrow { margin: 0 0 8px; }
+.bank-list { display: flex; flex-wrap: wrap; gap: 8px 22px; }
+.bank-item { display: flex; gap: 8px; align-items: baseline; }
+.bank-item span { color: #5c6b62; font-size: 13px; }
+.bank-item strong { font: 800 17px 'Manrope', system-ui, sans-serif; }

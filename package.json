@@ -19,6 +19,8 @@
     "grant:role": "npm run grant:role -w seeders --",
     "set:ledger-secret": "npm run set:ledger-secret -w seeders --",
     "nessie:mirror": "npm run nessie:mirror -w seeders",
+    "nessie:mirror:forever": "npm run nessie:mirror:forever -w seeders",
+    "verify:nessie-balances": "npm run verify:nessie-balances -w seeders",
     "verify:nessie": "npm run verify:nessie -w seeders",
     "verify:settlement": "npm run verify:settlement -w seeders",
     "verify:access": "npm run verify:access -w seeders",

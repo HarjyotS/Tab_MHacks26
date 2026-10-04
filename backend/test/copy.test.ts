@@ -192,16 +192,29 @@ function renders(seed: string): {
     {
       purpose: "breakdown_reply",
       group: true,
-      text: T.breakdownReply({
-        lines: [
+      text: T.breakdownCommandReply({
+        subject: "Jake",
+        pairs: [
           {
-            description: "Frita Batidos",
-            amount_cents: 3825,
-            why: "the ribeye, part of the fries, plus tax and tip",
+            debtor: "Jake",
+            creditor: "Joe",
+            net_cents: 2825,
+            events: [
+              { signed_cents: 3825, description: "Frita Batidos", payer: "Joe", debtor: "Jake", total_cents: 10200, when: "Oct 3, 7:42 PM", source: "receipt photo", why: "ribeye + tax + tip" },
+              { signed_cents: -1000, description: "Pizza", payer: "Jake", debtor: "Joe", total_cents: 4000, when: "Oct 3, 9:10 PM", source: '"got pizza, $40"', why: "split 4 ways" },
+            ],
           },
         ],
-      }),
-      amounts: [3825],
+        max_pairs: 4,
+        max_lines: 12,
+      }).text,
+      amounts: [2825, 3825, 10200, 1000, 4000],
+    },
+    {
+      purpose: "other",
+      group: true,
+      text: T.breakdownHint(),
+      amounts: [],
     },
     {
       purpose: "balance_reply",
@@ -281,7 +294,7 @@ function renders(seed: string): {
     },
     { purpose: "balance_reply", group: true, text: T.personalBalanceReply({ owes: [], owed: [] }), amounts: [] },
     { purpose: "balance_reply", group: true, text: T.personalBalanceReply({ owes: [], owed: [{ from: jake, to: priya, amount_cents: 500 }] }), amounts: [500] },
-    { purpose: "breakdown_reply", group: true, text: T.breakdownReply({ lines: [] }), amounts: [] },
+    { purpose: "breakdown_reply", group: true, text: T.breakdownCommandReply({ subject: "Jake", pairs: [], max_pairs: 4, max_lines: 12 }).text, amounts: [] },
     { purpose: "other", group: false, text: T.ledgerLink([{ url: "https://tab.tech/g/AbC123" }]), amounts: [] },
     { purpose: "other", group: false, text: T.noLedger(), amounts: [] },
   ];
