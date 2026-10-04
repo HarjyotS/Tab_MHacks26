@@ -212,6 +212,26 @@ describe("receipts (SPEC 7.4)", () => {
     expect(w.db.expenses()[0]!.status).toBe("itemizing");
     expect(w.said("item_list")).toHaveLength(1);
   });
+
+  it('still itemizes when Grok restates the proposal as amounts the message never said (#44)', async () => {
+    // Live: Grok copied "$4.25 each" from Tab's proposal into fixed. None of it
+    // is in "thats not even", so grounding drops the amounts; the empty entries
+    // must not make the message look specific.
+    const w = world({
+      receipt: { meijer: MEIJER },
+      expense: {
+        "adjustment|thats not even": {
+          is_expense: true, amount_cents: null, amount_is_per_person: false, description: null,
+          payer: "unknown", payer_name: null, participants: "everyone", participant_names: [], exclusion_names: [],
+          fixed: [{ name: "Joe", amount_cents: 425, item: null }, { name: "Kian", amount_cents: 425, item: null }],
+        },
+      },
+    });
+    await w.photo("Joe", "meijer");
+    await w.say("Priya", "thats not even");
+    expect(w.db.expenses()[0]).toMatchObject({ status: "itemizing", split_mode: "itemized" });
+    expect(w.said("item_list")).toHaveLength(1);
+  });
 });
 
 describe("settling while a receipt is open", () => {
