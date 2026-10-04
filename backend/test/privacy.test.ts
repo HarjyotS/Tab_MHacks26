@@ -57,3 +57,34 @@ describe("privacy", () => {
     expect(logged.at(-1)).toMatchObject({ prefiltered: false });
   });
 });
+
+describe("what never reaches Grok (Joe's review of #35)", () => {
+  const pizza = {
+    "new|got pizza, $40": {
+      is_expense: true, amount_cents: 4000, amount_is_per_person: false, description: "Pizza",
+      payer: "sender", payer_name: null, participants: "everyone", participant_names: [],
+      exclusion_names: [], fixed: [],
+    },
+  };
+
+  it("keeps \"just me and priya…\" chatter out of the extractor while a split is open", async () => {
+    // No scripted extraction for this text: reaching Grok would throw.
+    const w = world({ expense: pizza });
+    await w.say("Joe", "got pizza, $40");
+    const chat = "just me and priya are going to the movies later lol";
+    const base = w.ctx.classify;
+    w.ctx.classify = async (input) =>
+      input.message.text === chat ? { intent: "ignore", confidence: 0.45 } : base(input);
+    const m = await w.say("Kian", chat);
+    expect(m).toMatchObject({ status: "done", intent: "ignore", text: undefined });
+    expect(w.said("clarifying_question")).toEqual([]);
+  });
+
+  it("leaves an unsure photo alone instead of sending it to receipt vision", async () => {
+    const w = world({}); // no scripted receipt: reaching Grok would throw
+    w.ctx.classify = async () => ({ intent: "receipt", confidence: 0.6 });
+    const m = await w.photo("Kian", "maybe-a-receipt");
+    expect(m.status).toBe("done");
+    expect(w.db.expenses()).toEqual([]);
+  });
+});
