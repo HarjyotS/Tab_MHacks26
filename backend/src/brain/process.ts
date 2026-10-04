@@ -63,7 +63,8 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
 };
 
 // Intents that only read data or point to the 👍: answered even when unsure.
-const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval", "receipt"]);
+// Not `receipt`: an unsure photo stays with Tab, never Grok's vision (§19).
+const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "approval"]);
 
 // "just me and priya", "only sam and alex went", "priya and I went, no one
 // else", "jordan didn't come": who was there, said to an open split.
@@ -323,7 +324,8 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   // short of the act bar Tab confirms first.
   const split = pool.find((t) => t.data.kind === "split_open");
   const elsewhere = decision === "act" && result.intent !== "split_adjustment" && result.intent !== "answer";
-  const chatter = result.intent === "ignore" && result.confidence >= thresholds.clarify;
+  // Anything the gate called chatter stays out of Grok (§19), however unsure.
+  const chatter = result.intent === "ignore";
   if (split && PRESENCE.test(m.text) && !elsewhere && !chatter) {
     const e = threadExpense(ctx, split, "proposed");
     if (e) {
