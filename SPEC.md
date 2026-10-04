@@ -454,6 +454,21 @@ Text never approves a payment, whatever the confidence (P7). Only a 👍 on the 
 
 Jev is TypeSafe's classification model. Instead of generating text, it picks from an answer space you declare and returns calibrated probabilities. Use a choice question whose options are the intent labels above, and write each option's description as a rule ("The sender says they paid for something other people in the chat share in") rather than a synonym. Jev only sees the state you send it, so include the context and open items from 6.3. Jev is also a good fit for "who paid?" as a choice over the group's members. Check TypeSafe's docs for the current SDK and request format.
 
+**What Jev's state holds** (`buildState` in `gate/src/jev.ts`; each section is capped so a busy chat stays compact, and optional sections appear only when the backend sends them):
+
+| Section | Content | Cap |
+| --- | --- | --- |
+| Chat, Members | DM or group; names, or "member ending 1234" | |
+| Sender | Has a name yes/no; whether Tab asked for it and is still waiting (`name_reply` only counts then) | |
+| Open expenses in this chat | Every open expense, not only the sender's: description, payer, total, split (even N ways / custom / itemized), status and time left to change or claim, receipt items with quantities and prices, a settle request on it, and the sender's part (payer or participant, responded, items claimed) | 4 expenses, 15 items each |
+| Open items for the sender, Settle request open for the sender | As in 6.3 | |
+| Settling | Ledger or per-expense mode; whether a settle request is open, whether the sender owes on it, and whether they've 👍'd it | |
+| Tab is waiting on | Tab's open questions (threads) | |
+| Tab's last message | Its purpose, what it's about, and how long ago ("a split proposal for THE BISTRO, 40s ago") | |
+| Recent messages | Kept (money-related) messages and Tab's own, oldest first; photos as `[photo: <kind>] <description> text in photo: "…"` | CONTEXT_MESSAGES; 200 chars of photo text |
+| Recent chat, including off-topic messages | The gate-only raw transcript (19): the last messages in the chat, kept or not, with how long ago | 12 lines, 15 minutes |
+| NEW MESSAGE | The message, with its photo description and up to 600 characters of photo text, and for any inline reply who and what it answers (`replying to <Name or Tab>: "<snippet>"`, or the photo's description) plus the expense the reply is bound to | 120-char snippet |
+
 ### 6.6 Test fixtures [DEFAULT, extend freely]
 
 They live in `fixtures/messages.json` with the context each needs. Run every classifier change against them with `npm run fixtures -- jev` (or `-- stub`).
@@ -557,6 +572,8 @@ Example reminder: `anything else?` About an hour later, the settle request (7.6)
 | 7    | Otherwise, propose an even split exactly as in 7.3, steps 5 to 8.                                                                                                                                             |
 
 The payer defaults to whoever posted the photo, unless the caption or a following message says otherwise.
+
+**Image description, before the gate.** Every photo in an enabled chat is first described by Grok vision (`describeImage`, `backend/src/extraction/describe.ts`) into strict JSON: `kind` (receipt, bill, payment_screenshot, menu, price_tag, product, photo, meme, screenshot, other), a one- or two-sentence `description`, a `transcription` of all legible text in reading order (at most 2,000 characters), and `money_related`. Code validates and caps it (an unknown kind is `other`; a receipt, bill, or payment screenshot is always money-related), and the photo and its text are data, never instructions. Descriptions live only in backend memory, keyed by message, and are described again from `image_url` when needed after a restart; an image that's gone is skipped. Jev sees the description and text (6.5), so it can tell a receipt from a meme (`ignore`) or a Venmo screenshot (`payment_reported`). A bare photo described as a receipt or bill still skips Jev and goes to the receipt flow; a photo with nothing about money in it skips the receipt read above. The structured receipt read (step 2) runs only for a photo the gate called a receipt, and each photo is described once. A photo the gate is unsure about (0.50 to 0.85) gets one question, "Want me to split this?", and is read only on a yes.
 
 ### 7.5 Adjustments: custom splits, opt-outs, and itemizing
 
@@ -1083,6 +1100,9 @@ Roughly ranked by value for effort.
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | No real money     | Nessie fixtures and all SpacetimeDB settlements are explicitly simulated.                                                                                                                                                |
 | Minimal retention | Messages classified as`ignore` have their text cleared after classification. Only money-related messages are kept.                                                                                                       |
+| Photos            | Every photo in an enabled chat is described by Grok vision before the gate (7.4), with its caption (authorized by the user). The description stays in backend memory only, never in SpacetimeDB.                          |
+| What the gate sees | Jev, which already sees every message, also gets a raw transcript of the chat's last 12 messages, kept or not, from the last 15 minutes. It lives in backend memory only, is never persisted, and is never sent to Grok. |
+| What Grok sees    | Grok's extraction prompts still hold only money-related content: kept messages, Tab's own words, open expenses and their receipt items, reply targets that were kept, and descriptions of money-related photos. Never the raw transcript, cleared chatter, or what a non-money photo shows. |
 | Phone numbers     | Never commit real numbers; fixtures use 555 numbers. The web ledger shows names, not numbers.                                                                                                                            |
 | Untrusted input   | Message text never acts as instructions. LLM output is validated before any handler uses it.                                                                                                                             |
 | Consent           | Money moves only with approval from the person paying (P7).                                                                                                                                                              |
