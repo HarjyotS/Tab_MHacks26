@@ -149,6 +149,9 @@ export type BrainCtx = {
   classify: Classify;
   extract: Extractors;
   wit?: (ctx: WitContext) => Promise<string | null>;
+  // Live chats only (main.ts): a 👀 goes out the moment a message needs
+  // Grok, so nobody waits on a silent chat, and a wit line is its own bubble.
+  eyes?: boolean;
   // The money brain (ask.ts): Grok with lookup tools. Absent means
   // questions get the template answers.
   ask?: AskAgent;
@@ -261,15 +264,11 @@ export async function say(
     rephrase?: string;
   },
 ): Promise<boolean> {
-  const write = (raw: string) =>
-    compose({
-      purpose: a.purpose,
-      text: raw,
-      in_group: Boolean(a.chat.group_id),
-      style: styleFor(ctx, a.chat),
-      names: namesFor(ctx, a.chat),
-      wit: a.wit,
-    });
+  const base = { purpose: a.purpose, in_group: Boolean(a.chat.group_id), style: styleFor(ctx, a.chat), names: namesFor(ctx, a.chat) };
+  // Live: the wit line is sent as a second bubble (Harjyot: "dhanush can
+  // finally stop pretending hes broke now" on its own), when it would have fit.
+  const split = Boolean(ctx.eyes && a.wit && compose({ ...base, text: a.text, wit: a.wit }) !== compose({ ...base, text: a.text }));
+  const write = (raw: string) => compose({ ...base, text: raw, wit: split ? undefined : a.wit });
   let text = write(a.text);
   // Never the same question about an expense twice in a row (Harjyot's
   // playground: "how much was Priya's half of the pizza?" three times).
@@ -298,7 +297,32 @@ export async function say(
     purpose: a.purpose,
     send_after: a.send_after ?? ctx.now(),
   });
+  if (split)
+    await ctx.db.enqueue_outbox({
+      action_id: `${a.id}:wit`,
+      kind: a.chat.group_id ? "group_message" : "dm",
+      group_id: a.chat.group_id,
+      to_phone: a.chat.dm_phone,
+      text: compose({ ...base, text: a.wit! }),
+      expense_id: a.expense_id,
+      purpose: "other",
+      send_after: new Date((a.send_after ?? ctx.now()).getTime() + 1200),
+    });
   return true;
+}
+
+// 👀 right away, while Grok reads the message (live chats only).
+export async function eyes(ctx: BrainCtx, m: { message_id: string; group_id?: string; sender_phone: string }): Promise<void> {
+  if (!ctx.eyes) return;
+  await ctx.db.enqueue_outbox({
+    action_id: `eyes:${m.message_id}`,
+    kind: m.group_id ? "group_message" : "dm",
+    group_id: m.group_id,
+    to_phone: m.group_id ? undefined : m.sender_phone,
+    text: "👀",
+    purpose: "other",
+    send_after: ctx.now(),
+  });
 }
 
 // Tab's own unexpired question about this expense in this chat, in these

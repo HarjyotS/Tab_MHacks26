@@ -79,6 +79,7 @@ const ctx: BrainCtx = {
     describe: async (url, caption) => describeImage(xai, grok.model, await images.get(url), caption),
   },
   wit: (w) => witLine(xai, grok.model, w),
+  eyes: process.env.TAB_EYES !== "off",
   // The money brain: Grok with read-only lookup tools (brain/ask.ts).
   ask: { client: xai, model: grok.model },
   summarize: (s) => summarizeBreakdown(xai, grok.model, s, (why, reason) => log("summary_dropped", { why, reason })),
