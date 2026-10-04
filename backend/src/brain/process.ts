@@ -22,7 +22,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
-import { handleCorrection } from "./correction.js";
+import { clearlyCorrects, handleCorrection, namedCorrectionTarget } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
@@ -257,9 +257,14 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
   const bound = repliedExpense(ctx, m);
   const boundIf = (...statuses: Expense["status"][]) => (bound && statuses.includes(bound.status) ? bound : undefined);
   switch (intent) {
-    case "expense":
+    case "expense": {
       // A captioned photo ("dinner, i paid") is still a receipt.
-      return m.kind === "image" ? handleReceipt(ctx, m) : handleExpense(ctx, m);
+      if (m.kind === "image") return handleReceipt(ctx, m);
+      // "actually the uber was $30 not $24": a correction to the open Uber, not
+      // a second one. The gate said new expense, so only when it clearly is one.
+      const corrected = clearlyCorrects(m.text ?? "") ? namedCorrectionTarget(ctx, m) : undefined;
+      return corrected ? handleCorrection(ctx, m, corrected) : handleExpense(ctx, m);
+    }
     case "split_adjustment":
       return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed", "finalized"));
     case "name_reply":
@@ -294,7 +299,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       return receipt ? handleAdjustment(ctx, m, m.text ?? "", receipt) : handleClaim(ctx, m, boundIf("itemizing"));
     }
     case "correction":
-      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : undefined);
+      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m));
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
     // payment_reported is ignored in the MVP; ignore needs nothing.
@@ -319,6 +324,11 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     if (receipt) return handleAdjustment(ctx, m, m.text ?? "", receipt, { confirmOnly: true });
     return ctx.log("no_handler", { message_id: m.message_id, intent });
   }
+  // Unsure, but it reads as a correction to an open expense it names: ask
+  // "change uber to $30?" and apply only on yes (Joe's review on #44), never
+  // "want me to split that?" about a duplicate.
+  const correcting = intent === "expense" || intent === "correction" ? namedCorrectionTarget(ctx, m) : undefined;
+  if (correcting) return confirmCorrectionOf(ctx, m, correcting, id);
   // "whats the $90.70 from?" asks about a balance; offering to split it as a
   // new expense would be wrong. Point to the command instead (live run).
   if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
@@ -346,6 +356,17 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     data: intent === "expense"
       ? { kind: "confirm", then: "expense", source: m, asked_at: ctx.now() }
       : { kind: "confirm", then: "act", intent, source: m, asked_at: ctx.now() },
+  });
+}
+
+async function confirmCorrectionOf(ctx: BrainCtx, m: Message, e: Expense, id: string) {
+  const { result } = await ctx.extract.correction(extractInput(ctx, m));
+  const text = T.confirmCorrectionTo(e.description, result.new_amount_cents);
+  await tapback(ctx, m, "question", e.expense_id);
+  await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text, expense_id: e.expense_id });
+  addThread(ctx, chatOf(m), {
+    id, text, who: "asker", asker: m.sender_phone, expense_id: e.expense_id,
+    data: { kind: "confirm", then: "act", intent: "correction", source: m, asked_at: ctx.now() },
   });
 }
 
