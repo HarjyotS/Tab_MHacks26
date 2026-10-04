@@ -15,6 +15,28 @@ import type {
 // Only multiply when the message itself says the amount is per person.
 const PER_PERSON = /\b(each|apiece|per person|per head|a head|a person)\b/i;
 
+// §9.1, like amounts: in an adjustment, a name or item must be in the message
+// itself, so an earlier message in the context never becomes a fixed share
+// (playground run, #44: "thats not even" on a new receipt picked up "1 and 4"
+// from the last one). Whole words only, so "Al" never matches "all good"
+// (Joe's review on #44).
+const SELF = new Set(["me", "i", "myself", "sender"]);
+const FILLER = new Set(["the", "a", "an", "and", "of", "my", "some", "x", "had", "item", "items", "number"]);
+const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const said = (word: string, text: string) => new RegExp(`(^|[^a-z0-9])${escapeRe(word)}($|[^a-z0-9])`, "i").test(text);
+
+export function nameSaid(name: string, text: string): boolean {
+  const n = name.trim().toLowerCase();
+  return SELF.has(n) || n.split(/\s+/).some((part) => part.length > 1 && said(part, text));
+}
+
+export function itemSaid(item: string, text: string): boolean {
+  const all = item.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+  const key = all.filter((w) => !FILLER.has(w));
+  // "drinks" matches "drink", and the other way round.
+  return (key.length > 0 ? key : all).some((w) => said(w, text) || (w.length > 3 && (said(w.replace(/s$/, ""), text) || said(`${w}s`, text))));
+}
+
 // What Grok returns: names exactly as written and amounts exactly as stated.
 // Code resolves names to members and does all arithmetic (P6), then
 // `toContract` produces the §9.2 ExpenseExtraction.
@@ -143,6 +165,11 @@ function toContract(
     r.participants === "list" && r.participant_names.length > 0
       ? { kind: "list", phones: resolveAll(r.participant_names) }
       : { kind: "everyone" };
+  // The sender may be written as their own name ("Priya" for "I").
+  const inMessage = (name: string) =>
+    mode !== "adjustment" || nameSaid(name, text) || resolveName(name, members, message.sender_phone) === message.sender_phone;
+  // Exclusions aren't checked: "it was just sam and alex" excludes people who,
+  // by definition, aren't named (H4, Joe's review on #44).
   const exclusions = resolveAll(r.exclusion_names);
 
   let amount = r.amount_cents ?? undefined;
@@ -167,6 +194,7 @@ function toContract(
 
   const fixed: ExpenseExtraction["fixed"] = [];
   for (const f of r.fixed) {
+    if (!inMessage(f.name)) continue;
     const phone = resolve(f.name);
     if (!phone) continue;
     let cents = f.amount_cents ?? undefined;
@@ -174,19 +202,20 @@ function toContract(
       problems.push({ kind: "ungrounded_amount", amount_cents: cents });
       cents = undefined;
     }
+    const item = f.item && (mode !== "adjustment" || itemSaid(f.item, text)) ? f.item : undefined;
     // Nothing left to pin (its amount wasn't in the message, and no item).
     // Keeping it made "thats not even" look specific, so a receipt went to
     // `custom` with nothing changed instead of itemizing (playground run, #44).
-    if (cents === undefined && !f.item) continue;
+    if (cents === undefined && !item) continue;
     fixed.push({
       phone,
       ...(cents !== undefined ? { amount_cents: cents } : {}),
-      ...(f.item ? { item: f.item } : {}),
+      ...(item ? { item } : {}),
       // Owning an item needs an item to own.
-      ...(f.only === false && f.item ? { had: true as const } : {}),
+      ...(f.only === false && item ? { had: true as const } : {}),
     });
-    if (cents === undefined && f.item)
-      problems.push({ kind: "missing_item_price", phone, item: f.item });
+    if (cents === undefined && item)
+      problems.push({ kind: "missing_item_price", phone, item });
   }
 
   // Someone who had something was there (live: "jake only had a $3 diet

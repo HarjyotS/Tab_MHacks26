@@ -31,6 +31,15 @@ export const stubClassifier: Classify = async ({ message, context, open_items, o
   if (has('finalized') && /^(no|nope)\b|didn'?t (get|have|eat)|\bwrong\b|only had/.test(text)) return hit('dispute');
   if (has('itemizing') && (/^[\d\s,and&]+$/.test(text) || /^even$|same as|we all split/.test(text))) return hit('claim');
   if (message.reply_to_id && /\bactually\b/.test(text) && AMOUNT.test(text)) return hit('correction');
+  // Not a reply, but "actually the uber was $30 not $24" names an open expense
+  // and reads as a correction; never "another uber" or "gas too" (Joe on #44).
+  const named = open_items.some(i => (i.description.toLowerCase().match(/[a-z]+/g) ?? [])
+    .some(w => w.length >= 4 && !['team', 'house', 'group', 'everyone', 'with', 'from', 'that', 'this', 'some'].includes(w) && new RegExp(`\\b${w}s?\\b`).test(text)));
+  // Sure only when it clearly fixes an amount; otherwise unsure, so Tab asks
+  // "change uber to $18?" instead of overwriting it (merge review of #50).
+  const fixing = /\bnot\s+\$?\d|\b(?:meant|typo|should\s+(?:have\s+|'ve\s+)?be(?:en)?)\b/.test(text) ||
+    (/\bactually\b/.test(text) && !/\b(?:paid|pay|got|get|bought|buy|grabbed|covered|spent|ordered|picked\s+up)\b/.test(text));
+  if (named && /\b(?:was|is|were)\s+(?:actually\s+|really\s+|only\s+)?\$?\d|\bnot\s+\$?\d/.test(text) && !/\b(another|again|too|also|second|more)\b/.test(text)) return hit('correction', fixing ? 0.9 : 0.6);
   if (/\bnot even\b|\bonly had\b|\bwasn'?t (at|there)\b/.test(text)) return hit('split_adjustment');
   // "just me and priya" said to an open split: who was there, never a name.
   if (splitOpen && /^(just|only) \w+ (and|&) \w+/.test(text)) return hit('split_adjustment');
