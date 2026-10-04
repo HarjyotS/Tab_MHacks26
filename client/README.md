@@ -76,6 +76,15 @@ curl -X POST localhost:8787/dev/outbox -H 'content-type: application/json' \
 
 `bun run tapback-probe` tapbacks 👍 on the newest incoming message in an enabled group and checks chat.db to confirm it landed there. Run it once in the test group before relying on tapbacks. `bun run chats` lists recent group chats with their guids. `bun test` runs the tests against a fake chat.db.
 
+## Playground (simulate chats without iMessage)
+
+`bun run playground` serves a page at http://localhost:4400 where you play several fake group members against the **real** backend. It stands in for the iMessage bridge: your messages are ingested as those members, and Tab's outbox rows show up on the page.
+- Under every message: the gate's verdict (intent, confidence, and act / clarify / ignore). Click it for the backend's events.
+- Tap 👍 👎 ❓ ❤️ on Tab's messages, reply in thread, DM Tab, or upload a receipt photo.
+- The side panels show live expenses, shares, line items, transfers, Tab's DMs, and the backend log.
+
+It needs a **local** SpacetimeDB (it refuses Maincloud), the backend running against it, and the module owner's token as `SPACETIME_AUTH_TOKEN` in the repo-root `.env`. Optional settings: `PLAYGROUND_BACKEND_IDENTITY` (grants that identity the backend role on startup) and `PLAYGROUND_BACKEND_LOG` (the backend's log file, for decisions and events).
+
 ## Connecting to SpacetimeDB
 
 Set `HUB=spacetime` (plus `SPACETIME_HOST` and `SPACETIME_DB`) to use the real module instead of DevHub. The shared database is `SPACETIME_HOST=https://maincloud.spacetimedb.com` with `SPACETIME_DB=tabmhacks2026-268xk`; on Maincloud, Kian grants the role with `spacetime call tabmhacks2026-268xk grant_service_role <identity> client --server maincloud`. The client calls `ingest_message` and `mark_outbox`, and reads its work from the `client_outbox` view.

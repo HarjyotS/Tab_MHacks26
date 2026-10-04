@@ -9,7 +9,8 @@
     "tapback-probe": "bun src/tapback-probe.ts",
     "reply-probe": "bun src/reply-probe.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "playground": "bun playground/server.ts"
   },
   "dependencies": {
     "@spectrum-ts/imessage-local": "12.10.1",
