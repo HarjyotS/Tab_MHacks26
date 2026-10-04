@@ -25,9 +25,11 @@ const FILLER = new Set(["the", "a", "an", "and", "of", "my", "some", "x", "had",
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 const said = (word: string, text: string) => new RegExp(`(^|[^a-z0-9])${escapeRe(word)}($|[^a-z0-9])`, "i").test(text);
 
+// Possessives count as the name ("priyas fatass had half", "jake's"), but
+// only a trailing s or 's, so "Al" still never matches "also".
 export function nameSaid(name: string, text: string): boolean {
   const n = name.trim().toLowerCase();
-  return SELF.has(n) || n.split(/\s+/).some((part) => part.length > 1 && said(part, text));
+  return SELF.has(n) || n.split(/\s+/).some((part) => part.length > 1 && (said(part, text) || said(`${part}s`, text) || said(`${part}'s`, text) || said(`${part}’s`, text)));
 }
 
 export function itemSaid(item: string, text: string): boolean {

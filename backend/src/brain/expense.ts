@@ -416,7 +416,7 @@ export async function handleAdjustment(
   }
   // Only says what the split already is ("me and jordan had the other half"
   // right after Priya's half): nothing to change, so nothing to confirm.
-  if (changesNothing(ctx, expense, result)) return keepSplit(ctx, m, expense, true);
+  if (changesNothing(ctx, expense, result, text)) return keepSplit(ctx, m, expense, true);
   // Reopening a locked-in expense is always confirmed first.
   if (opts.confirmOnly || locked) {
     const question = locked
@@ -452,14 +452,22 @@ async function holdOpen(ctx: BrainCtx, expense: Expense) {
   await ctx.db.upsert_expense({ ...expense, objection_deadline: new Date(until) });
 }
 
-function changesNothing(ctx: BrainCtx, e: Expense, result: ExpenseExtraction): boolean {
+// "the other half" / "the rest": the first part already belongs to someone.
+const COMPLEMENT = /\b(other half|the other|the rest|rest of it|remaining)\b/i;
+
+function changesNothing(ctx: BrainCtx, e: Expense, result: ExpenseExtraction, text = ""): boolean {
   const shares = ctx.store.shares(e.expense_id);
   const share = (phone: string) => shares.find((s) => s.phone === phone);
   return (
-    result.exclusions.every((p) => share(p)?.status === "opted_out") &&
+    // Someone left out of "me and jordan had the other half" who already has
+    // the first half (Priya's pinned $24) isn't being counted out.
+    result.exclusions.every((p) => share(p)?.status === "opted_out" || (share(p)?.fixed_cents != null && COMPLEMENT.test(text))) &&
     result.fixed.every((f) => {
       const s = share(f.phone);
-      return f.amount_cents !== undefined && s !== undefined && s.status !== "opted_out" && s.fixed_cents === f.amount_cents;
+      // Fixed already, or what their even share already comes to ("me and
+      // jordan had the other half" while the rest is split between them).
+      return f.amount_cents !== undefined && s !== undefined && s.status !== "opted_out" &&
+        (s.fixed_cents === f.amount_cents || (s.fixed_cents === undefined && s.amount_cents === f.amount_cents));
     })
   );
 }
