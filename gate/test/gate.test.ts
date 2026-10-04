@@ -77,8 +77,9 @@ describe('fixture scoring', () => {
     expect(passes(f, { intent: 'ignore', confidence: 0.99 })).toBe(true);
   });
 
-  it('requires 0.90 for a text approval', () => {
-    expect(passes(byId(10), { intent: 'approval', confidence: 0.89 })).toBe(false);
+  it('never counts a typed approval as acting on money, whatever the confidence', () => {
+    // Approvals are tap-only (SPEC P7); a typed one is classified but never moves money.
+    expect(passes(byId(10), { intent: 'approval', confidence: 0.6 })).toBe(true);
   });
 });
 
