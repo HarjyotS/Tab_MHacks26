@@ -347,7 +347,10 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     case "correction": {
       const target = bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m);
       // Nothing it names is on the tab, and it states a purchase: a new expense.
-      if (!target && STATES_PURCHASE.test(m.text ?? "") && !clearlyCorrects(m.text ?? "")) return handleExpense(ctx, m);
+      // ("also the uber there was 23" with no uber on the tab is a new expense,
+      // not a change to dinner; right after the sender's own expense, they paid.)
+      if (!target && /\d/.test(m.text ?? "") && !clearlyCorrects(m.text ?? "") && !repliedExpense(ctx, m))
+        return handleExpense(ctx, m, m.text ?? "", m, { senderPaid: justPaid(ctx, m) });
       return handleCorrection(ctx, m, target);
     }
     case "answer":
@@ -1194,5 +1197,13 @@ function tabJustAsked(ctx: BrainCtx, m: Message): boolean {
       (m.group_id ? o.group_id === m.group_id : o.to_phone === m.sender_phone))
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
   return Boolean(last && m.received_at.getTime() - last.created_at.getTime() <= 3 * 60_000 && /\?\s*$/.test(last.text ?? ""));
+}
+
+// The sender logged an expense they paid in the last five minutes, so a
+// follow-up ("also the uber there was 23") is theirs too.
+function justPaid(ctx: BrainCtx, m: Message): boolean {
+  return ctx.store.expenses().some(
+    (e) => e.group_id === m.group_id && e.payer_phone === m.sender_phone && e.status !== "void" && m.received_at.getTime() - e.created_at.getTime() <= 5 * 60_000,
+  );
 }
 

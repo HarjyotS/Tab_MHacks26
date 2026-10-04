@@ -22,6 +22,7 @@ on run argv
   set targetGuid to item 1 of argv
   set chatTitle to item 2 of argv
   set savedClipboard to missing value
+  set opened to false
   tell application "System Events" to set previousApp to name of first application process whose frontmost is true
   try
     ${paste ? `try
@@ -46,11 +47,19 @@ on run argv
       end repeat
       if not ready then error "NOT_SENT: Messages didn't show " & chatTitle & " with ${menuPrefix} available"
       click item 1 of menuItems
+      set opened to true
       delay 0.4
       if not frontmost or name of window 1 is not chatTitle then error "NOT_SENT: Messages lost focus or switched chats"
       ${finalKeys.join("\n      ")}
     end tell
   on error errMsg
+    -- The tapback picker (or reply field) is still open: close it, or it
+    -- blocks every later tapback and reply (live run).
+    if opened then
+      try
+        tell application "System Events" to key code 53
+      end try
+    end if
     if savedClipboard is not missing value then set the clipboard to savedClipboard
     error errMsg
   end try
