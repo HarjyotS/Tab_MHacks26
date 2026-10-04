@@ -9,6 +9,7 @@ import { ImageStore } from "./images.ts";
 import { osascriptSender, spectrumSender } from "./sender.ts";
 import { spacetimeHub } from "./spacetime-hub.ts";
 import { State } from "./state.ts";
+import { uiReplier } from "./reply.ts";
 import { uiTapbacker } from "./tapback.ts";
 
 const log = (line: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${line}`);
@@ -77,6 +78,7 @@ const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
   tabPhone: config.tabPhone,
   sendMatchTimeoutMs: config.sendMatchTimeoutMs,
   tapbackVerifyMs: config.tapbackVerifyMs,
+  replier: config.replies ? uiReplier() : null,
   attachmentWaitMs: config.attachmentWaitMs,
   chatWaitMs: config.chatWaitMs,
   now: Date.now,

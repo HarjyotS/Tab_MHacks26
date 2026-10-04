@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Outgoing, Sender, Target } from "../src/sender.ts";
+import type { Replier } from "../src/reply.ts";
 import type { Tapbacker } from "../src/tapback.ts";
 import type { Reaction } from "../src/types.ts";
 
@@ -207,6 +208,26 @@ export class FakeTapbacker implements Tapbacker {
   }
 
   nextReact(): Promise<void> {
+    return new Promise((resolve) => this.waiters.push(resolve));
+  }
+}
+
+/** Writes the from-me inline-reply row Messages.app would have written. */
+export class FakeReplier implements Replier {
+  readonly calls: { target: string; text: string }[] = [];
+  fail = false;
+  private waiters: (() => void)[] = [];
+
+  constructor(private readonly fx: FakeMessages) {}
+
+  async reply(target: string, text: string): Promise<void> {
+    this.calls.push({ target, text });
+    if (this.fail) throw new Error("Messages has no enabled Reply menu item for this message");
+    this.fx.message({ chat: this.fx.chatOf(target), fromMe: true, text, threadOriginator: target });
+    for (const wake of this.waiters.splice(0)) wake();
+  }
+
+  nextReply(): Promise<void> {
     return new Promise((resolve) => this.waiters.push(resolve));
   }
 }

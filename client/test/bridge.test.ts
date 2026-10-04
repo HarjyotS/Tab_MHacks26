@@ -4,7 +4,7 @@ import { ChatDb } from "../src/chatdb.ts";
 import { Gate } from "../src/gate.ts";
 import { DevHub } from "../src/hub.ts";
 import { State } from "../src/state.ts";
-import { ATTRIBUTED_BODIES, FakeMessages, FakeSender, FakeTapbacker } from "./helpers.ts";
+import { ATTRIBUTED_BODIES, FakeMessages, FakeReplier, FakeSender, FakeTapbacker } from "./helpers.ts";
 
 const A = "+15555550101";
 const B = "+15555550102";
@@ -23,6 +23,7 @@ function setup(opts: { threadColumn?: boolean } = {}) {
   const hub = new DevHub(true, (line) => logs.push(line));
   const sender = new FakeSender(fx);
   const tapbacker = new FakeTapbacker(fx);
+  const replier = new FakeReplier(fx);
   const clock = { offset: 0 };
   const bridge = new Bridge(
     new ChatDb(fx.path),
@@ -42,6 +43,7 @@ function setup(opts: { threadColumn?: boolean } = {}) {
       chatWaitMs: 10_000,
       now: () => Date.now() + clock.offset,
       log: (line) => logs.push(line),
+      replier,
     },
   );
   /** Sends the next due outbox row and lets the bridge see it land in chat.db. */
@@ -64,7 +66,15 @@ function setup(opts: { threadColumn?: boolean } = {}) {
     await bridge.poll();
     await draining;
   }
-  return { fx, gate, hub, sender, tapbacker, bridge, clock, logs, deliverNext, tapbackNext, turnOn };
+  /** Sends the next due row as an inline reply and lets the bridge see it land. */
+  async function replyNext() {
+    const replied = replier.nextReply();
+    const draining = bridge.drainOutbox();
+    await replied;
+    await bridge.poll();
+    await draining;
+  }
+  return { fx, gate, hub, sender, tapbacker, replier, bridge, clock, logs, deliverNext, tapbackNext, replyNext, turnOn };
 }
 
 test("ignores a group until Tab's phone says /tab on, then announces members and ingests", async () => {
@@ -264,6 +274,43 @@ test("ingests members joining and leaving, and stops on /tab off", async () => {
   await bridge.poll();
   expect(gate.groupEnabled(HOUSE)).toBe(false);
   expect(hub.ingested.at(-1)!.text).toBe("member_left");
+});
+
+test("replies in thread when the outbox row names the newest message as its target", async () => {
+  const { fx, hub, sender, replier, logs, replyNext, turnOn } = setup();
+  await turnOn();
+  const question = fx.message({ chat: HOUSE, handle: A, text: "who paid for the pizza?" });
+  const row = hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "Joe did, $48.00", target_message_id: question });
+  await replyNext();
+  expect(replier.calls).toEqual([{ target: question, text: "Joe did, $48.00" }]);
+  expect(sender.calls).toHaveLength(0);
+  expect(hub.row(row.action_id)).toMatchObject({ status: "sent" });
+  expect(logs.some((l) => l.includes("not in"))).toBe(false);
+});
+
+test("sends a normal message when the target is no longer the newest", async () => {
+  const { fx, hub, sender, replier, deliverNext, turnOn } = setup();
+  await turnOn();
+  const question = fx.message({ chat: HOUSE, handle: A, text: "who paid?" });
+  fx.message({ chat: HOUSE, handle: B, text: "lol" });
+  const row = hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "Joe did", target_message_id: question });
+  await deliverNext();
+  expect(replier.calls).toHaveLength(0);
+  expect(sender.calls).toHaveLength(1);
+  expect(hub.row(row.action_id)).toMatchObject({ status: "sent" });
+});
+
+test("falls back to a normal message when Messages can't open the reply", async () => {
+  const { fx, hub, sender, replier, logs, deliverNext, turnOn } = setup();
+  await turnOn();
+  const question = fx.message({ chat: HOUSE, handle: A, text: "who paid?" });
+  replier.fail = true;
+  const row = hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "Joe did", target_message_id: question });
+  await deliverNext();
+  expect(replier.calls).toHaveLength(1);
+  expect(sender.calls).toHaveLength(1);
+  expect(hub.row(row.action_id)).toMatchObject({ status: "sent" });
+  expect(logs.some((l) => l.includes("couldn't reply in thread"))).toBe(true);
 });
 
 test("READ_DMS=off ignores every DM, even ones addressed to Tab", async () => {

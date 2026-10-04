@@ -19,6 +19,7 @@ export const config = {
   readDms: !/^(off|false|0|no)$/i.test(env.READ_DMS?.trim() ?? ""),
   sendVia: env.SEND_VIA === "osascript" ? "osascript" : "spectrum",
   tapbacks: env.TAPBACK_MODE !== "off",
+  replies: env.REPLY_MODE !== "off",
   hub: env.HUB ?? "dev",
   spacetime: {
     uri: env.SPACETIME_HOST ?? "http://127.0.0.1:3000",
