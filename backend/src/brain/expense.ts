@@ -369,7 +369,9 @@ export async function handleAdjustment(
   let { result, problems } = priceChange(ctx, expense, extracted);
   // "just tanuj and joe" says who was in it, not what they had: everyone
   // else is out, and nobody needs a price ("how much was Joe's pool cabana?").
-  if (PRESENCE.test(text) && result.fixed.length > 0 && result.fixed.every((f) => f.amount_cents === undefined)) {
+  // No amount or fraction in the words means nobody's share was stated, even when
+  // the item ("pool cabana") got priced as the whole expense for each of them.
+  if (PRESENCE.test(text) && result.fixed.length > 0 && !/\d|\$/.test(text) && !fractionIn(text)) {
     const inIt = new Set(result.fixed.map((f) => f.phone));
     const out = activeMembers(ctx, expense.group_id).map((x) => x.phone).filter((p) => !inIt.has(p));
     result = { ...result, fixed: [], exclusions: [...new Set([...result.exclusions, ...out])] };
