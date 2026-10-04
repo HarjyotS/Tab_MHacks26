@@ -4,6 +4,7 @@ import {
   Controls,
   MarkerType,
   ReactFlow,
+  useReactFlow,
   type Edge,
   type Node,
 } from '@xyflow/react';
@@ -25,18 +26,30 @@ export function App({ secret }: AppProps) {
   const { isActive, connectionError } = useSpacetimeDB();
   const redeem = useReducer(reducers.redeemLedgerAccess);
   const [groups, groupsReady] = useTable(tables.ledgerGroups);
-  const [members] = useTable(tables.ledgerMembers);
-  const [expenses] = useTable(tables.ledgerExpenses);
-  const [shares] = useTable(tables.ledgerShares);
-  const [items] = useTable(tables.ledgerItems);
-  const [claims] = useTable(tables.ledgerClaims);
-  const [transfers] = useTable(tables.ledgerTransfers);
-  const [balances] = useTable(tables.ledgerBalances);
+  const [allMembers] = useTable(tables.ledgerMembers);
+  const [allExpenses] = useTable(tables.ledgerExpenses);
+  const [allShares] = useTable(tables.ledgerShares);
+  const [allItems] = useTable(tables.ledgerItems);
+  const [allClaims] = useTable(tables.ledgerClaims);
+  const [allTransfers] = useTable(tables.ledgerTransfers);
+  const [allBalances] = useTable(tables.ledgerBalances);
   const [accessState, setAccessState] = useState<'idle' | 'redeeming' | 'ready' | 'invalid'>('idle');
   const [selectedExpenseId, setSelectedExpenseId] = useState<string>();
   const [pulse, setPulse] = useState<Pulse>();
   const redeemedRef = useRef(false);
   const previousTransferStatus = useRef<Map<string, string> | undefined>(undefined);
+
+  // main.tsx gives each link its own identity, so the views should hold one group.
+  // Still pin everything to a single group so a stray grant can never mix ledgers.
+  const group = groups[0];
+  const scoped = useMemo(
+    () => scopeToGroup(group?.ledgerGroupId, {
+      members: allMembers, expenses: allExpenses, shares: allShares, items: allItems,
+      claims: allClaims, transfers: allTransfers, balances: allBalances,
+    }),
+    [group?.ledgerGroupId, allMembers, allExpenses, allShares, allItems, allClaims, allTransfers, allBalances]
+  );
+  const { members, expenses, shares, items, claims, transfers, balances } = scoped;
 
   useEffect(() => {
     if (!isActive || redeemedRef.current || !secret) return;
@@ -66,17 +79,32 @@ export function App({ secret }: AppProps) {
   }, [transfers]);
 
   useEffect(() => {
-    if (!selectedExpenseId && expenses.length) setSelectedExpenseId(expenses[0].expenseId);
+    if (expenses.some(expense => expense.expenseId === selectedExpenseId)) return;
+    setSelectedExpenseId(expenses[0]?.expenseId);
   }, [expenses, selectedExpenseId]);
 
-  const names = useMemo(
-    () => new Map(members.map(member => [member.ledgerMemberId, member.name ?? 'Unnamed member'])),
-    [members]
-  );
+  const names = useMemo(() => memberNames(members), [members]);
+  const [graphBox, setGraphBox] = useState<Size>({ width: 0, height: 0 });
+  const [graphElement, setGraphElement] = useState<HTMLDivElement | null>(null);
   const graph = useMemo(
-    () => buildGraph(members, balances, pulse, names),
-    [members, balances, pulse, names]
+    () => buildGraph(members, balances, pulse, names, graphBox),
+    [members, balances, pulse, names, graphBox]
   );
+
+  // Lay the graph out for the box it actually has, and refit when that box changes.
+  useEffect(() => {
+    const element = graphElement;
+    if (!element) return;
+    const measure = () => {
+      const { width, height } = element.getBoundingClientRect();
+      setGraphBox(current => current.width === Math.round(width) && current.height === Math.round(height)
+        ? current : { width: Math.round(width), height: Math.round(height) });
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [graphElement]);
 
   if (!secret) return <StatusPage title="Ledger link required" detail="Open the private link posted by Tab in your group chat." />;
   if (connectionError) return <StatusPage title="Ledger unavailable" detail={connectionError.message} />;
@@ -84,9 +112,8 @@ export function App({ secret }: AppProps) {
     return <StatusPage title="Opening your ledger" detail="Connecting to the live SpacetimeDB view…" loading />;
   }
   if (accessState === 'invalid') return <StatusPage title="That link is invalid" detail="Ask Tab for a fresh private ledger link." />;
-  if (!groups.length) return <StatusPage title="Access granted" detail="Waiting for this group’s first ledger update…" loading />;
+  if (!group) return <StatusPage title="Access granted" detail="Waiting for this group’s first ledger update…" loading />;
 
-  const group = groups[0];
   const selectedExpense = expenses.find(expense => expense.expenseId === selectedExpenseId);
   const outstanding = balances.reduce((sum, balance) => sum + balance.amountCents, 0n);
   const paid = transfers.filter(transfer => transfer.status === 'done').reduce((sum, transfer) => sum + transfer.amountCents, 0n);
@@ -120,7 +147,7 @@ export function App({ secret }: AppProps) {
       <section className="stats">
         <Metric label="Open expenses" value={String(expenses.filter(expense => expense.status !== 'settled').length)} />
         <Metric label="Simulated paid" value={formatMoney(paid)} />
-        <Metric label="Housemates" value={String(members.length)} />
+        <Metric label="People" value={String(members.length)} />
       </section>
 
       {/* Synced by the Nessie mirror from each member's Nessie records; hidden until it has run. */}
@@ -140,11 +167,15 @@ export function App({ secret }: AppProps) {
       <section className="dashboard-grid">
         <article className="panel graph-panel">
           <div className="panel-heading"><div><p className="eyebrow">Money flow</p><h2>Who owes whom</h2></div><span className="hint">Live</span></div>
-          <div className="graph-wrap">
+          <div className="graph-wrap" ref={setGraphElement}>
             {balances.length === 0 && !pulse ? (
               <div className="empty-state"><span>✓</span><strong>Everyone is square</strong><small>No outstanding balances</small></div>
             ) : (
-              <ReactFlow nodes={graph.nodes} edges={graph.edges} fitView minZoom={0.65} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}>
+              <ReactFlow
+                nodes={graph.nodes} edges={graph.edges} defaultViewport={WHOLE_BOX}
+                minZoom={0.2} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}
+              >
+                <ShowWholeGraph box={graphBox} />
                 <Background color="#d7dfda" gap={22} size={1} />
                 <Controls showInteractive={false} />
               </ReactFlow>
@@ -182,6 +213,53 @@ export function App({ secret }: AppProps) {
   );
 }
 
+/**
+ * Display names for the ledger. Members Tab hasn't learned a name for get
+ * "Member 1", "Member 2"… in a stable order; the views never expose phones.
+ */
+function memberNames(members: readonly LedgerMember[]): Map<string, string> {
+  const names = new Map<string, string>();
+  let unnamed = 0;
+  for (const member of [...members].sort((a, b) => a.ledgerMemberId.localeCompare(b.ledgerMemberId))) {
+    const name = member.name?.trim();
+    names.set(member.ledgerMemberId, name || `Member ${++unnamed}`);
+  }
+  return names;
+}
+
+/** "Haejyot" → "H", "Mary Jane" → "MJ", "Member 2" → "2". */
+function initials(name: string): string {
+  const numbered = name.match(/^Member (\d+)$/);
+  if (numbered) return numbered[1];
+  const words = name.split(/\s+/).filter(Boolean);
+  const letters = words.length > 1 ? [words[0], words[words.length - 1]] : words;
+  return letters.map(word => [...word][0]?.toUpperCase() ?? '').join('') || '·';
+}
+
+type LedgerRows = {
+  members: readonly LedgerMember[]; expenses: readonly LedgerExpense[]; shares: readonly LedgerShare[];
+  items: readonly LedgerItem[]; claims: readonly LedgerClaim[]; transfers: readonly LedgerTransfer[];
+  balances: readonly LedgerBalance[];
+};
+
+/** Keeps only the rows that belong to one group: by group id, then by its expenses and members. */
+function scopeToGroup(groupId: string | undefined, rows: LedgerRows): LedgerRows {
+  const members = rows.members.filter(member => member.ledgerGroupId === groupId);
+  const expenses = rows.expenses.filter(expense => expense.ledgerGroupId === groupId);
+  const memberIds = new Set(members.map(member => member.ledgerMemberId));
+  const expenseIds = new Set(expenses.map(expense => expense.expenseId));
+  return {
+    members,
+    expenses,
+    shares: rows.shares.filter(share => expenseIds.has(share.expenseId)),
+    items: rows.items.filter(item => expenseIds.has(item.expenseId)),
+    claims: rows.claims.filter(claim => expenseIds.has(claim.expenseId)),
+    transfers: rows.transfers.filter(transfer => expenseIds.has(transfer.expenseId)),
+    balances: rows.balances.filter(balance =>
+      memberIds.has(balance.fromLedgerMemberId) && memberIds.has(balance.toLedgerMemberId)),
+  };
+}
+
 function Metric({ label, value }: { label: string; value: string }) {
   return <div className="metric"><span>{label}</span><strong>{value}</strong></div>;
 }
@@ -212,22 +290,55 @@ function ExpenseDetail({ expense, shares, items, claims, transfers, names }: {
   );
 }
 
+type Size = { width: number; height: number };
+
+// buildGraph lays nodes out inside the measured box, so the unzoomed viewport shows all of them.
+const WHOLE_BOX = { x: 0, y: 0, zoom: 1 };
+const NARROW_GRAPH = 520;
+
+/**
+ * Resets the view whenever the box changes, so a resize or rotation never leaves
+ * people off screen. (useReactFlow().fitView waits for the next node change,
+ * which a pure resize may never bring, so it can't be relied on here.)
+ */
+function ShowWholeGraph({ box }: { box: Size }) {
+  const { setViewport } = useReactFlow();
+  useEffect(() => {
+    if (box.width) void setViewport(WHOLE_BOX);
+  }, [box.width, box.height, setViewport]);
+  return null;
+}
+
 function buildGraph(
-  members: readonly LedgerMember[], balances: readonly LedgerBalance[], pulse: Pulse | undefined, names: Map<string, string>
+  members: readonly LedgerMember[], balances: readonly LedgerBalance[], pulse: Pulse | undefined,
+  names: Map<string, string>, box: Size
 ): { nodes: Node[]; edges: Edge[] } {
-  const radius = 165;
+  // An ellipse sized to the container, so everyone is in view at zoom 1 on any screen.
+  const width = box.width || 440;
+  const height = box.height || 400;
+  const narrow = width < NARROW_GRAPH;
+  const nodeSize = { width: 96, height: 80 };
+  const radiusX = Math.max(60, width / 2 - nodeSize.width / 2 - 12);
+  const radiusY = Math.max(60, height / 2 - nodeSize.height / 2 - 12);
+  // Two people read best side by side; more go round from the top.
+  const start = members.length === 2 ? Math.PI : -Math.PI / 2;
   const nodes: Node[] = members.map((member, index) => {
-    const angle = (Math.PI * 2 * index) / Math.max(members.length, 1) - Math.PI / 2;
+    const angle = start + (Math.PI * 2 * index) / Math.max(members.length, 1);
     return {
       id: member.ledgerMemberId,
-      position: { x: 210 + Math.cos(angle) * radius, y: 180 + Math.sin(angle) * radius },
-      data: { label: <div className="person-node"><span>{(member.name ?? '?').slice(0, 1).toUpperCase()}</span><strong>{member.name ?? 'Unnamed'}</strong></div> },
+      position: {
+        x: width / 2 + Math.cos(angle) * radiusX - nodeSize.width / 2,
+        y: height / 2 + Math.sin(angle) * radiusY - nodeSize.height / 2,
+      },
+      style: { width: nodeSize.width },
+      data: { label: <div className="person-node"><span>{initials(names.get(member.ledgerMemberId) ?? '')}</span><strong>{names.get(member.ledgerMemberId)}</strong></div> },
       className: pulse && (pulse.from === member.ledgerMemberId || pulse.to === member.ledgerMemberId) ? 'graph-node pulse' : 'graph-node',
     };
   });
   const edges: Edge[] = balances.map(balance => ({
     id: balance.edgeId, source: balance.fromLedgerMemberId, target: balance.toLedgerMemberId,
-    label: `${names.get(balance.fromLedgerMemberId)} owes ${formatMoney(balance.amountCents)}`,
+    // The arrow already says who owes whom; on narrow screens the full sentence covers the nodes.
+    label: narrow ? formatMoney(balance.amountCents) : `${names.get(balance.fromLedgerMemberId)} owes ${formatMoney(balance.amountCents)}`,
     markerEnd: { type: MarkerType.ArrowClosed, color: '#ee5d3f' },
     style: { stroke: '#ee5d3f', strokeWidth: 2.5 }, labelStyle: { fill: '#28322d', fontWeight: 700, fontSize: 12 },
   }));

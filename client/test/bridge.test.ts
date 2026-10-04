@@ -105,6 +105,25 @@ test("ignores a group until Tab's phone says /tab on, then announces members and
   });
 });
 
+test("sends the group chat's name with group messages so the ledger can title it", async () => {
+  const { fx, hub, bridge, gate } = setup();
+  const UNNAMED = fx.group("iMessage;+;chat333", [A, B]);
+  gate.enable(UNNAMED);
+  await bridge.syncRosters();
+  fx.message({ chat: HOUSE, fromMe: true, text: "/tab on" });
+  await bridge.poll();
+  fx.message({ chat: HOUSE, handle: A, text: "got groceries, $63" });
+  fx.message({ chat: UNNAMED, handle: B, text: "tickets were $90" });
+  await bridge.poll();
+
+  const house = hub.ingested.filter((m) => m.group_id === HOUSE);
+  expect(house.map((m) => m.kind)).toEqual(["system", "system", "text"]);
+  expect(house.every((m) => m.group_name === "the house")).toBe(true);
+  const unnamed = hub.ingested.filter((m) => m.group_id === UNNAMED);
+  expect(unnamed.length).toBeGreaterThan(0);
+  expect(unnamed.every((m) => !("group_name" in m))).toBe(true);
+});
+
 test("records sent_photon_id so a tapback on Tab's message routes back to it", async () => {
   const { fx, hub, sender, bridge, logs, deliverNext, turnOn } = setup();
   await turnOn();
