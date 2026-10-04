@@ -265,3 +265,32 @@ test("ingests members joining and leaving, and stops on /tab off", async () => {
   expect(gate.groupEnabled(HOUSE)).toBe(false);
   expect(hub.ingested.at(-1)!.text).toBe("member_left");
 });
+
+test("READ_DMS=off ignores every DM, even ones addressed to Tab", async () => {
+  const fx = new FakeMessages();
+  fx.group(HOUSE, [A, B], "the house");
+  const state = new State(null);
+  const gate = new Gate(state, 72 * HOUR, false);
+  const hub = new DevHub(false, () => {});
+  const bridge = new Bridge(new ChatDb(fx.path), hub, new FakeSender(fx), null, { publish: async (p) => p }, gate, state, {
+    commandPrefix: "/tab", tabName: "Tab", sendMatchTimeoutMs: 500, tapbackVerifyMs: 300,
+    attachmentWaitMs: 60_000, chatWaitMs: 10_000, now: Date.now, log: () => {},
+  });
+  fx.message({ chat: HOUSE, fromMe: true, text: "/tab on" });
+  await bridge.poll();
+  const before = hub.ingested.length;
+  fx.message({ chat: fx.dm(A), handle: A, text: "@tab what do I owe" });
+  fx.message({ chat: HOUSE, handle: B, text: "group still works" });
+  await bridge.poll();
+  expect(hub.ingested.slice(before).map((m) => m.text)).toEqual(["group still works"]);
+});
+
+test("never decodes the owner's own DMs unless Tab is waiting for a send to that person", async () => {
+  const { fx, bridge, hub, turnOn } = setup();
+  await turnOn();
+  const before = hub.ingested.length;
+  // A personal DM typed from the owner's phone: from-me, no pending send. It must be skipped untouched.
+  fx.message({ chat: fx.dm(A), handle: A, fromMe: true, text: null, attributedBody: new Uint8Array([0xff, 0x00, 0x13]) });
+  await bridge.poll();
+  expect(hub.ingested).toHaveLength(before);
+});

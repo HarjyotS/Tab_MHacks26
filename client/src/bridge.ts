@@ -151,7 +151,7 @@ export class Bridge {
       if (isGroup && this.gate.groupEnabled(chat)) this.rosterDirty = true;
       return "done";
     }
-    if (isGroup ? !this.gate.groupEnabled(chat) : !this.gate.isMember(sender)) return "done";
+    if (isGroup ? !this.gate.groupEnabled(chat) : !this.gate.readsDms() || !this.gate.isMember(sender)) return "done";
 
     const base = {
       message_id: row.guid,
@@ -215,6 +215,8 @@ export class Bridge {
     }
 
     const key = isGroup ? chat : normalizeHandle(row.handle ?? row.chat_identifier ?? "");
+    // The owner's own DMs are only read when Tab is waiting for one of its sends to that person.
+    if (!isGroup && !this.matcher.expecting(key)) return;
     const text = messageText(row);
     if (this.matcher.match(key, text, row.cache_has_attachments === 1, row.guid)) return;
     if (!isGroup) return;

@@ -8,11 +8,14 @@ import type { State } from "./state.ts";
  * - Group chats: only ones switched on with "/tab on" (or TAB_GROUP_IDS).
  * - DMs: only from members of an enabled group, and only when the bridge DMed
  *   them within the reply window or the message starts with "tab"/"@tab".
+ *   READ_DMS=off turns DM reading off entirely (sending DMs still works).
  */
 export class Gate {
   constructor(
     private readonly state: State,
     private readonly dmReplyWindowMs: number,
+    /** When false, no DM is ever read; Tab only sees enabled groups. */
+    private readonly readDms = true,
   ) {}
 
   groupEnabled(chatGuid: string): boolean {
@@ -58,7 +61,13 @@ export class Gate {
     this.state.save();
   }
 
+  /** False when READ_DMS is off: then no DM is decoded at all. */
+  readsDms(): boolean {
+    return this.readDms;
+  }
+
   allowDm(handle: string, text: string, now: number): boolean {
+    if (!this.readDms) return false;
     if (!this.isMember(handle)) return false;
     const last = this.state.data.lastBridgeDmAt[handle];
     if (last != null && now - last <= this.dmReplyWindowMs) return true;
