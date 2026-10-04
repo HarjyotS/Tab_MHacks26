@@ -61,6 +61,11 @@ export class Gate {
     this.state.save();
   }
 
+  /** False when READ_DMS is off: then no DM is decoded at all. */
+  readsDms(): boolean {
+    return this.readDms;
+  }
+
   allowDm(handle: string, text: string, now: number): boolean {
     if (!this.readDms) return false;
     if (!this.isMember(handle)) return false;

@@ -151,7 +151,7 @@ export class Bridge {
       if (isGroup && this.gate.groupEnabled(chat)) this.rosterDirty = true;
       return "done";
     }
-    if (isGroup ? !this.gate.groupEnabled(chat) : !this.gate.isMember(sender)) return "done";
+    if (isGroup ? !this.gate.groupEnabled(chat) : !this.gate.readsDms() || !this.gate.isMember(sender)) return "done";
 
     const base = {
       message_id: row.guid,

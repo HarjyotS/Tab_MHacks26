@@ -15,7 +15,8 @@ export const config = {
   groupIds: (env.TAB_GROUP_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
   commandPrefix: env.TAB_COMMAND ?? "/tab",
   dmReplyWindowMs: hours(env.DM_REPLY_WINDOW_HOURS, 72),
-  readDms: env.READ_DMS !== "off",
+  // Fails closed: off / false / 0 / no (any case) all turn DM reading off.
+  readDms: !/^(off|false|0|no)$/i.test(env.READ_DMS?.trim() ?? ""),
   sendVia: env.SEND_VIA === "osascript" ? "osascript" : "spectrum",
   tapbacks: env.TAPBACK_MODE !== "off",
   hub: env.HUB ?? "dev",
