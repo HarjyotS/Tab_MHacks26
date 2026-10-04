@@ -50,6 +50,11 @@ export async function handleReceipt(ctx: BrainCtx, m: Message): Promise<void> {
     await askAbout(ctx, m, T.clearerPhoto());
     return;
   }
+  // Items but no usable total (a $0 "Amount Due"): ask for it, never confirm $0.
+  if (receipt.total_cents <= 0) {
+    await askAbout(ctx, m, T.whatWasTotal(), read, "total");
+    return;
+  }
   if (read.currency !== "USD") {
     await askAbout(ctx, m, T.foreignCurrencyQuestion(), read, "total");
     return;
