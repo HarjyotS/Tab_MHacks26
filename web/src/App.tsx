@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Background,
+  BaseEdge,
   Controls,
+  EdgeLabelRenderer,
   MarkerType,
   ReactFlow,
-  useReactFlow,
   type Edge,
+  type EdgeProps,
   type Node,
 } from '@xyflow/react';
+import { centers, extent, layoutEdges, PILL_H, pillWidth, type Person, type Pt } from './graphLayout';
 import { useReducer, useSpacetimeDB, useTable } from 'spacetimedb/react';
 import { reducers, tables } from './module_bindings';
 import type {
@@ -86,8 +89,8 @@ export function App({ secret }: AppProps) {
   const [graphBox, setGraphBox] = useState<Size>({ width: 0, height: 0 });
   const [graphElement, setGraphElement] = useState<HTMLDivElement | null>(null);
   const graph = useMemo(
-    () => buildGraph(members, balances, pulse, names, graphBox),
-    [members, balances, pulse, names, graphBox]
+    () => buildGraph(members, balances, pulse, names),
+    [members, balances, pulse, names]
   );
 
   // Lay the graph out for the box it actually has, and refit when that box changes.
@@ -171,10 +174,9 @@ export function App({ secret }: AppProps) {
               <div className="empty-state"><span>✓</span><strong>Everyone is square</strong><small>No outstanding balances</small></div>
             ) : (
               <ReactFlow
-                nodes={graph.nodes} edges={graph.edges} defaultViewport={WHOLE_BOX}
-                minZoom={0.2} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}
+                key={`${graphBox.width}x${graphBox.height}`} nodes={graph.nodes} edges={graph.edges} edgeTypes={EDGE_TYPES}
+                fitView fitViewOptions={{ padding: 0.12 }} minZoom={0.2} maxZoom={1.4} nodesDraggable={false} nodesConnectable={false}
               >
-                <ShowWholeGraph box={graphBox} />
                 <Background color="#d7dfda" gap={22} size={1} />
                 <Controls showInteractive={false} />
               </ReactFlow>
@@ -223,15 +225,6 @@ function memberNames(members: readonly LedgerMember[]): Map<string, string> {
     names.set(member.ledgerMemberId, name || `Member ${++unnamed}`);
   }
   return names;
-}
-
-/** "Haejyot" → "H", "Mary Jane" → "MJ", "Member 2" → "2". */
-function initials(name: string): string {
-  const numbered = name.match(/^Member (\d+)$/);
-  if (numbered) return numbered[1];
-  const words = name.split(/\s+/).filter(Boolean);
-  const letters = words.length > 1 ? [words[0], words[words.length - 1]] : words;
-  return letters.map(word => [...word][0]?.toUpperCase() ?? '').join('') || '·';
 }
 
 type LedgerRows = {
@@ -290,61 +283,69 @@ function ExpenseDetail({ expense, shares, items, claims, transfers, names }: {
 
 type Size = { width: number; height: number };
 
-// buildGraph lays nodes out inside the measured box, so the unzoomed viewport shows all of them.
-const WHOLE_BOX = { x: 0, y: 0, zoom: 1 };
-const NARROW_GRAPH = 520;
-
-/**
- * Resets the view whenever the box changes, so a resize or rotation never leaves
- * people off screen. (useReactFlow().fitView waits for the next node change,
- * which a pure resize may never bring, so it can't be relied on here.)
- */
-function ShowWholeGraph({ box }: { box: Size }) {
-  const { setViewport } = useReactFlow();
-  useEffect(() => {
-    if (box.width) void setViewport(WHOLE_BOX);
-  }, [box.width, box.height, setViewport]);
-  return null;
+// A debt arrow drawn from graphLayout's precomputed path, with its amount on
+// a solid pill so lines never run through the text.
+type MoneyEdgeData = { path: string; labelAt: Pt; text: string; settled?: boolean };
+function MoneyEdge({ id, data, markerEnd, style }: EdgeProps) {
+  const d = data as MoneyEdgeData;
+  return (
+    <>
+      <BaseEdge id={id} path={d.path} markerEnd={markerEnd} style={style} />
+      <EdgeLabelRenderer>
+        <div className={`edge-label${d.settled ? ' settled' : ''}`} style={{ transform: `translate(-50%, -50%) translate(${d.labelAt.x}px, ${d.labelAt.y}px)` }}>
+          {d.text}
+        </div>
+      </EdgeLabelRenderer>
+    </>
+  );
 }
+const EDGE_TYPES = { money: MoneyEdge };
 
 function buildGraph(
   members: readonly LedgerMember[], balances: readonly LedgerBalance[], pulse: Pulse | undefined,
-  names: Map<string, string>, box: Size
+  names: Map<string, string>
 ): { nodes: Node[]; edges: Edge[] } {
-  // An ellipse sized to the container, so everyone is in view at zoom 1 on any screen.
-  const width = box.width || 440;
-  const height = box.height || 400;
-  const narrow = width < NARROW_GRAPH;
-  const nodeSize = { width: 96, height: 80 };
-  const radiusX = Math.max(60, width / 2 - nodeSize.width / 2 - 12);
-  const radiusY = Math.max(60, height / 2 - nodeSize.height / 2 - 12);
-  // Two people read best side by side; more go round from the top.
-  const start = members.length === 2 ? Math.PI : -Math.PI / 2;
-  const nodes: Node[] = members.map((member, index) => {
-    const angle = start + (Math.PI * 2 * index) / Math.max(members.length, 1);
+  const spots = centers(members.length).centers;
+  const at = new Map<string, Person>(members.map((member, i) => [member.ledgerMemberId, { center: spots[i]!, name: names.get(member.ledgerMemberId) ?? 'Unnamed' }]));
+  const nodes: Node[] = members.map(member => {
+    const { center: c, name } = at.get(member.ledgerMemberId)!;
+    const w = pillWidth(name);
     return {
       id: member.ledgerMemberId,
-      position: {
-        x: width / 2 + Math.cos(angle) * radiusX - nodeSize.width / 2,
-        y: height / 2 + Math.sin(angle) * radiusY - nodeSize.height / 2,
-      },
-      style: { width: nodeSize.width },
-      data: { label: <div className="person-node"><span>{initials(names.get(member.ledgerMemberId) ?? '')}</span><strong>{names.get(member.ledgerMemberId)}</strong></div> },
+      position: { x: c.x - w / 2, y: c.y - PILL_H / 2 },
+      style: { width: w, height: PILL_H },
+      data: { label: <div className="person-node">{name}</div> },
       className: pulse && (pulse.from === member.ledgerMemberId || pulse.to === member.ledgerMemberId) ? 'graph-node pulse' : 'graph-node',
     };
   });
-  const edges: Edge[] = balances.map(balance => ({
-    id: balance.edgeId, source: balance.fromLedgerMemberId, target: balance.toLedgerMemberId,
-    // The arrow already says who owes whom; on narrow screens the full sentence covers the nodes.
-    label: narrow ? formatMoney(balance.amountCents) : `${names.get(balance.fromLedgerMemberId)} owes ${formatMoney(balance.amountCents)}`,
+  const debts = balances
+    .filter(balance => at.has(balance.fromLedgerMemberId) && at.has(balance.toLedgerMemberId))
+    .map(balance => ({
+      id: balance.edgeId, from: at.get(balance.fromLedgerMemberId)!, to: at.get(balance.toLedgerMemberId)!,
+      label: formatMoney(balance.amountCents), balance,
+    }));
+  const settled = pulse && at.has(pulse.from) && at.has(pulse.to)
+    ? [{ id: `settled-${pulse.transferId}`, from: at.get(pulse.from)!, to: at.get(pulse.to)!, label: `Paid ${formatMoney(pulse.amount)}` }]
+    : [];
+  const placed = layoutEdges([...debts, ...settled], [...at.values()]);
+  // Two invisible corners around every arrow and label: fitView only sees nodes.
+  const { min, max } = extent([...at.values()], placed);
+  for (const [id, p] of [['bounds-min', min], ['bounds-max', max]] as const)
+    nodes.push({ id, position: p, data: { label: null }, className: 'bounds-node', style: { width: 1, height: 1 }, selectable: false, focusable: false });
+  const edges: Edge[] = debts.map((debt, i) => ({
+    id: debt.id, type: 'money', source: debt.balance.fromLedgerMemberId, target: debt.balance.toLedgerMemberId,
+    data: { path: placed[i]!.path, labelAt: placed[i]!.label, text: debt.label },
+    ariaLabel: `${names.get(debt.balance.fromLedgerMemberId)} owes ${names.get(debt.balance.toLedgerMemberId)} ${debt.label}`,
     markerEnd: { type: MarkerType.ArrowClosed, color: '#ee5d3f' },
-    style: { stroke: '#ee5d3f', strokeWidth: 2.5 }, labelStyle: { fill: '#28322d', fontWeight: 700, fontSize: 12 },
+    style: { stroke: '#ee5d3f', strokeWidth: 2.5 },
   }));
-  if (pulse) edges.push({
-    id: `settled-${pulse.transferId}`, source: pulse.from, target: pulse.to, animated: true,
-    label: `Settled ${formatMoney(pulse.amount)}`, markerEnd: { type: MarkerType.ArrowClosed, color: '#2ba879' },
-    className: 'settled-edge', style: { stroke: '#2ba879', strokeWidth: 4 },
-    labelStyle: { fill: '#157153', fontWeight: 800, fontSize: 13 },
-  });
+  if (pulse && settled.length) {
+    const p = placed[debts.length]!;
+    edges.push({
+      id: settled[0]!.id, type: 'money', source: pulse.from, target: pulse.to, animated: true, className: 'settled-edge',
+      data: { path: p.path, labelAt: p.label, text: settled[0]!.label, settled: true },
+      markerEnd: { type: MarkerType.ArrowClosed, color: '#2ba879' }, style: { stroke: '#2ba879', strokeWidth: 4 },
+    });
+  }
   return { nodes, edges };
 }
