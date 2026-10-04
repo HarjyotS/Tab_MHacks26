@@ -412,13 +412,14 @@ Reactions never go to the classifier. A message with `kind: "reaction"` is route
 
 | Reaction is on     | Reaction            | Meaning                                                                                                                            |
 | ------------------ | ------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| A`split_proposal`  | like                | This person is fine with the split (`responded = true`). If every participant likes it, the expense finalizes immediately.         |
+| A`split_proposal`  | like                | This person is fine with the split (`responded = true`). If every participant likes it, the expense finalizes immediately. A like from the payer confirms the split for the group and finalizes it immediately: they know what it cost and who was there. Anyone who disagrees later can still change it (7.7: Tab asks to reopen it). Locking in never pays (P7). |
 | A`split_proposal`  | dislike or question | Treated as`split_adjustment` without specifics: Tab asks what's off.                                                               |
 | A `settle_request` | like                | Approves every share of this person's that the request covers, and nobody else's. This is the only way a payment is approved (P7). |
+| A `settle_request` | like from the payee | Pays nothing and changes nothing (P7). The first time, Tab DMs them once who it's still waiting on ("you're the one getting paid, just waiting on alex and sam", or "everyone's already paid you"); later likes get no reply. |
 | A`settle_request`  | dislike             | Treated as`dispute` for this person.                                                                                               |
 | Anything else      | anything            | Ignored.                                                                                                                           |
 
-Approving a payment is tap-only: a 👍 on the settle request from the person whose share it is (P7). Other reaction-driven actions, like disputing or objecting, also work in plain text ("no", "not even"). Tab supports iMessage groups only (10.3), so every member can tap.
+Approving a payment is tap-only: a 👍 on the settle request from the person whose share it is (P7). Other reaction-driven actions, like disputing or objecting, also work in plain text ("no", "not even"). So does agreeing: a reply to the proposal that agrees ("yeah", "looks good", "split 4 ways" when it is 4 ways) counts as that person's like and is never read as an objection. Code decides it: a reply that isn't a question and has nothing to change (no name, amount, fraction, or words like "had", "only", "wasn't") agrees. Only the payer's like, not their typed "yeah", locks the split in early. Tab supports iMessage groups only (10.3), so every member can tap.
 
 DM replies are classified with the context of that person's open items. If the sender has more than one open item, Tab asks which one with a numbered list rather than guessing.
 
@@ -493,7 +494,7 @@ stateDiagram-v2
   needs_info --> proposed: question answered
   proposed --> proposed: custom adjustment, opt-out, or correction
   proposed --> itemizing: someone says a receipt split is uneven
-  proposed --> finalized: objection deadline passes or everyone likes it
+  proposed --> finalized: objection deadline passes, everyone likes it, or the payer likes it
   itemizing --> finalized: everyone responded or claim deadline passes
   finalized --> settled: every participant share paid
   proposed --> void: payer cancels
@@ -531,7 +532,7 @@ just say what you paid ("paid 40 for groceries") or drop a receipt pic. you can 
 | 5    | Shares are created with status`proposed`, `recompute_expense` runs, and Tab likes the source message.                                                     |
 | 6    | Tab posts the split proposal and sets`objection_deadline` (OBJECTION_WINDOW, pushed out of quiet hours).                                                    |
 | 7    | At the deadline minus OBJECTION_REMINDER_BEFORE, Tab posts one group reminder.                                                                                |
-| 8    | At the deadline, or as soon as every participant has liked the proposal, the expense finalizes (7.6).                                                         |
+| 8    | At the deadline, as soon as every participant has liked the proposal (or agreed in text), or as soon as the payer likes it, the expense finalizes (7.6).     |
 
 Example proposal:
 
@@ -564,9 +565,11 @@ The payer defaults to whoever posted the photo, unless the caption or a followin
 
 **Item ownership.** On a receipt with line items, "Alex had both drinks" (had or got, without "only" or "just") means those items are Alex's and Alex still shares the rest. Each named item that is a whole line on the receipt becomes a claim by that person, `split_mode` switches to `itemized`, and the expense stays `proposed`. Unclaimed items split evenly among everyone not opted out, and tax and tip are allocated proportionally (section 8). Extraction marks the difference (`only` per fixed entry); code checks every item against the receipt. If any item isn't a whole line ("a drink" from a 2x line), or someone "only had" something, the custom split above applies instead. On a text expense with no items, "Alex had a $5 drink" stays a custom split.
 
+**Fractional shares.** "Priya had half", "a third of it", "75%", "Jake ate two thirds", or "half of the pizza" on the expense "Pizza" is a fraction of the expense, not an item to price. Code reads the fraction (a regex plus number words, never Grok) and pins that person's share to the fraction times the subtotal (the total on a text expense), as a custom split; everyone else still on it splits the rest evenly. "Me and Jordan had the other half" or "the rest split between Sam and Jordan" gives the remainder to exactly those people, and anyone else on the split had none of it (opted out). An item named without a price that is the expense itself ("Priya had the pizza" on "Pizza") is all of it. Tab never asks for a price it already knows: a reply to "how much was Priya's half?" that is a fraction ("half of the cost", "50%", "a third of it") is read against the total. "Half of the fries" on "Dinner" still needs a price, and receipts with line items work as before.
+
 **Opt-out.** "I wasn't there" sets that person's share to `opted_out` and recomputes, and Tab likes the message. Tab posts an updated proposal only if other people's amounts changed.
 
-**Uneven without specifics.** For a receipt, switch to itemizing. For a text expense, ask "ok what was uneven?" and stay in `proposed`.
+**Uneven without specifics.** For a receipt, switch to itemizing. For a text expense, ask "ok what was uneven?" and stay in `proposed`. Tab asks it once: an answer that says it's even after all ("split 4 ways", "nvm", "it was even", "no it's fine") closes the question and keeps the split, the same as a like from that person. An answer that still has nothing specific also keeps the split (Tab likes it), without counting as their like.
 
 **Itemizing.** Tab posts the numbered item list and sets `claim_deadline`. Claims are accepted in the group or in DMs, in any phrasing, and resolved against the list (9.2).
 
@@ -642,7 +645,7 @@ Every expense included gets this message's id as its `settle_message_id`, so a t
 | A participant dislikes it or replies "no"     | Their shares in the request become `disputed`. Tab asks what's off, in the group if they replied there, otherwise by DM.                                                                                                                                                              |
 | A participant hasn't approved                 | A friendly nudge in the group by name (P5), on the same schedule as claim nudges, using the `approval_followup` purpose. Each nudge ends with "no rush, just tap 👍 on the settle msg when you can". After the last one, the balance simply stays outstanding. Tab never pays on anyone's behalf (P7). |
 
-Only the person whose money moves can approve their own share. Reactions from anyone else on the settle request are ignored for that share, and the payer's own reaction means nothing.
+Only the person whose money moves can approve their own share. Reactions from anyone else on the settle request are ignored for that share. The payee's own 👍 pays nothing; the first one gets a single DM saying who Tab is still waiting on (6.2).
 
 **Disputes in the MVP [DEFAULT].** A dispute can change only the disputing person's amount. Tab reopens claims for that person alone, recomputes, and sends them a new approval request. Any difference is absorbed by the payer's own share, so nobody who already approved or paid is affected. **[YOUR CALL]** if you find a fairer approach that still respects P4.
 
@@ -955,6 +958,8 @@ Access: an unguessable group URL such as `/g/<random id>`, with no login for the
 | ------------- | ---------------------------------------------- |
 | Like          | Logged, or understood                          |
 | Question      | Not sure; a short question follows immediately |
+
+Tab never sends the same clarifying question about an expense twice in a row. While a question is still open, asking it again goes out once in other words with a concrete example ("how much should Priya pay? like $16.00"), or not at all when there's no better way to put it; after that Tab stops asking and keeps the question open to an answer. Where the best reading is clear, Tab applies it instead of asking (fractional shares, 7.5; "it was even", 7.5).
 
 Tab's tapbacks are acknowledgements only. The Mac bridge sends them by driving Messages' interface, and one can occasionally fail (10.2), so no flow may depend on a tapback arriving.
 
