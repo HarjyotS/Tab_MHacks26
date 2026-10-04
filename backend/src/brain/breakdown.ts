@@ -93,6 +93,50 @@ export function breakdownTargets(ctx: BrainCtx, group_id: string, m: Message): {
   return { phones, unknown };
 }
 
+// Each pair's balance and the events behind it, largest balance first.
+function buildSections(ctx: BrainCtx, group_id: string, pairs: [string, string][]): T.BreakdownPair[] {
+  const name = nameIn(ctx, group_id);
+  const sections: T.BreakdownPair[] = [];
+  for (const [a, b] of pairs) {
+    const events = pairEvents(ctx, group_id, a, b);
+    if (events.length === 0) continue;
+    const net = events.reduce((sum, e) => sum + e.signed_cents, 0);
+    // Headline from the side that owes; flip the signs to match it.
+    const [debtor, creditor, flip] = net >= 0 ? [a, b, 1] : [b, a, -1];
+    sections.push({
+      debtor: name(debtor),
+      creditor: name(creditor),
+      net_cents: Math.abs(net),
+      events: events.map((e) => ({ ...e, signed_cents: e.signed_cents * flip })),
+    });
+  }
+  return sections.sort((x, y) => y.net_cents - x.net_cents);
+}
+
+// "why?" right after a balance reply (Joe's rule: "if he asks why, explain
+// very shortly"): one short line per balance the asker has, from the same
+// traced records. "@Tab breakdown" is there for the full trace.
+export async function handleShortWhy(ctx: BrainCtx, m: Message) {
+  const groups = groupsOf(ctx, m);
+  const lines = groups.flatMap((g) =>
+    T.shortWhyLines(buildSections(ctx, g, activeMembers(ctx, g).filter((x) => x.phone !== m.sender_phone).map((x) => [m.sender_phone, x.phone])), nameIn(ctx, g)(m.sender_phone)),
+  );
+  await say(ctx, {
+    chat: chatOf(m), purpose: "breakdown_reply", id: `breakdown_reply:${m.message_id}`, reply_to: m.message_id,
+    text: T.shortWhyReply(lines),
+  });
+}
+
+// "why do I owe Priya", "why does Sam owe me": the breakdown for that pair.
+const WHY_OWE = /\bwhy (?:do|does|am) (\w+) (?:owe|owing) (\w+)/i;
+export function whyOweTarget(m: Message): string | undefined {
+  const match = (m.text ?? "").match(WHY_OWE);
+  if (!match) return undefined;
+  const [, a, b] = match;
+  const self = (w: string) => /^(i|me)$/i.test(w);
+  return [a!, b!].filter((w) => !self(w)).join(" ") || undefined;
+}
+
 export async function handleBreakdownCommand(ctx: BrainCtx, m: Message) {
   const group_id = m.group_id ?? groupsOf(ctx, m)[0];
   if (!group_id) return;
@@ -112,22 +156,7 @@ export async function handleBreakdownCommand(ctx: BrainCtx, m: Message) {
         ? [[m.sender_phone, others[0]!]]
         : activeMembers(ctx, group_id).filter((x) => x.phone !== m.sender_phone).map((x) => [m.sender_phone, x.phone]);
 
-  const sections: T.BreakdownPair[] = [];
-  for (const [a, b] of pairs) {
-    const events = pairEvents(ctx, group_id, a, b);
-    if (events.length === 0) continue;
-    const net = events.reduce((sum, e) => sum + e.signed_cents, 0);
-    // Headline from the side that owes; flip the signs to match it.
-    const [debtor, creditor, flip] = net >= 0 ? [a, b, 1] : [b, a, -1];
-    sections.push({
-      debtor: name(debtor),
-      creditor: name(creditor),
-      net_cents: Math.abs(net),
-      events: events.map((e) => ({ ...e, signed_cents: e.signed_cents * flip })),
-    });
-  }
-  sections.sort((x, y) => y.net_cents - x.net_cents);
-
+  const sections = buildSections(ctx, group_id, pairs);
   const subject = pairs.length === 1 ? undefined : name(m.sender_phone);
   const shown = T.breakdownCommandReply({ subject, pairs: sections, max_pairs: MAX_PAIRS, max_lines: MAX_LINES });
   const url = shown.truncated ? await ledgerUrl(ctx, group_id) : undefined;

@@ -416,6 +416,26 @@ export function breakdownSummaryReply(a: { subject?: string; pairs: BreakdownPai
   return out.join("\n");
 }
 
+// The short "why?" (Joe's rule: explain very shortly). A balance that is one
+// share the asker owes reads as before ("pizza $15.00: split 3 ways after
+// Jake's $3.00"); anything netted gets its headline and the expenses behind
+// it ("Alex owes Jordan $90.70: sushi $100.70, less pizza $10.00").
+export function shortWhyLines(pairs: BreakdownPair[], asker: string): string[] {
+  return pairs.map((p) => {
+    const only = p.events.length === 1 ? p.events[0]! : undefined;
+    if (only && p.debtor === asker) return `${only.description} ${money(Math.abs(only.signed_cents))}: ${only.why}`;
+    const adds = p.events.filter((e) => e.signed_cents >= 0).map((e) => `${e.description} ${money(e.signed_cents)}`);
+    const back = p.events.filter((e) => e.signed_cents < 0).map((e) => `${e.description} ${money(-e.signed_cents)}`);
+    return `${pairHeadline(p)}: ${adds.join(", ")}${back.length ? `, less ${back.join(", ")}` : ""}`;
+  });
+}
+
+export function shortWhyReply(lines: string[]): string {
+  if (lines.length === 0) return "nothing open for you rn";
+  const more = lines.length > 5 ? `\nmore: "@tab breakdown"` : "";
+  return `${lines.slice(0, 5).join("\n")}${more}`;
+}
+
 export const pairHeadline = (p: BreakdownPair) =>
   p.net_cents === 0 ? `${p.debtor} and ${p.creditor} are even` : `${p.debtor} owes ${p.creditor} ${money(p.net_cents)}`;
 

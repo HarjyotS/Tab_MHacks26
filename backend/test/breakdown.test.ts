@@ -145,6 +145,26 @@ describe("@Tab breakdown", () => {
     expect(w.said("other").at(-1)?.toLowerCase()).toMatch(/@tab breakdown/);
   });
 
+  it('answers "why?" after a balance reply shortly, netting with the expenses behind it', async () => {
+    const w = await evening();
+    await w.say("Joe", "what do i owe");
+    await w.say("Joe", "why");
+    expect(last(w).split("\n")).toEqual([
+      "joe owes priya $90.70: blue ocean sushi $100.70, less pizza $10.00",
+      "jake owes joe $10.00: pizza $10.00",
+      "kian owes joe $4.00: pizza $10.00, less uber $6.00",
+    ]);
+  });
+
+  it.each([
+    ["why do I owe Priya?", /^here's the breakdown:\njoe owes priya \$90\.70\n/],
+    ["why does kian owe me", /^here's the breakdown:\nkian owes joe \$4\.00\n/],
+  ])("routes %j to the breakdown for that person", async (text, want) => {
+    const w = await evening();
+    await w.say("Joe", text);
+    expect(last(w)).toMatch(want);
+  });
+
   it("answers the command even while Tab is waiting on another question", async () => {
     const w = await evening();
     const source = w.db.messages().find((m) => m.group_id === GROUP)!;

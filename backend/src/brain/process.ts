@@ -23,7 +23,7 @@ import {
 } from "./settle.js";
 import { handleCorrection } from "./correction.js";
 import { handleLedger } from "./ledger.js";
-import { BREAKDOWN_COMMAND, handleBreakdownCommand, hintBreakdown } from "./breakdown.js";
+import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
   handleBalanceQuery,
   handleHelp,
@@ -111,15 +111,17 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
         prefiltered: result.prefiltered === true,
       });
 
-      // "@Tab breakdown" (§7.8): the one way to ask where amounts come from,
+      // "@Tab breakdown" (§7.8): the full trace of where amounts come from,
       // checked before anything else so an open question can't swallow it.
-      const breakdown = BREAKDOWN_COMMAND.test((m.text ?? "").trim());
-      if (breakdown) await handleBreakdownCommand(ctx, m);
+      // "why do I owe Priya" is the same thing for one person.
+      const whyOwe = whyOweTarget(m);
+      const breakdown = BREAKDOWN_COMMAND.test((m.text ?? "").trim()) || whyOwe !== undefined;
+      if (breakdown) await handleBreakdownCommand(ctx, whyOwe ? { ...m, text: `@tab breakdown ${whyOwe}` } : m);
       const reply: Reply = breakdown ? { answered: false } : await answerThreads(ctx, m, result, decision);
       const answered = reply.answered;
-      // A free-form "why?" right after Tab's balance reply: point to the command.
+      // "why?" right after Tab's balance reply: the short answer (Joe's rule).
       const why = !breakdown && !answered && WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
-      if (why) await hintBreakdown(ctx, m);
+      if (why) await handleShortWhy(ctx, m);
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
       const ledger = !breakdown && !answered && !why && wantsLedger(m, intent, decision);
       if (ledger) await handleLedger(ctx, m);

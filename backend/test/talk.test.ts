@@ -17,7 +17,7 @@ const raw = {
 };
 
 describe("what do i owe", () => {
-  it("answers with just the amount; a free-form why points to @Tab breakdown", async () => {
+  it("answers with just the amount, and explains only when asked why", async () => {
     const w = world({
       expense: {
         "new|got pizza for everyone, $48": {
@@ -38,8 +38,10 @@ describe("what do i owe", () => {
     await w.say("Priya", "what do i owe");
     expect(w.said("balance_reply")).toEqual(["you owe Joe $15.00"]);
     await w.say("Priya", "why");
-    expect(w.said("breakdown_reply")).toEqual([]);
-    expect(w.said("other").at(-1)?.toLowerCase()).toMatch(/^send "@tab breakdown" and i'll show where each amount comes from\.?$/);
+    expect(w.said("breakdown_reply")).toEqual([
+      "pizza $15.00: split 3 ways after Jake's $3.00",
+    ]);
+    // The full trace is still there on request.
     await w.say("Priya", "@Tab breakdown joe");
     expect(w.said("breakdown_reply").at(-1)?.toLowerCase()).toMatch(
       /^here's the breakdown:\npriya owes joe \$15\.00\n\+ \$15\.00 priya's share of pizza \(split 3 ways after jake's \$3\.00\) · joe paid \$48\.00, .+ · "got pizza for everyone, \$48"$/,
