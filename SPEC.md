@@ -889,7 +889,7 @@ Keep all of these in one config file.
 | LARGE_AMOUNT_CENTS        | 100000                 | $1,000                                                                                |
 | SCHEDULER_INTERVAL        | 30 seconds             |                                                                                       |
 | DEMO_STARTING_BALANCE     | 50000                  | $500 per setup-time Nessie fixture account                                            |
-| DEMO_MODE                 | false                  | When true, every duration above is divided by DEMO_TIME_SCALE and quiet hours are off |
+| DEMO_MODE                 | false                  | When true, every duration above except the answer window for Tab's questions is divided by DEMO_TIME_SCALE, and quiet hours are off |
 | DEMO_TIME_SCALE           | 360                    | 3 hours becomes 30 seconds, and 48 hours becomes 8 minutes                            |
 
 DEMO_MODE matters: without it, nothing time-based can be shown on stage.

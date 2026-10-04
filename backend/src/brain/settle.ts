@@ -58,12 +58,10 @@ export async function finalize(ctx: BrainCtx, snapshot: Expense) {
     finalized_at: ctx.now(),
   });
   if (settleModeFor(ctx, expense.group_id) === "per_expense") {
-    await postSettleRequest(
-      ctx,
-      expense.group_id,
-      [ctx.store.expense(expense.expense_id)!],
-      `settle_request:${expense.expense_id}`,
-    );
+    // A reopened expense (§7.7) gets a new request, so a new id.
+    const first = `settle_request:${expense.expense_id}`;
+    const id = ctx.store.outbox().some((o) => o.action_id === first) ? `${first}:${ctx.now().getTime()}` : first;
+    await postSettleRequest(ctx, expense.group_id, [ctx.store.expense(expense.expense_id)!], id);
   }
 }
 
@@ -133,13 +131,18 @@ export async function settleUp(ctx: BrainCtx, m: Message) {
     outstanding,
     `settle_request:${m.group_id}:${m.message_id}`,
   );
-  if (!posted)
-    await say(ctx, {
-      chat: chatOf(m),
-      purpose: "balance_reply",
-      id: `settle_up:${m.message_id}`, reply_to: m.message_id,
-      text: T.nothingToSettle(),
-    });
+  if (posted) return;
+  // Nothing locked in yet, but something may still be open: say so rather
+  // than "everyone's square".
+  const open = ctx.store
+    .expenses()
+    .filter((e) => e.group_id === m.group_id && (e.status === "proposed" || e.status === "itemizing"));
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "balance_reply",
+    id: `settle_up:${m.message_id}`, reply_to: m.message_id,
+    text: open.length > 0 ? T.notLockedYet(open) : T.nothingToSettle(),
+  });
 }
 
 // Expenses a settle request covers.

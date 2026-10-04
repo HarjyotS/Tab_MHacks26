@@ -33,9 +33,12 @@ const BASE_DURATIONS = {
   // says 10:00 the next morning for the second; quiet hours push it there.
   FOLLOWUP_DM2_AFTER: 12 * HOUR,
   FOLLOWUP_DM3_AFTER: 44 * HOUR,
-  // How long Tab waits for an answer to one of its questions.
+  // How long Tab waits for an answer to one of its questions. People type
+  // at the same speed in a demo, so DEMO_MODE leaves this one unscaled.
   PENDING_QUESTION_TTL: 2 * HOUR,
 };
+
+const UNSCALED: ReadonlySet<keyof typeof BASE_DURATIONS> = new Set(["PENDING_QUESTION_TTL"]);
 
 export type Durations = typeof BASE_DURATIONS;
 
@@ -57,7 +60,10 @@ export function timing(
       `DEMO_TIME_SCALE must be a positive number, got ${env.DEMO_TIME_SCALE}`,
     );
   const durations = Object.fromEntries(
-    Object.entries(BASE_DURATIONS).map(([k, v]) => [k, Math.round(v / scale)]),
+    Object.entries(BASE_DURATIONS).map(([k, v]) => [
+      k,
+      UNSCALED.has(k as keyof Durations) ? v : Math.round(v / scale),
+    ]),
   ) as Durations;
   return {
     demo,

@@ -128,7 +128,7 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       // A captioned photo ("dinner, i paid") is still a receipt.
       return m.kind === "image" ? handleReceipt(ctx, m) : handleExpense(ctx, m);
     case "split_adjustment":
-      return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed"));
+      return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed", "finalized"));
     case "name_reply":
       return handleNameReply(ctx, m);
     case "approval":
@@ -165,7 +165,8 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent) {
   // stay silent: explain what's wrong, or confirm before applying.
   if (intent === "split_adjustment") {
     const bound = repliedExpense(ctx, m);
-    return handleAdjustment(ctx, m, m.text ?? "", bound?.status === "proposed" ? bound : undefined, { confirmOnly: true });
+    const target = bound?.status === "proposed" || bound?.status === "finalized" ? bound : undefined;
+    return handleAdjustment(ctx, m, m.text ?? "", target, { confirmOnly: true });
   }
   const question = CONFIRM_QUESTION[intent];
   if (!question) return; // e.g. a possible name: never guess (P3), stay quiet (P1)
@@ -296,7 +297,7 @@ async function answerConfirm(
   if (p.then === "expense") await handleExpense(ctx, m, p.source.text ?? "", p.source);
   else if (p.then === "adjustment" && p.extraction && p.expense_id) {
     const expense = ctx.store.expense(p.expense_id);
-    if (expense?.status === "proposed") {
+    if (expense?.status === "proposed" || expense?.status === "finalized") {
       await tapback(ctx, m, "like", expense.expense_id);
       await applyAdjustment(ctx, expense, p.extraction.result);
     }
@@ -436,12 +437,25 @@ export function answerPercent(text: string, base_cents: number): number | undefi
   return match ? Math.round((base_cents * Number(match[1])) / 100) : undefined;
 }
 
-// SPEC #15: "each" switches the group to per-expense settling; anything else
-// leaves the default (ledger) and goes through normal handling.
+// SPEC #15: "each" switches the group to per-expense settling. A clear
+// "no trip, keep a tab" reply ("nah we're just adding friend expenses in the
+// long run", Harjyot's playground test) keeps the default. Either way Tab
+// confirms in one line. Anything else goes through normal handling.
+const EACH = /^(each|every time|after (each|every))\b/i;
+const LEDGER = /^(nah|no|nope|not really)\b|\b(running tab|long run|at the end|keep a tab)\b/i;
+
 async function answerSettleMode(ctx: BrainCtx, m: Message, key: string): Promise<boolean> {
-  if (!m.group_id || !/^each\b/i.test((m.text ?? "").trim())) return false;
+  const text = (m.text ?? "").trim();
+  const mode = EACH.test(text) ? "per_expense" : LEDGER.test(text) ? "ledger" : undefined;
+  if (!m.group_id || !mode) return false;
   ctx.memory.pending.delete(key);
-  ctx.memory.settleMode.set(m.group_id, "per_expense");
-  await tapback(ctx, m, "like");
+  ctx.memory.settleMode.set(m.group_id, mode);
+  await say(ctx, {
+    chat: chatOf(m),
+    purpose: "other",
+    id: `settle_mode_set:${m.group_id}`,
+    reply_to: m.message_id,
+    text: T.settleModeSet(mode),
+  });
   return true;
 }
