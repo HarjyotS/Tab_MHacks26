@@ -46,13 +46,33 @@ export function App({ secret }: AppProps) {
     () => {
       // A voided expense is gone: it, its shares and its payments stay off the page.
       const gone = new Set(allExpenses.filter(expense => expense.status === 'void').map(expense => expense.expenseId));
+      const expenses = allExpenses.filter(expense => !gone.has(expense.expenseId));
+      const shares = allShares.filter(share => !gone.has(share.expenseId));
+      // Balances from the live shares, so a voided expense is never owed
+      // (the module's balance view still counts its locked shares).
+      const owed = new Map<string, bigint>();
+      for (const expense of expenses) {
+        if (!expense.payerLedgerMemberId) continue;
+        for (const share of shares) {
+          if (share.expenseId !== expense.expenseId || share.role !== 'participant' || !['locked', 'approved', 'disputed'].includes(share.status)) continue;
+          const key = `${share.ledgerMemberId}>${expense.payerLedgerMemberId}`;
+          owed.set(key, (owed.get(key) ?? 0n) + share.amountCents);
+        }
+      }
+      const balances = [...owed].flatMap(([key, cents]) => {
+        const [from, to] = key.split('>') as [string, string];
+        const net = cents - (owed.get(`${to}>${from}`) ?? 0n);
+        return net > 0n ? [{ edgeId: key, fromLedgerMemberId: from, toLedgerMemberId: to, amountCents: net }] : [];
+      });
+      // Someone with no name who isn't in any live split has left the chat.
+      const inSplit = new Set(shares.filter(share => share.status !== 'opted_out').map(share => share.ledgerMemberId));
+      const members = allMembers.filter(member => member.name || inSplit.has(member.ledgerMemberId));
       return scopeToGroup(group?.ledgerGroupId, {
-        members: allMembers, expenses: allExpenses.filter(expense => !gone.has(expense.expenseId)),
-        shares: allShares.filter(share => !gone.has(share.expenseId)), items: allItems,
-        claims: allClaims, transfers: allTransfers.filter(transfer => !gone.has(transfer.expenseId)), balances: allBalances,
+        members, expenses, shares: shares.filter(share => members.some(member => member.ledgerMemberId === share.ledgerMemberId)), items: allItems,
+        claims: allClaims, transfers: allTransfers.filter(transfer => !gone.has(transfer.expenseId)), balances,
       });
     },
-    [group?.ledgerGroupId, allMembers, allExpenses, allShares, allItems, allClaims, allTransfers, allBalances]
+    [group?.ledgerGroupId, allMembers, allExpenses, allShares, allItems, allClaims, allTransfers]
   );
   const { members, expenses, shares, items, claims, transfers, balances } = scoped;
 
