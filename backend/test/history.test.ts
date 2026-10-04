@@ -94,10 +94,10 @@ describe("the playground DM, after Sam paid Priya for tp", () => {
     expect(replyTo(m)!.text).toBe("that was tp, you paid Priya $5.00 today\nyou're all square now");
   });
 
-  it("a balance with nothing open shows the last payment, and \"why?\" says what it was", async () => {
+  it("a balance with nothing open is just \"square\" (only what's asked), and \"why?\" says what it was", async () => {
     const { dm, replyTo } = await samPaidPriya();
     const owe = await dm("what do i owe");
-    expect(replyTo(owe)!.text).toBe("you're square with everyone\nlast one: you paid Priya $5.00 for tp today");
+    expect(replyTo(owe)!.text).toBe("you're square with everyone");
     const why = await dm("why");
     expect(replyTo(why)!.text).toBe("that was tp, you paid Priya $5.00 today\nyou're all square now");
   });
@@ -108,7 +108,7 @@ describe("the playground DM, after Sam paid Priya for tp", () => {
     const m = w.db.ingest({ sender_phone: PEOPLE.Priya, text: "what do i owe" });
     await processMessage(w.ctx, m);
     // Priya is in the house too, where she owes Joe nothing yet: square.
-    expect(w.db.outbox().find((o) => o.target_message_id === m.message_id)!.text).toBe("you're square with everyone\nlast one: Sam paid you $5.00 for tp today");
+    expect(w.db.outbox().find((o) => o.target_message_id === m.message_id)!.text).toBe("you're square with everyone");
   });
 });
 
@@ -121,7 +121,6 @@ describe("combined questions", () => {
     const reply = w.db.outbox().find((o) => o.target_message_id === m.message_id)!;
     expect(reply.text!.split("\n")).toEqual([
       "you owe Joe $26.00 and Jake $6.00",
-      "not locked in yet: groceries: $15.75 to Kian",
       "Priya owes Joe $26.00: the bistro $14.00, pizza $12.00",
       "uber to the airport $6.00: split 4 ways",
     ]);

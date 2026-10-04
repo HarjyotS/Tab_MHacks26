@@ -182,7 +182,7 @@ describe("the money brain answers from the database", () => {
     const { w, agent } = setup();
     const t = agent([]);
     await w.say("Priya", "what do i owe");
-    expect(w.said("balance_reply")).toEqual([styled(w, "You owe Joe $26.00 and Jake $6.00.\nNot locked in yet: groceries: $15.75 to Kian.")]);
+    expect(w.said("balance_reply")).toEqual([styled(w, "You owe Joe $26.00 and Jake $6.00.")]);
     await w.say("Priya", "why");
     await w.say("Jake", "why do i owe joe 14");
     expect(w.said("breakdown_reply")).toHaveLength(2);
@@ -243,7 +243,7 @@ describe("the money brain answers from the database", () => {
     const { w } = setup();
     await w.say("Priya", "what do i owe");
     await w.say("Kian", "how much did we spend on food?");
-    expect(w.said("balance_reply")).toEqual([styled(w, "You owe Joe $26.00 and Jake $6.00.\nNot locked in yet: groceries: $15.75 to Kian."), "couldn't pin that one down"]);
+    expect(w.said("balance_reply")).toEqual([styled(w, "You owe Joe $26.00 and Jake $6.00."), "couldn't pin that one down"]);
   });
 
   it("respects the round budget: after 5 tool rounds it must reply", async () => {

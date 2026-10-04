@@ -89,7 +89,8 @@ describe("@Tab breakdown", () => {
     const balance = w.said("balance_reply").at(-1)!.toLowerCase();
     const text = last(w);
     for (const [, who, cents] of text.matchAll(/^joe owes (\w+) (\$[\d.]+)$/gm)) expect(balance).toContain(`${who} ${cents}`);
-    for (const [, who, cents] of text.matchAll(/^(\w+) owes joe (\$[\d.]+)$/gm)) expect(balance).toContain(`${who} owes you ${cents}`);
+    // "what do i owe" lists only what Joe owes (Joe's rule), not who owes him.
+    for (const [, who] of text.matchAll(/^(\w+) owes joe (\$[\d.]+)$/gm)) expect(balance).not.toContain(`${who} owes you`);
     // And each headline is the signed sum of its lines.
     for (const section of text.split(/\n(?=\w+ owes )/).slice(1)) {
       const [head, ...lines] = section.split("\n");

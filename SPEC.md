@@ -510,7 +510,7 @@ stateDiagram-v2
   needs_info --> proposed: question answered
   proposed --> proposed: custom adjustment, opt-out, or correction
   proposed --> itemizing: someone says a receipt split is uneven
-  proposed --> finalized: objection deadline passes, everyone likes it, or the payer likes it
+  proposed --> finalized: objection deadline passes, everyone likes it, or someone says settle up
   itemizing --> finalized: everyone responded or claim deadline passes
   finalized --> settled: every participant share paid
   proposed --> void: payer cancels
@@ -548,7 +548,7 @@ just say what you paid ("paid 40 for groceries") or drop a receipt pic. you can 
 | 5    | Shares are created with status`proposed`, `recompute_expense` runs, and Tab likes the source message.                                                     |
 | 6    | Tab posts the split proposal and sets`objection_deadline` (OBJECTION_WINDOW, pushed out of quiet hours).                                                    |
 | 7    | At the deadline minus OBJECTION_REMINDER_BEFORE, Tab posts one group reminder.                                                                                |
-| 8    | At the deadline, as soon as every participant has liked the proposal (or agreed in text), or as soon as the payer likes it, the expense finalizes (7.6).     |
+| 8    | At the deadline, or as soon as every participant has liked the proposal (or agreed in text), the expense finalizes (7.6). The payer's 👍 is their own agreement only, so nobody loses the window to object (P4).     |
 
 Example proposal:
 

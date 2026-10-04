@@ -22,7 +22,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
-import { clearlyCorrects, handleCorrection, namedCorrectionTarget } from "./correction.js";
+import { askWhichCorrection, clearlyCorrects, correctionCandidates, handleCorrection } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
@@ -278,8 +278,9 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       if (m.kind === "image") return handleReceipt(ctx, m);
       // "actually the uber was $30 not $24": a correction to the open Uber, not
       // a second one. The gate said new expense, so only when it clearly is one.
-      const corrected = clearlyCorrects(m.text ?? "") ? namedCorrectionTarget(ctx, m) : undefined;
-      return corrected ? handleCorrection(ctx, m, corrected) : handleExpense(ctx, m);
+      const candidates = clearlyCorrects(m.text ?? "") ? correctionCandidates(ctx, m) : [];
+      if (candidates.length > 1) return askWhichCorrection(ctx, m);
+      return candidates[0] ? handleCorrection(ctx, m, candidates[0]) : handleExpense(ctx, m);
     }
     case "split_adjustment":
       return handleAdjustment(ctx, m, m.text ?? "", boundIf("proposed", "finalized"));
@@ -318,8 +319,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
       const receipt = claimTargets(ctx, m).length === 0 && !boundIf("itemizing") ? receiptToSplit(ctx, m) : undefined;
       return receipt ? handleAdjustment(ctx, m, m.text ?? "", receipt) : handleClaim(ctx, m, boundIf("itemizing"));
     }
-    case "correction":
-      return handleCorrection(ctx, m, bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m));
+    case "correction": {
+      if (bound && bound.status !== "void") return handleCorrection(ctx, m, bound);
+      const candidates = correctionCandidates(ctx, m);
+      if (candidates.length > 1) return askWhichCorrection(ctx, m);
+      return handleCorrection(ctx, m, candidates[0]);
+    }
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
     // payment_reported is ignored in the MVP; ignore needs nothing.
@@ -351,8 +356,9 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   // Unsure, but it reads as a correction to an open expense it names: ask
   // "change uber to $30?" and apply only on yes (Joe's review on #44), never
   // "want me to split that?" about a duplicate.
-  const correcting = intent === "expense" || intent === "correction" ? namedCorrectionTarget(ctx, m) : undefined;
-  if (correcting) return confirmCorrectionOf(ctx, m, correcting, id);
+  const candidates = intent === "expense" || intent === "correction" ? correctionCandidates(ctx, m) : [];
+  if (candidates.length > 1) return askWhichCorrection(ctx, m);
+  if (candidates[0]) return confirmCorrectionOf(ctx, m, candidates[0], id);
   // "whats the $90.70 from?" asks about a balance; offering to split it as a
   // new expense would be wrong. Point to the command instead (live run).
   if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
@@ -363,7 +369,10 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     const target = bound?.status === "proposed" || bound?.status === "finalized" ? bound : undefined;
     return handleAdjustment(ctx, m, m.text ?? "", target, { confirmOnly: true });
   }
-  const question = CONFIRM_QUESTION[intent];
+  // When a yes will also mean "I paid", the question says so (P3, audit of
+  // #57): "you got that? want me to split it?", never a silent assumption.
+  const senderPaid = intent === "expense" && confidence >= FAIRLY_SURE;
+  const question = senderPaid ? T.confirmYourExpense() : CONFIRM_QUESTION[intent];
   if (!question) return ctx.log("no_handler", { message_id: m.message_id, intent });
   await tapback(ctx, m, "question");
   await say(ctx, {
@@ -378,7 +387,7 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
     who: "asker",
     asker: m.sender_phone,
     data: intent === "expense"
-      ? { kind: "confirm", then: "expense", source: m, sender_paid: confidence >= FAIRLY_SURE, asked_at: ctx.now() }
+      ? { kind: "confirm", then: "expense", source: m, sender_paid: senderPaid, asked_at: ctx.now() }
       : { kind: "confirm", then: "act", intent, source: m, asked_at: ctx.now() },
   });
 }
@@ -1113,10 +1122,29 @@ async function answerSettleMode(ctx: BrainCtx, m: Message, t: Thread, mode: "led
 // "yeah", "ok", "bet", "sounds good", 👍: a short message that only agrees.
 const BARE_AGREEMENT = /^(?:y(?:ea+h?|es+|ep|up|a)|ok(?:ay)?|k+|kk|cool|bet|word|facts|perfect|sounds? good|looks? (?:good|right)|all good|that'?s right|correct|true|fair|for sure|fs|deal|done|👍|👌|💯)[\s!.]*$/iu;
 
-// The split a bare agreement is about: the newest one in this chat that's
-// proposed or just locked in.
+// How soon after Tab's message a bare "yeah" still reads as agreeing to it.
+const AGREEMENT_WINDOW_MS = 10 * 60_000;
+
+// The split a bare agreement is about. Only when it's clearly about that
+// split (audit of #52: a "yeah" to "movies tonight?" locked in a split):
+// an inline reply to the split (Tab's message about it, or the message
+// that logged it), or the very next message after Tab's last message,
+// which is about that split, within a few minutes. A reply to anything
+// else never counts.
 function recentSplit(ctx: BrainCtx, m: Message): Expense | undefined {
-  if (!BARE_AGREEMENT.test((m.text ?? "").trim())) return undefined;
-  return latestOpen(ctx, groupFor(ctx, m), ["proposed", "finalized"]);
+  if (!m.group_id || !BARE_AGREEMENT.test((m.text ?? "").trim())) return undefined;
+  const open = (e: Expense | undefined) => (e && (e.status === "proposed" || e.status === "finalized") ? e : undefined);
+  if (m.reply_to_id) return open(repliedExpense(ctx, m));
+  const tab = ctx.store
+    .outbox()
+    .filter((o) => o.group_id === m.group_id && o.kind !== "reaction" && o.status !== "cancelled" && o.created_at <= m.received_at)
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+  if (!tab?.expense_id || m.received_at.getTime() - tab.created_at.getTime() > AGREEMENT_WINDOW_MS) return undefined;
+  const between = ctx.store
+    .messages()
+    // Others agreeing in a row ("yeah", "same") don't break the chain;
+    // anything else said in between does. Cleared text (chatter) counts too.
+    .some((x) => x.group_id === m.group_id && x.message_id !== m.message_id && x.kind !== "reaction" && x.received_at > tab.created_at && x.received_at <= m.received_at && !BARE_AGREEMENT.test((x.text ?? "").trim()));
+  return between ? undefined : open(ctx.store.expense(tab.expense_id));
 }
 

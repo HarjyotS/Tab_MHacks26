@@ -134,6 +134,7 @@ export function debts(ctx: BrainCtx, group_id: string): Debt[] {
   return out.sort((a, b) => b.amount_cents - a.amount_cents);
 }
 
+const OWE_QUESTION = /\b(?:do|did|should)\s+i\s+owe\b|\bi\s+owe\b|\bmy\s+(?:share|part|cut)\b/i;
 const PERSONAL = /\b(i|me|my|am i)\b/i;
 
 // Why someone's share of an expense is what it is, in words, built only from
@@ -220,8 +221,13 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message, more?: (mine
   const all = pairDebts(ctx, groups);
   // A DM only ever shows the sender's own money (§19).
   const mine = { owes: all.filter((d) => d.from.phone === m.sender_phone), owed: all.filter((d) => d.to.phone === m.sender_phone) };
+  // "what do i owe" gets just what they owe (Joe's rule): not who owes
+  // them, and splits that aren't locked in only when nothing else is owed.
+  const owesOnly = OWE_QUESTION.test(m.text ?? "");
+  const shown = owesOnly ? { owes: mine.owes, owed: [] } : mine;
+  const pending = owesOnly && mine.owes.length > 0 ? [] : groups.flatMap((g) => pendingFor(ctx, g, m.sender_phone)).filter((p) => !owesOnly || p.owes);
   const text = !m.group_id || PERSONAL.test(m.text ?? "")
-    ? [T.personalBalanceReply({ ...mine, pending: groups.flatMap((g) => pendingFor(ctx, g, m.sender_phone)) }), ...(more?.(mine) ?? [])].join("\n")
+    ? [T.personalBalanceReply({ ...shown, pending }), ...(more?.(mine) ?? [])].join("\n")
     : T.balanceReply({
         debts: all,
         pending: pendingDebts(ctx, groups),
