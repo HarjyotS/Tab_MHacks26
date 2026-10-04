@@ -53,7 +53,8 @@ export async function spacetimeHub(opts: SpacetimeHubOptions): Promise<Hub & { i
         groupId: m.group_id,
         // Opaque ids for the web ledger, used only when this message creates the group or member.
         groupLedgerId: m.group_id ? crypto.randomUUID() : undefined,
-        groupDisplayName: undefined,
+        // Sets the name on a new group and keeps it current when the chat is renamed.
+        groupDisplayName: m.group_name,
         groupTimezone: opts.timezone,
         senderPhone: m.sender_phone,
         senderLedgerMemberId: crypto.randomUUID(),

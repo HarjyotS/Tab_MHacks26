@@ -396,6 +396,9 @@ export const ingest_message = spacetime.reducer(
           display_name: input.group_display_name, timezone: input.group_timezone,
           onboarding_status: 'pending', created_at: ctx.timestamp,
         });
+      } else if (input.group_display_name && input.group_display_name !== group.display_name) {
+        // Groups created before the bridge sent names, or renamed since, pick up the current name.
+        ctx.db.groups.group_id.update({ ...group, display_name: input.group_display_name });
       }
       const memberId = `${input.group_id}:${input.sender_phone}`;
       if (!ctx.db.members.member_id.find(memberId)) {
