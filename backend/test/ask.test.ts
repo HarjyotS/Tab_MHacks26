@@ -53,6 +53,14 @@ describe("checkReply (P6 and §9.3 on the agent's words)", () => {
     expect(check("Burger and salad came to $24.98.")).toBe("amount");
   });
 
+  it("never counts numbers someone typed: quoted chat in tool results, or the question", () => {
+    const quoted = { ...facts, outputs: [...facts.outputs, JSON.stringify(l.searchMessages({ query: "tacos" })), JSON.stringify(l.expenseDetail("e2"))], question: "why do i owe jake 12" };
+    expect(JSON.stringify(quoted.outputs)).toMatch(/tacos 36/);
+    expect(checkReply("Priya spent 36 on tacos.", quoted)?.code).toBe("number");
+    expect(checkReply("You owe Jake 12.", quoted)?.code).toBe("number");
+    expect(checkReply("Pizza was $48.", quoted)).toBeNull(); // the computed total, not the typed "$48"
+  });
+
   it("rejects counts and dates that aren't in tool results, and spelled-out numbers", () => {
     expect(check("That was 9 days ago.")).toBe("number");
     expect(check("Split three ways.")).toBe("spelled_number");

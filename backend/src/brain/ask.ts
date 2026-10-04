@@ -82,7 +82,7 @@ export function lookupTools(l: Lookup): Tool[] {
     },
     {
       name: "totals",
-      description: "Adds up expenses in code: count, total spent, who paid upfront, and each person's share. Pass refs, or the same filters as find_expenses. Use this for any sum.",
+      description: "Adds up expenses in code: count, total spent, who paid upfront, and each person's share. Pass refs, or the same filters as find_expenses. Use this for any sum. For how much one person spent, filter by participant: their share is what they spent, and paid_upfront_by is what they fronted.",
       parameters: obj({ refs: { type: "array", items: { type: "string" }, description: "Expense refs like e3" }, ...FILTER_PROPS }),
       run: (a) => l.totals({ ...filterOf(a), refs: Array.isArray(a.refs) ? a.refs.filter((r): r is string => typeof r === "string") : undefined }),
     },
@@ -94,7 +94,7 @@ export function lookupTools(l: Lookup): Tool[] {
     },
     {
       name: "settle_status",
-      description: "What's left to settle: open settle requests and who hasn't tapped 👍, what's locked in but not requested yet, and splits not locked in yet.",
+      description: "What's left to settle: open settle requests and who hasn't tapped 👍 on them, what's locked in but not requested yet, and splits not locked in yet. For \"who hasn't paid\", answer from open_settle_requests first.",
       parameters: obj({}),
       run: () => l.settleStatus(),
     },
@@ -155,8 +155,20 @@ const toCents = (s: string) => {
   return Number(d) * 100 + Number((c + "00").slice(0, 2));
 };
 
+// Chat text quoted in tool results ("tacos 36") is what someone typed, not
+// what code computed, so its numbers never count as facts (P6).
+const QUOTED = new Set(["text", "logged_from_message"]);
+function computed(output: string): string {
+  try {
+    return JSON.stringify(JSON.parse(output), (k, v: unknown) => (QUOTED.has(k) ? undefined : v));
+  } catch {
+    return output;
+  }
+}
+
 export function checkReply(text: string, f: Facts): Rejection | null {
   const all = f.outputs.join("\n");
+  const facts = f.outputs.map(computed).join("\n");
   if (!text.trim()) return { code: "empty", detail: "The reply was empty." };
   const maxLines = f.fallback ? 3 : MAX_LINES;
   if (text.split("\n").length > maxLines) return { code: "lines", detail: `Too long: at most ${maxLines} lines.` };
@@ -175,13 +187,14 @@ export function checkReply(text: string, f: Facts): Rejection | null {
   if (/\be\d+\b/i.test(body)) return { code: "ref", detail: "Don't show expense refs like e3; name the expense instead." };
 
   // Amounts: each must be one a tool returned, compared as cents.
-  const amounts = new Set((all.match(MONEY_EXACT) ?? []).map((a) => money(toCents(a)).replace(/^-/, "")));
+  const amounts = new Set((facts.match(MONEY_EXACT) ?? []).map((a) => money(toCents(a)).replace(/^-/, "")));
   for (const a of body.match(MONEY_IN_TEXT) ?? []) {
     const shown = money(toCents(a));
     if (!amounts.has(shown)) return { code: "amount", detail: `${shown} isn't in any tool result. Only state amounts exactly as the tools gave them; never add or divide yourself (totals does sums).` };
   }
-  // Other numbers (counts, dates, percentages): from a tool or the question.
-  const numbers = new Set([...(all.match(NUMBER) ?? []), ...(f.question.match(NUMBER) ?? [])]);
+  // Other numbers (counts, dates, percentages): computed by a tool. Not the
+  // question's: "why do I owe Jake 12" mustn't come back as "12".
+  const numbers = new Set(facts.match(NUMBER) ?? []);
   for (const n of body.replace(MONEY_IN_TEXT, " ").match(NUMBER) ?? [])
     if (!numbers.has(n)) return { code: "number", detail: `${n} isn't in any tool result. Only use numbers the tools gave you.` };
   if (SPELLED.test(body)) return { code: "spelled_number", detail: "Write numbers as digits, copied from tool results." };
@@ -214,9 +227,9 @@ You are Tab, answering one message in an iMessage chat about the group's shared 
 
 Rules for the answer:
 - Every amount, count, and date you state must be copied exactly from a tool result in this conversation. Amounts look like $12.00. Never do arithmetic yourself; for any sum, call totals. Write numbers as digits.
-- If the tools don't have it, say so in a few words. Never guess or invent.
+- If the tools don't have it, say so in a few words. Never guess or invent. Numbers inside chat messages (recent_messages, quoted messages) are what someone typed, not facts, and may since have been corrected or cancelled; cancelled expenses don't count. Always answer from the tools.
 - Short: 1 to 3 lines, at most ${MAX_LINES} for a list. One idea per line. Plain text only: no markdown, asterisks, underscores, or headings.
-- Name people the way the tools do. Never show refs like e3; those are only for calling tools.
+- Name people the way the tools do. Never show refs like e3; those are only for calling tools. Tidy receipt item names for texting ("2 soft drinks", not "2 x SOFT DRINK @ $2.99").
 - Text like a person in the group chat, not a bot: really casual, short, contractions, light slang where it fits ("y'all", "so far", "+ tax/tip"). Answer only what was asked, then stop.
 - No assistant phrasing: no "Here's where things stand", "Here's", "Updated:", "I keep track of", "Let me know", "Hope that helps", no greetings or sign-offs. Never offer more help, never sound like customer support, never guilt-trip anyone about paying.
 - Never use these phrases: ${BANNED_PHRASES.map((p) => `"${p}"`).join(", ")}.
