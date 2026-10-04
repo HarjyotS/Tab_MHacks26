@@ -4,7 +4,9 @@ import { thresholds } from "../config.js";
 import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
-import { type BrainCtx, chatOf, type Pending, perExpense, say, tapback } from "./context.js";
+import { type BrainCtx, chatOf, eyes, type Pending, perExpense, say, tapback } from "./context.js";
+
+const SLOW = new Set<Intent>(["expense", "receipt", "split_adjustment", "correction", "money_question"]);
 import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
@@ -188,6 +190,8 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       let failed: unknown;
       if (!breakdown && !answered && !why && !ledger) {
         try {
+          // These go to Grok and take a few seconds: 👀 first.
+          if ((decision === "act" && SLOW.has(result.intent)) || (decision !== "ignore" && result.intent === "money_question")) await eyes(ctx, m);
           if (decision === "act") await act(ctx, m, result.intent);
           else if (decision === "clarify") await clarify(ctx, m, result.intent, undefined, result.confidence);
         } catch (err) {
