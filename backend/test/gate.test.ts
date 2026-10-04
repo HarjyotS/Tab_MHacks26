@@ -62,6 +62,39 @@ describe("createClassify", () => {
   });
 });
 
+describe("the pre-filter in front of Jev", () => {
+  const jevSays = () =>
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ answers: { intent: { choice: "ignore", probabilities: { ignore: 0.99 } } } })),
+    );
+
+  it("is on by default: chatter never reaches Jev and comes back marked", async () => {
+    const spy = jevSays();
+    const made = createClassify({ TYPESAFE_API_KEY: "k" });
+    expect(made.prefilter).toBe(true);
+    await expect(made.classify(input(text("who's driving")))).resolves.toEqual({
+      intent: "ignore",
+      confidence: 1,
+      prefiltered: true,
+    });
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("sends everything to Jev when GATE_PREFILTER is off", async () => {
+    const spy = jevSays();
+    const made = createClassify({ TYPESAFE_API_KEY: "k", GATE_PREFILTER: "off" });
+    expect(made.prefilter).toBe(false);
+    await expect(made.classify(input(text("who's driving")))).resolves.toEqual({ intent: "ignore", confidence: 0.99 });
+    expect(spy).toHaveBeenCalledTimes(1);
+    spy.mockRestore();
+  });
+
+  it("is not used with the stub, which is free", () => {
+    expect(createClassify({}).prefilter).toBe(false);
+  });
+});
+
 describe("route with the stub gate", () => {
   const { classify } = createClassify({});
 

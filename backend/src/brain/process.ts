@@ -69,13 +69,18 @@ export async function processMessage(ctx: BrainCtx, raw: Message): Promise<void>
       // The gate sees every message; Grok only sees what the gate passes
       // (§19, §16.3). Anything not money-related is reported as `ignore`, so
       // the module clears its text and later context never includes it.
-      const input = extractInput(ctx, m);
+      // An open question tells the pre-filter to pass even "the 2nd one",
+      // since a bystander's inline answer only counts if the gate passes it.
+      const input = { ...extractInput(ctx, m), tab_question_open: ctx.memory.pending.has(chatKey(chatOf(m))) };
       const result = await ctx.classify(input);
       intent = result.intent;
       confidence = result.confidence;
       const decision = decide(result, input);
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent);
-      ctx.log("classified", { message_id: m.message_id, group_id: m.group_id, intent, confidence, decision });
+      ctx.log("classified", {
+        message_id: m.message_id, group_id: m.group_id, intent, confidence, decision,
+        prefiltered: result.prefiltered === true,
+      });
 
       const answered = (await mayAnswerPending(ctx, m, decision !== "ignore")) && (await answerPending(ctx, m));
       // "why?" right after Tab's balance reply: the short explanation.

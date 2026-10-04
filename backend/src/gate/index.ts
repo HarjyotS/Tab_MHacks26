@@ -1,9 +1,12 @@
 // The backend's entry to the classifier gate (SPEC §6.3, M6). Jev when
 // TYPESAFE_API_KEY is set, otherwise the keyword stub; both come from
 // @tab/gate with the same signature, so nothing else changes on a swap.
+// Jev sits behind the free pre-filter unless GATE_PREFILTER is off.
 import {
   jevClassifier,
+  prefilterEnabled,
   stubClassifier,
+  withPrefilter,
   type Classify,
   type ClassifyInput,
   type Intent,
@@ -17,19 +20,21 @@ export const TAB_MEMBER = { phone: "tab", name: "Tab" } as const;
 export const JEV_TIMEOUT_MS = 10_000;
 
 export function createClassify(
-  env: { TYPESAFE_API_KEY?: string } = process.env,
+  env: { TYPESAFE_API_KEY?: string; GATE_PREFILTER?: string } = process.env,
 ): {
   classify: Classify;
   kind: "jev" | "stub";
+  prefilter: boolean;
 } {
   const apiKey = env.TYPESAFE_API_KEY;
-  if (!apiKey) return { classify: stubClassifier, kind: "stub" };
+  // The stub is free, so only Jev gets the pre-filter in front of it.
+  if (!apiKey) return { classify: stubClassifier, kind: "stub", prefilter: false };
   const timedFetch: typeof fetch = (input, init) =>
     fetch(input, { ...init, signal: AbortSignal.timeout(JEV_TIMEOUT_MS) });
-  return {
-    classify: jevClassifier({ apiKey, fetch: timedFetch }),
-    kind: "jev",
-  };
+  const jev = jevClassifier({ apiKey, fetch: timedFetch });
+  // Off sends every message to Jev, as before the pre-filter existed.
+  const prefilter = prefilterEnabled(env.GATE_PREFILTER);
+  return { classify: prefilter ? withPrefilter(jev) : jev, kind: "jev", prefilter };
 }
 
 // Tab's own messages appear in context with sender_phone "tab"; listing Tab

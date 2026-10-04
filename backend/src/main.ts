@@ -25,14 +25,14 @@ const log = (event: string, fields: Record<string, unknown> = {}) =>
 const grok = grokConfig();
 const xai = createXaiClient(grok.apiKey, grok.baseURL);
 const t = timing();
-const { classify, kind } = createClassify();
+const { classify, kind, prefilter } = createClassify();
 
 // A dropped connection can't recover in place; exit so the runner restarts us.
 const { conn, identity, token } = await connectBackend((error) => {
   log("disconnected", { error: String(error) });
   process.exit(1);
 });
-log("connected", { identity, gate: kind, demo_mode: t.demo });
+log("connected", { identity, gate: kind, prefilter, demo_mode: t.demo });
 if (!process.env.BACKEND_SPACETIME_TOKEN) {
   log("save_token", {
     hint: "Add BACKEND_SPACETIME_TOKEN to backend/.env to keep this identity, then have the module owner grant it the backend role.",
