@@ -112,7 +112,8 @@ export function debts(ctx: BrainCtx, group_id: string): Debt[] {
   const owed = new Map<string, number>(); // "from>to" → cents
   for (const e of ctx.store
     .expenses()
-    .filter((x) => x.group_id === group_id && x.payer_phone)) {
+    // A voided expense is never owed, whatever its shares still say.
+    .filter((x) => x.group_id === group_id && x.payer_phone && x.status !== "void")) {
     for (const s of ctx.store.shares(e.expense_id)) {
       if (
         s.role !== "participant" ||
