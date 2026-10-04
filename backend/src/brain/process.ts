@@ -1177,6 +1177,10 @@ function amountAfterPhoto(ctx: BrainCtx, m: Message): string | undefined {
   if (!before || before.kind !== "image" || m.received_at.getTime() - before.received_at.getTime() > 3 * 60_000) return undefined;
   if (ctx.store.expenses().some((e) => e.source_message_id === before.message_id && e.status !== "void")) return undefined;
   const note = ctx.memory.photos.get(before.message_id);
+  // Only after a photo of something bought (or one that couldn't be read):
+  // "20" after a selfie is chatter, and its description must not reach
+  // Grok (§19, review of #63).
+  if (note && !note.money_related) return undefined;
   const what = note && "description" in note && typeof note.description === "string" && note.description ? `the photo (${note.description.slice(0, 80)})` : "the receipt in my photo";
   return `i paid $${amount} for ${what}, split it with everyone`;
 }

@@ -54,3 +54,16 @@ describe("a yes that also means \"I paid\" (#57)", () => {
     expect(w.db.expenses()[0]).toMatchObject({ payer_phone: PEOPLE.Kian, status: "proposed" });
   });
 });
+
+describe("an amount right after your own photo (#63)", () => {
+  it("is chatter after a selfie, and the selfie's description never reaches Grok", async () => {
+    // No scripted expense extraction: reaching Grok would throw.
+    const w = world({
+      describe: { selfie: { kind: "photo", description: "Kian and Jake at the beach", transcription: "", money_related: false } },
+    });
+    await w.photo("Kian", "selfie");
+    const m = await w.say("Kian", "20");
+    expect(m.status).toBe("done");
+    expect(w.db.expenses()).toEqual([]);
+  });
+});
