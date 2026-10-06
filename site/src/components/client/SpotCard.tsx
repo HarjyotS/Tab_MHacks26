@@ -3,7 +3,6 @@
 import { useEffect, useRef } from 'react'
 import { track } from '@/lib/analytics'
 import {
-  BETA_GROUP_LIMIT,
   SHOW_TOTAL_FROM,
   SPOTS_PER_REFERRAL,
   positionBucket,
@@ -66,7 +65,7 @@ export function SpotCard({
       {spot.total >= SHOW_TOTAL_FROM ? <p className="spot__total">{spot.total.toLocaleString('en-US')} people are waiting</p> : null}
       <div className="spot__boost">
         <p className="spot__rule">
-          Each friend who joins with your link moves you up {SPOTS_PER_REFERRAL} spots. The beta opens to the first {BETA_GROUP_LIMIT} groups.
+          Each friend who joins with your link moves you up {SPOTS_PER_REFERRAL} spots.
         </p>
         <p className="spot__friends">
           <span className="spot__count" aria-hidden="true">

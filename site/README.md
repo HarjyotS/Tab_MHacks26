@@ -145,7 +145,7 @@ with `'` so a spreadsheet won't run them as formulas. It runs on Node's built-in
 
 Every number shown is real: the position is a rank over the actual rows, the total is the real row count, and
 there is no simulated counter, starting offset or padding. The settings live in
-`src/lib/waitlist/referral-config.ts`: `SPOTS_PER_REFERRAL = 5`, `BETA_GROUP_LIMIT = 20`, and `SHOW_TOTAL_FROM = 25`
+`src/lib/waitlist/referral-config.ts`: `SPOTS_PER_REFERRAL = 5` and `SHOW_TOTAL_FROM = 25`
 (the "N people are waiting" line only shows from 25 sign-ups, so a tiny list doesn't look empty).
 
 **Position** (`src/lib/waitlist/position.ts`): scan `phone, created_at, referral_count`, sort by `created_at` to get

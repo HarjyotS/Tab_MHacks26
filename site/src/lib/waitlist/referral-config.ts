@@ -6,9 +6,6 @@ import { SITE_URL } from '../site'
 /** Places a person moves up for each friend who joins with their link. */
 export const SPOTS_PER_REFERRAL = 5
 
-/** The beta opens to this many groups first. */
-export const BETA_GROUP_LIMIT = 20
-
 /** "N people are waiting" only shows from this many sign-ups, so a tiny list doesn't look empty. */
 export const SHOW_TOTAL_FROM = 25
 
