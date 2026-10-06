@@ -1,6 +1,6 @@
 'use client'
 
-import { CHATS, IGNORED_AT, LEDGER } from '@/content/chats'
+import { CHATS, IGNORED_AT, LEDGER, SETTLE_AT } from '@/content/chats'
 import { chatFrames, money } from '@/lib/thread'
 import { gsap, ScrollTrigger, scheduleRefresh, useGSAP } from '@/lib/gsap'
 import type { EnhancerProps } from '../client/Enhance'
@@ -9,7 +9,7 @@ const msgs = CHATS.vegas.msgs
 /** Frame 0 is the empty chat; then one frame per message, plus Tab's typing frame. */
 const FRAMES = [{ count: 0, typing: false }, ...chatFrames(msgs)]
 /** Index of the first frame where the receipt is settled (Tab's summary is on screen). */
-const SETTLED_FRAME = FRAMES.findIndex((f) => f.count > 16 && !f.typing)
+const SETTLED_FRAME = FRAMES.findIndex((f) => f.count > SETTLE_AT && !f.typing)
 const DELIVERED_H = 18
 const STEP = 1 // timeline seconds per frame
 const LEAD = 0.35 // a little scroll before the first message arrives

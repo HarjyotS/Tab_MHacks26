@@ -1,4 +1,4 @@
-import { CHATS, IGNORED_AT, LEDGER } from '@/content/chats'
+import { CHATS, IGNORED_AT, LEDGER, VEGAS_PEOPLE } from '@/content/chats'
 import { buildThread, money, type MsgItem } from '@/lib/thread'
 import { Phone } from '../phone/Phone'
 import { ThreadParts } from '../phone/ThreadView'
@@ -8,6 +8,7 @@ import jordan from '@/assets/jordan.png'
 
 const vegas = CHATS.vegas
 const TOTAL_CENTS = LEDGER.reduce((s, l) => s + l.cents, 0)
+const EACH_CENTS = Math.round(TOTAL_CENTS / VEGAS_PEOPLE)
 
 /**
  * The Vegas weekend. Server-rendered in its finished state (whole chat, full
@@ -17,7 +18,7 @@ const TOTAL_CENTS = LEDGER.reduce((s, l) => s + l.cents, 0)
  */
 export function VegasSection() {
   const items = buildThread(vegas.msgs, { group: true })
-  // The typing indicator Tab shows right before its summary (message 16).
+  // The typing indicator Tab shows right before its summary (SETTLE_AT).
   const tabIndex = vegas.msgs.findIndex((m) => m.who === 'tab')
   const typing = buildThread(vegas.msgs, { group: true, count: tabIndex, typing: true }).at(-1) as MsgItem
 
@@ -52,7 +53,7 @@ export function VegasSection() {
                 </span>
                 <span className="receipt__titles">
                   <span className="receipt__title">Vegas Trip 2026</span>
-                  <span className="receipt__sub">5 people, running tab</span>
+                  <span className="receipt__sub">{VEGAS_PEOPLE} people, running tab</span>
                 </span>
               </div>
               <div className="r-window" data-window="">
@@ -90,7 +91,7 @@ export function VegasSection() {
                 <div className="r-row r-row--each" data-settled="">
                   <span>Each</span>
                   <span className="r-fill r-fill--soft" aria-hidden="true" />
-                  <span>$511.71</span>
+                  <span>{money(EACH_CENTS)}</span>
                 </div>
                 <div className="r-row r-row--pay" data-settled="">
                   <span>Payments needed</span>

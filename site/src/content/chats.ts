@@ -35,6 +35,10 @@ export const PEOPLE: Record<PersonId, { name: string }> = {
   tab: { name: 'Tab' },
 }
 
+/** Tab's wrap-up for the Vegas chat, shared by the scroll story and the "with Tab" ending. */
+const SUMMARY =
+  'Trip’s over! 7 expenses, $2,003.10 total, $400.62 each. Settled in 4 payments:\nSam pays Maya $186.62\nAva pays Maya $342.32\nJordan pays Maya $310.62\nYou pay Maya $57.82'
+
 export const CHATS = {
   vegas: {
     group: true,
@@ -43,6 +47,8 @@ export const CHATS = {
       { who: 'sys', kind: 'time', text: 'Fri 6:12 PM' },
       { who: 'maya', text: 'landed!! got the uber to the hotel, $38', react: 'heart' },
       { who: 'sys', kind: 'logged', dir: 'in', text: 'Tab logged $38.00' },
+      { who: 'maya', text: 'also the airbnb was $1,260, it’s on my card' },
+      { who: 'sys', kind: 'logged', dir: 'in', text: 'Tab logged $1,260.00' },
       { who: 'jordan', text: 'who’s down for the buffet tomorrow' },
       { who: 'sam', text: 'obviously' },
       { who: 'sys', kind: 'time', text: 'Sat 12:40 PM' },
@@ -57,14 +63,18 @@ export const CHATS = {
       { who: 'sys', kind: 'time', text: 'Sat 11:48 PM' },
       { who: 'me', text: 'covered club entry for all of us, $200', react: 'haha' },
       { who: 'sys', kind: 'logged', dir: 'out', text: 'Tab logged $200.00' },
+      { who: 'sam', text: 'i got the buffet earlier btw, $214 💀' },
+      { who: 'sys', kind: 'logged', dir: 'in', text: 'Tab logged $214.00' },
       { who: 'ava', text: 'the fountain show was unreal 😭', react: 'heart' },
       { who: 'sys', kind: 'time', text: 'Sun 11:20 AM' },
       { who: 'jordan', text: 'airbnb cleaning fee was $90 btw' },
       { who: 'sys', kind: 'logged', dir: 'in', text: 'Tab logged $90.00' },
+      { who: 'ava', text: 'gas for the drive home, $58.30' },
+      { who: 'sys', kind: 'logged', dir: 'in', text: 'Tab logged $58.30' },
       { who: 'sys', kind: 'time', text: 'Sun 2:05 PM' },
       {
         who: 'tab',
-        text: 'Trip’s over! 14 expenses, $2,558.55 total, $511.71 each. Settled in 4 payments:\nSam pays Maya $186.76\nAva pays Maya $328.66\nJordan pays Maya $181.71\nYou pay Maya $116.31',
+        text: SUMMARY,
         react: 'thumbs',
       },
       { who: 'me', text: 'wait it even read the brunch receipt??' },
@@ -117,10 +127,10 @@ export const ENDINGS: Record<'without' | 'with', Msg[]> = {
   without: [
     { who: 'sys', kind: 'time', text: 'Sun 9:02 PM' },
     { who: 'maya', text: 'ok who owes who for vegas' },
-    { who: 'sam', text: 'i paid in-n-out and the buffet' },
-    { who: 'ava', text: 'groceries, pizza, AND gas' },
-    { who: 'me', text: 'brunch, club, airport uber' },
-    { who: 'maya', text: 'and the airbnb 💀' },
+    { who: 'sam', text: 'i paid for the buffet' },
+    { who: 'me', text: 'brunch AND club' },
+    { who: 'ava', text: 'gas home' },
+    { who: 'maya', text: 'the airbnb and the uber 💀' },
     { who: 'sam', text: 'can someone make a spreadsheet' },
     { who: 'maya', text: 'i’ll do it tmrw' },
     { who: 'sys', kind: 'time', text: 'Wed 4:47 PM' },
@@ -132,11 +142,7 @@ export const ENDINGS: Record<'without' | 'with', Msg[]> = {
   ],
   with: [
     { who: 'sys', kind: 'time', text: 'Sun 2:05 PM' },
-    {
-      who: 'tab',
-      text: 'Trip’s over! 14 expenses, $2,558.55 total, $511.71 each. Settled in 4 payments:\nSam pays Maya $186.76\nAva pays Maya $328.66\nJordan pays Maya $181.71\nYou pay Maya $116.31',
-      react: 'thumbs',
-    },
+    { who: 'tab', text: SUMMARY, react: 'thumbs' },
     { who: 'me', text: 'paid' },
     { who: 'sam', text: 'same' },
     { who: 'jordan', text: 'done' },
@@ -145,26 +151,25 @@ export const ENDINGS: Record<'without' | 'with', Msg[]> = {
   ],
 }
 
-/** Each receipt line prints once the Vegas chat has shown more than `at` messages. */
+/**
+ * Each receipt line prints when its "Tab logged" row (message index `at`) shows up in the
+ * Vegas chat, so every line on the receipt is an expense someone posted.
+ */
 export const LEDGER = [
   { at: 2, what: 'Uber to hotel', who: 'Maya', cents: 3800 },
-  { at: 3, what: 'In-N-Out', who: 'Sam', cents: 6420 },
-  { at: 3, what: 'Airbnb', who: 'Maya', cents: 126000 },
-  { at: 4, what: 'Groceries', who: 'Ava', cents: 8635 },
-  { at: 5, what: 'Pool cabana', who: 'Jordan', cents: 24000 },
-  { at: 7, what: 'Brunch receipt', who: 'You', cents: 14280 },
-  { at: 10, what: 'Club entry', who: 'You', cents: 20000 },
-  { at: 11, what: 'Ubers', who: 'Sam', cents: 4675 },
-  { at: 11, what: 'Late-night pizza', who: 'Ava', cents: 3840 },
-  { at: 14, what: 'Cleaning fee', who: 'Jordan', cents: 9000 },
-  { at: 15, what: 'Coffee', who: 'Maya', cents: 2715 },
-  { at: 15, what: 'Buffet', who: 'Sam', cents: 21400 },
-  { at: 15, what: 'Gas', who: 'Ava', cents: 5830 },
-  { at: 15, what: 'Airport Uber', who: 'You', cents: 5260 },
+  { at: 4, what: 'Airbnb', who: 'Maya', cents: 126000 },
+  { at: 9, what: 'Brunch receipt', who: 'You', cents: 14280 },
+  { at: 12, what: 'Club entry', who: 'You', cents: 20000 },
+  { at: 14, what: 'Buffet', who: 'Sam', cents: 21400 },
+  { at: 18, what: 'Cleaning fee', who: 'Jordan', cents: 9000 },
+  { at: 20, what: 'Gas', who: 'Ava', cents: 5830 },
 ]
+/** People on the Vegas tab (the "Each" row splits the total this many ways). */
+export const VEGAS_PEOPLE = 5
 /** Vegas message indexes that aren't about money (the "Messages ignored" counter). */
-export const IGNORED_AT = [3, 4, 11]
-export const SETTLE_AT = 16
+export const IGNORED_AT = [5, 6, 15]
+/** Index of Tab's summary, where the receipt settles. */
+export const SETTLE_AT = 22
 
 export const WALL_POOL = [
   'wait who paid for the airbnb',
