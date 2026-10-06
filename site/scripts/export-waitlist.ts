@@ -1,4 +1,4 @@
-// Prints the waitlist as CSV: phone, created_at, status, utm_source.
+// Prints the waitlist as CSV: phone, created_at, status, utm_source, ref_code, referred_by, referral_count.
 //
 //   npm run waitlist:export > waitlist.csv
 //
@@ -8,7 +8,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb'
 
-const COLUMNS = ['phone', 'created_at', 'status', 'utm_source'] as const
+const COLUMNS = ['phone', 'created_at', 'status', 'utm_source', 'ref_code', 'referred_by', 'referral_count'] as const
 
 export function csvCell(value: unknown): string {
   const s = value == null ? '' : String(value)
@@ -36,7 +36,7 @@ async function main() {
     const page = await doc.send(
       new ScanCommand({
         TableName: table,
-        ProjectionExpression: '#p, created_at, #s, utm_source',
+        ProjectionExpression: '#p, created_at, #s, utm_source, ref_code, referred_by, referral_count',
         ExpressionAttributeNames: { '#p': 'phone', '#s': 'status' },
         ExclusiveStartKey: start,
       }),

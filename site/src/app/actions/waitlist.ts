@@ -2,7 +2,7 @@
 
 import { createHmac, randomUUID } from 'node:crypto'
 import { after } from 'next/server'
-import { headers } from 'next/headers'
+import { cookies, headers } from 'next/headers'
 import { CONSENT_TEXT, CONSENT_VERSION, ERRORS } from '@/lib/waitlist/consent'
 import { getWaitlistConfig } from '@/lib/waitlist/env'
 import { normalizePhone } from '@/lib/waitlist/phone'
@@ -10,10 +10,12 @@ import { getStore } from '@/lib/waitlist/store'
 import { recordAttempt } from '@/lib/waitlist/rate-limit'
 import { verifyTurnstile } from '@/lib/waitlist/turnstile'
 import { notifyWaitlistSignup } from '@/lib/waitlist/notify'
+import { registerSignup } from '@/lib/waitlist/signup'
+import { REF_COOKIE, cleanRefCode, type WaitlistSpot } from '@/lib/waitlist/referral-config'
 
 export type WaitlistResult =
   | { status: 'idle' }
-  | { status: 'success'; display: string; duplicate: boolean }
+  | { status: 'success'; display: string; duplicate: boolean; referred: boolean; spot: WaitlistSpot | null }
   | { status: 'error'; code: 'phone' | 'consent' | 'captcha' | 'rate_limited' | 'unavailable'; message: string }
 
 /** Attempts allowed per hashed IP in a rolling window (per server instance, see rate-limit.ts). */
@@ -67,7 +69,10 @@ export async function joinWaitlist(_prev: WaitlistResult, form: FormData): Promi
     }
     // No secret: getWaitlistConfig() already warned that the bot check is off.
 
-    const { inserted, row } = await store.insertSignup({
+    // The invite page puts its code in a hidden field; the cookie covers sign-ups after browsing on.
+    const inviteCode = cleanRefCode(field(form, 'ref', 32)) ?? cleanRefCode((await cookies()).get(REF_COOKIE)?.value)
+
+    const { inserted, row, referred, spot } = await registerSignup(store, {
       phoneE164: phone.e164,
       consentText: CONSENT_TEXT,
       consentVersion: CONSENT_VERSION,
@@ -81,7 +86,7 @@ export async function joinWaitlist(_prev: WaitlistResult, form: FormData): Promi
       utmTerm: field(form, 'utm_term', 200),
       utmContent: field(form, 'utm_content', 200),
       signupLocation: field(form, 'location', 32),
-    })
+    }, inviteCode)
 
     if (inserted && row) {
       // Runs after the response is sent, so the person never waits on it.
@@ -91,7 +96,7 @@ export async function joinWaitlist(_prev: WaitlistResult, form: FormData): Promi
       })
     }
 
-    return { status: 'success', display: phone.display, duplicate: !inserted }
+    return { status: 'success', display: phone.display, duplicate: !inserted, referred, spot }
   } catch (err) {
     console.error('[waitlist] Sign-up failed', err)
     return { status: 'error', code: 'unavailable', message: ERRORS.unavailable }
