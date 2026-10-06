@@ -59,6 +59,8 @@ Every variable is listed in `.env.example`.
 | `NEXT_PUBLIC_POSTHOG_HOST` | Optional | Default `https://us.i.posthog.com`. |
 | `TAB_SIGNUP_WEBHOOK_URL` | Optional | Where new sign-ups are POSTed (contract below). Unset means a logged no-op. |
 | `TAB_SIGNUP_WEBHOOK_SECRET` | With the URL | HMAC key for signing that webhook. |
+| `ADMIN_USER` | For `/admin` | Basic auth user for the internal admin page. |
+| `ADMIN_PASSWORD` | For `/admin` | Its password (`openssl rand -base64 24`). With either unset, `/admin` is a 404 outside `next dev`. Mark it Sensitive. |
 | `NEXT_PUBLIC_SITE_URL` | Optional | Canonical URL and the base of invite links, default `https://addtab.app`. |
 | `WAITLIST_DEV_FALLBACK` | Local only | `1` allows the dev fallbacks under `next start`. |
 
@@ -122,8 +124,9 @@ Minimal IAM policy for the site's key:
 }
 ```
 
-`Scan` is for the position ranking (it reads only `phone`, `created_at` and `referral_count`); `GetItem` is for
-giving older rows their invite code.
+`Scan` is for the position ranking (it reads only `phone`, `created_at` and `referral_count`) and for the
+read-only [admin page](#admin-page) and its CSV (every row, without `ip_hash`, `user_agent` or `consent_text`);
+`GetItem` is for giving older rows their invite code.
 
 **Rate limiting.** Sign-up attempts are limited to 8 per hashed IP per hour by an in-memory counter
 (`src/lib/waitlist/rate-limit.ts`). Each serverless instance keeps its own counts, so this slows casual abuse
@@ -140,6 +143,31 @@ npm run waitlist:export > waitlist.csv
 `scripts/export-waitlist.ts` scans the table (read-only) and prints CSV with `phone, created_at, status,
 utm_source, ref_code, referred_by, referral_count`, oldest first. Values that start with `=`, `+`, `-` or `@` (other than phone numbers) are prefixed
 with `'` so a spreadsheet won't run them as formulas. It runs on Node's built-in TypeScript support (Node 22.18+).
+
+## Admin page
+
+`/admin` is an internal, read-only dashboard of the waitlist. Set `ADMIN_USER` and `ADMIN_PASSWORD`, open
+`https://addtab.app/admin` and sign in with them in the browser's password prompt.
+
+- **Access.** HTTP Basic auth in `src/proxy.ts` (Next 16's name for `middleware.ts`), compared in constant time
+  (`src/lib/admin/auth.ts`), and checked again in the page and the CSV route. With either variable unset, `/admin`
+  is the normal 404 page everywhere except `next dev`, where it opens without a password, shows a warning banner
+  and logs `[admin] WARNING`. Never open by default.
+- **Not indexed.** `noindex, nofollow` in the page metadata and an `X-Robots-Tag` header on every `/admin` response
+  (401s and 404s too), `Cache-Control: no-store`, `Disallow: /admin` in `robots.txt`, and it is not in the sitemap.
+  Analytics and Lenis don't run there.
+- **Data.** Rendered per request on the server (`force-dynamic`, nothing cached). One Scan per load
+  (`store.listItems()`); positions come from `rank()` in `position.ts` over that same scan, so they are current
+  rather than the 30 second cache the public pages use. AWS credentials never reach the browser. The page shows
+  summary tiles (sign-ups today, 7 and 30 days, referred vs direct, credits, status), sign-ups per day for 30 days,
+  the top 25 referrers, every sign-up (sortable, searchable by phone or code, phones masked until you tick "Show
+  full numbers"), and counts by `utm_source` and referrer host. Days are calendar days in America/Detroit.
+- **Export.** `/admin/export.csv` returns the same columns as `npm run waitlist:export` plus `position`, oldest first,
+  behind the same auth.
+- **Read-only.** No edits or deletes, and phone numbers are never logged.
+
+Locally: `ADMIN_USER=me ADMIN_PASSWORD=pw npm run dev`, then sign up a few numbers on the home page (and through
+an invite link) to fill the in-memory list.
 
 ## Referrals
 
