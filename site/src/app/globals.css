@@ -512,6 +512,369 @@ summary:focus-visible,
   color: var(--ink-2);
 }
 
+/* ---------- waitlist result card (after signing up, and /w/<code>) ---------- */
+
+.spot {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.spot__eyebrow {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.spot__title {
+  margin: 0;
+  font-size: clamp(30px, 6.4vw, 40px);
+  font-weight: 700;
+  line-height: 1.02;
+  letter-spacing: -0.04em;
+}
+.spot__title:focus {
+  outline: none;
+}
+.spot__title:focus-visible {
+  outline: 3px solid var(--ink);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+.spot__num {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 -0.16em 0 var(--accent);
+}
+.spot__total {
+  margin: -4px 0 0;
+  font-size: 16px;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+.spot__boost {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.join-card--footer .spot__boost {
+  background: var(--paper);
+}
+.spot__rule {
+  margin: 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: var(--ink);
+}
+.spot__friends {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink-2);
+}
+.spot__count {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.spot__note {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+.spot__later {
+  margin: -6px 0 0;
+  font-size: 14px;
+  color: var(--ink-3);
+}
+.spot__later a {
+  color: var(--ink-2);
+  overflow-wrap: anywhere;
+}
+
+.share-trigger {
+  width: 100%;
+  gap: 10px;
+}
+.share-trigger__icon {
+  width: 20px;
+  height: 20px;
+}
+
+/* ---------- share sheet (a modal dialog: bottom sheet on phones, card on desktop) ---------- */
+
+html.is-sheet-open {
+  overflow: hidden;
+}
+.share-sheet {
+  /* The dialog box itself is invisible; clicks on it (outside the panel) close the sheet. */
+  margin: auto auto 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  color: var(--ink);
+  overflow: visible;
+}
+.share-sheet::backdrop {
+  background: rgba(28, 26, 23, 0.45);
+  opacity: 0;
+  transition: opacity 0.22s ease;
+}
+.share-sheet[data-open]::backdrop {
+  opacity: 1;
+}
+.share-sheet__panel {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 10px 20px calc(20px + env(safe-area-inset-bottom));
+  padding-left: max(20px, env(safe-area-inset-left));
+  padding-right: max(20px, env(safe-area-inset-right));
+  background: #ffffff;
+  border-radius: 24px 24px 0 0;
+  box-shadow: 0 -12px 40px -12px rgba(28, 26, 23, 0.35);
+  transform: translate3d(0, 100%, 0);
+  transition: transform 0.24s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.share-sheet[data-open] .share-sheet__panel {
+  transform: none;
+}
+.share-sheet__grab {
+  align-self: center;
+  width: 40px;
+  height: 5px;
+  border-radius: 999px;
+  background: var(--line-2);
+}
+.share-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.share-sheet__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+.share-sheet__close {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  margin-right: -10px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-2);
+  cursor: pointer;
+}
+.share-sheet__close:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+.share-sheet__close svg {
+  width: 22px;
+  height: 22px;
+}
+.share-sheet__sub {
+  margin: -8px 0 0;
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.share-sheet__link {
+  display: flex;
+  gap: 8px;
+  padding: 6px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+.share-sheet__field {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 44px;
+  padding: 0 10px;
+  border: none;
+  background: transparent;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-overflow: ellipsis;
+}
+.share-sheet__field:focus-visible {
+  outline-offset: 0;
+  border-radius: 10px;
+}
+.share-sheet__copy {
+  flex: none;
+  gap: 8px;
+  min-width: 100px;
+  border-radius: 12px;
+  padding: 0 14px;
+}
+.share-sheet__copy.is-copied,
+.share-sheet__copy.is-copied:hover {
+  background: var(--green);
+}
+.share-sheet__copy-icon {
+  width: 18px;
+  height: 18px;
+}
+.share-sheet__targets {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.share-sheet__target {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 2px;
+  border-radius: 16px;
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+  -webkit-tap-highlight-color: transparent;
+}
+.share-sheet__target:hover {
+  color: var(--ink);
+  background: var(--paper);
+}
+.share-sheet__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 18px;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  color: var(--ink);
+}
+.share-sheet__icon svg {
+  width: 26px;
+  height: 26px;
+}
+.share-sheet__icon--sms {
+  background: #34c759;
+  border-color: #34c759;
+  color: #ffffff;
+}
+.share-sheet__icon--whatsapp {
+  background: #25d366;
+  border-color: #25d366;
+  color: #ffffff;
+}
+.share-sheet__icon--x {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #ffffff;
+}
+@media (min-width: 640px) {
+  .share-sheet {
+    margin: auto;
+    width: calc(100% - 48px);
+    max-width: 460px;
+  }
+  .share-sheet__panel {
+    padding: 22px 24px 24px;
+    border-radius: 24px;
+    box-shadow: 0 24px 60px -20px rgba(28, 26, 23, 0.45);
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.98);
+    transition:
+      opacity 0.2s ease,
+      transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+  }
+  .share-sheet[data-open] .share-sheet__panel {
+    opacity: 1;
+  }
+  .share-sheet__grab {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .share-sheet::backdrop,
+  .share-sheet__panel {
+    transition: none;
+  }
+}
+
+/* ---------- invite banner (/i/<code>) and spot page (/w/<code>) ---------- */
+
+.invite-banner {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: max(10px, env(safe-area-inset-top)) var(--gutter) 10px;
+  background: var(--ink);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  text-align: center;
+}
+.invite-banner + .site-header {
+  padding-top: 18px;
+}
+@media (max-width: 639px) {
+  .invite-banner + .site-header .site-nav__cta {
+    top: 18px;
+  }
+}
+@media (min-width: 640px) {
+  .invite-banner + .site-header {
+    padding-top: 24px;
+  }
+}
+
+.spot-page {
+  display: flex;
+  justify-content: center;
+  padding-top: 32px;
+  padding-bottom: 72px;
+}
+.spot-page__card {
+  max-width: 580px;
+}
+
 /* Sticky pill: sits above the iPhone home indicator. */
 .sticky-join {
   position: fixed;

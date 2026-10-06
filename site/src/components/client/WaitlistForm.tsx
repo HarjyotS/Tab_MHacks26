@@ -6,6 +6,7 @@ import { CONSENT_LEAD, ERRORS } from '@/lib/waitlist/consent'
 import { track } from '@/lib/analytics'
 import { TurnstileWidget } from './turnstile-client'
 import { setJoined, useJoined } from './waitlist-state'
+import { SpotCard } from './SpotCard'
 
 type Location = 'hero' | 'footer'
 
@@ -25,7 +26,7 @@ function clientCheck(phone: string, consent: boolean): string | null {
   return null
 }
 
-export function WaitlistForm({ location, siteKey }: { location: Location; siteKey: string | null }) {
+export function WaitlistForm({ location, siteKey, inviteCode = null }: { location: Location; siteKey: string | null; inviteCode?: string | null }) {
   const id = useId()
   const inputId = `phone-${location}`
   const errorId = `${id}-error`
@@ -108,8 +109,8 @@ export function WaitlistForm({ location, siteKey }: { location: Location; siteKe
         widget.current?.destroy()
         widget.current = null
         submittedHere.current = true
-        track('waitlist_succeeded', { location, duplicate: result.duplicate })
-        setJoined({ display: result.display, duplicate: result.duplicate })
+        track('waitlist_succeeded', { location, duplicate: result.duplicate, referred: result.referred })
+        setJoined({ display: result.display, duplicate: result.duplicate, spot: result.spot })
       } else if (result.status === 'error') {
         widget.current?.reset()
         fail(result.code, result.message)
@@ -118,17 +119,28 @@ export function WaitlistForm({ location, siteKey }: { location: Location; siteKe
   }
 
   const busy = pending || waiting
+  const confirmNote = joined
+    ? `When your spot opens, Tab will text ${joined.display} from its own number to confirm. Reply STOP anytime to opt out.`
+    : ''
 
   return (
     <div className="join-form" aria-live="polite">
-      {joined ? (
+      {joined?.spot ? (
+        <SpotCard
+          spot={joined.spot}
+          eyebrow={joined.duplicate ? 'You’re already on the list' : 'You’re on the list'}
+          note={confirmNote}
+          level={location === 'hero' ? 2 : 3}
+          focusOnShow={submittedHere.current}
+          reportShown={submittedHere.current}
+        />
+      ) : joined ? (
+        // The spot couldn't be worked out (the sign-up still went through): the plain confirmation.
         <div className="join-form__done">
           <span className="join-form__done-title" tabIndex={-1} ref={doneRef}>
             {joined.duplicate ? 'You’re already on the list.' : 'You’re on the list.'}
           </span>
-          <span className="join-form__done-body">
-            When your spot opens, Tab will text {joined.display} from its own number to confirm. Reply STOP anytime to opt out.
-          </span>
+          <span className="join-form__done-body">{confirmNote}</span>
         </div>
       ) : (
         <form ref={formRef} className="join-form__form" method="post" noValidate onSubmit={onSubmit} onFocus={start} onPointerDown={start}>
@@ -169,6 +181,7 @@ export function WaitlistForm({ location, siteKey }: { location: Location; siteKe
               {CONSENT_LEAD} <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms</a>.
             </span>
           </label>
+          {inviteCode ? <input type="hidden" name="ref" value={inviteCode} /> : null}
           <div ref={widgetBox} className="join-form__captcha" />
           {error ? (
             <p role="alert" id={errorId} className="join-form__error">

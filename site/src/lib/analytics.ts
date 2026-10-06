@@ -8,7 +8,7 @@ type PostHogLike = { capture: (event: string, props?: Props) => void }
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY
 const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com'
 
-const ALLOWED_PROPS = new Set(['location', 'percent', 'section', 'reason', 'duplicate'])
+const ALLOWED_PROPS = new Set(['location', 'percent', 'section', 'reason', 'duplicate', 'referred', 'method', 'position_bucket', 'valid'])
 
 let client: PostHogLike | null = null
 let queue: [string, Props | undefined][] = []

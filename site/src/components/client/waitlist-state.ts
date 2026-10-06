@@ -1,10 +1,11 @@
 'use client'
 
 import { useSyncExternalStore } from 'react'
+import type { WaitlistSpot } from '@/lib/waitlist/referral-config'
 
 // Both forms on the page share one result, as in the design: sign up in one,
-// both show you're on the list.
-export type Joined = { display: string; duplicate: boolean } | null
+// both show you're on the list (and your spot).
+export type Joined = { display: string; duplicate: boolean; spot: WaitlistSpot | null } | null
 
 let joined: Joined = null
 const listeners = new Set<() => void>()
