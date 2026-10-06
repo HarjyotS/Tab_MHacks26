@@ -133,7 +133,7 @@ export function FaqSection() {
   )
 }
 
-export function JoinSection({ siteKey }: { siteKey: string | null }) {
+export function JoinSection({ siteKey, inviteCode = null }: { siteKey: string | null; inviteCode?: string | null }) {
   return (
     <section className="join" aria-labelledby="join-title" data-section="join-footer">
       <div className="join__inner wrap">
@@ -147,7 +147,7 @@ export function JoinSection({ siteKey }: { siteKey: string | null }) {
           </p>
         </div>
         <div id="join-footer" className="join-card join-card--footer">
-          <WaitlistForm location="footer" siteKey={siteKey} />
+          <WaitlistForm location="footer" siteKey={siteKey} inviteCode={inviteCode} />
         </div>
       </div>
     </section>

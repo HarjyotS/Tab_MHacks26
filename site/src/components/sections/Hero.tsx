@@ -7,7 +7,7 @@ const HEADLINE = 'Your group chat keeps the tab now.'
  * Server component. The headline builds word by word with a pure CSS stagger
  * (no JavaScript on the critical path); the form is the only client island.
  */
-export function Hero({ siteKey }: { siteKey: string | null }) {
+export function Hero({ siteKey, inviteCode = null }: { siteKey: string | null; inviteCode?: string | null }) {
   const words = HEADLINE.split(' ')
   return (
     <section id="top" className="hero" data-section="hero">
@@ -26,7 +26,7 @@ export function Hero({ siteKey }: { siteKey: string | null }) {
         the chat, ignores everything else, and settles up whenever you&apos;re ready: after a trip, on the first of the month, or whenever.
       </p>
       <div id="join" className="join-card join-card--hero">
-        <WaitlistForm location="hero" siteKey={siteKey} />
+        <WaitlistForm location="hero" siteKey={siteKey} inviteCode={inviteCode} />
       </div>
       <HeroFloat target="join" />
     </section>
