@@ -1,0 +1,7 @@
+import type { MetadataRoute } from 'next'
+import { SITE_URL } from '@/lib/site'
+
+// The legal pages are drafts (noindex) until the final text lands, so only the home page is listed.
+export default function sitemap(): MetadataRoute.Sitemap {
+  return [{ url: `${SITE_URL}/`, changeFrequency: 'weekly', priority: 1 }]
+}
