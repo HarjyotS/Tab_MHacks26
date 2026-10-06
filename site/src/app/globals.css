@@ -380,8 +380,8 @@ summary:focus-visible,
   max-width: 33em;
 }
 
-/* Privacy, said up front: a highlighted clause in the lede and a short proof line. */
-.hero__private {
+/* The lede's one highlight is the pitch; privacy is a quiet line under the form. */
+.hero__mark {
   background: linear-gradient(transparent 58%, rgba(255, 91, 31, 0.24) 58%);
   color: var(--ink);
   padding: 0 0.08em;
@@ -390,31 +390,20 @@ summary:focus-visible,
 }
 .hero__proof {
   display: inline-flex;
-  align-items: flex-start;
-  gap: 10px;
-  max-width: 34em;
-  margin-top: -6px;
-  padding: 10px 16px;
-  border: 1px solid var(--line);
-  border-radius: 14px;
-  background: #ffffff;
-  color: var(--ink-2);
-  font-size: 15px;
-  line-height: 1.45;
-  text-align: left;
+  align-items: center;
+  gap: 7px;
+  margin-top: -10px;
+  color: var(--ink-3);
+  font-size: 14px;
+  line-height: 1.4;
   text-decoration: none;
-  transition: border-color 0.2s;
 }
-.hero__proof strong {
-  color: var(--ink);
-  font-weight: 600;
-}
-.hero__proof:hover {
-  border-color: var(--line-2);
+.hero__proof:hover span {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .hero__shield {
   flex: none;
-  margin-top: 1px;
   color: var(--green);
 }
 
