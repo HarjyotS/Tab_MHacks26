@@ -2,13 +2,13 @@
 // this string (not anything the browser sends) with every sign-up, so if the
 // wording changes, bump CONSENT_VERSION in the same commit.
 
-export const CONSENT_VERSION = '2026-10-06.v2'
+export const CONSENT_VERSION = '2026-10-06.v3'
 
 export const CONSENT_LEAD =
-  'Text me when Tab is ready. I agree that Tab may text this number about the beta and its launch, usually just a few messages. Message and data rates may apply. Reply STOP anytime to opt out.'
+  'Text me when Tab is ready. I agree that Tab may text this number about the beta and its launch, usually just a few messages. Message and data rates may apply. Reply STOP anytime to opt out. See our'
 
-/** The full sentence as a person reads it. */
-export const CONSENT_TEXT = CONSENT_LEAD
+/** The full sentence as a person reads it, links included as plain words. */
+export const CONSENT_TEXT = `${CONSENT_LEAD} Privacy Policy and Terms.`
 
 export const ERRORS = {
   phone: 'Enter a 10-digit US phone number.',

@@ -1,3 +1,4 @@
+import Link from 'next/link'
 import { SUPPORT_EMAIL } from '@/lib/site'
 
 export function Logo({ size = 'lg' }: { size?: 'lg' | 'sm' }) {
@@ -36,7 +37,9 @@ export function Footer() {
         <Logo size="sm" />
         <span>addtab.app</span>
       </div>
-      <nav className="site-footer__nav" aria-label="Contact">
+      <nav className="site-footer__nav" aria-label="Legal and contact">
+        <Link href="/privacy">Privacy policy</Link>
+        <Link href="/terms">Terms</Link>
         <span className="site-footer__contact">
           Contact <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
         </span>

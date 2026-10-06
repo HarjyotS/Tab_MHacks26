@@ -6,13 +6,13 @@ export const LEGAL_UPDATED = 'October 6, 2026'
 
 export type LegalSection = { id: string; title: string; body: ReactNode }
 
-/** Draft legal page: plain-English sections under a clear "draft for lawyer review" banner. */
+/** A plain-English legal page: short sections, nothing to fill in. */
 export function LegalPage({ title, intro, sections }: { title: string; intro: ReactNode; sections: LegalSection[] }) {
   return (
     <>
       <Header home={false} />
       <main id="main" className="legal wrap">
-        <p className="legal__badge">Draft for lawyer review, last updated {LEGAL_UPDATED}</p>
+        <p className="legal__badge">Last updated {LEGAL_UPDATED}</p>
         <h1 className="h2 h2--56">{title}</h1>
         <div className="legal__intro">{intro}</div>
         {sections.map((s) => (
