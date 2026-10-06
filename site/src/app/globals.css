@@ -388,6 +388,14 @@ summary:focus-visible,
   -webkit-box-decoration-break: clone;
   box-decoration-break: clone;
 }
+.hero__u {
+  color: var(--ink);
+  text-decoration-line: underline;
+  text-decoration-color: var(--accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.22em;
+  text-decoration-skip-ink: auto;
+}
 .hero__proof {
   display: inline-flex;
   align-items: center;

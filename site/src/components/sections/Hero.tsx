@@ -22,9 +22,9 @@ export function Hero({ siteKey, inviteCode = null }: { siteKey: string | null; i
         ))}
       </h1>
       <p className="hero__lede">
-        Add Tab to your group chat and get on with your life. Nobody opens an app or stops the night to log what they paid.{' '}
-        <mark className="hero__mark">You just text like normal.</mark> Tab picks up the expenses, ignores everything else, and settles up whenever
-        you&apos;re ready.
+        Add Tab to your group chat and get on with your life. <u className="hero__u">Nobody opens an app</u> or stops the night to log what they
+        paid. <mark className="hero__mark">You just text like normal.</mark> Tab <u className="hero__u">picks up the expenses</u>, ignores
+        everything else, and <u className="hero__u">settles up whenever you&apos;re ready</u>.
       </p>
       <div id="join" className="join-card join-card--hero">
         <WaitlistForm location="hero" siteKey={siteKey} inviteCode={inviteCode} />
