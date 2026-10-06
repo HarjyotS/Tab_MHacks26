@@ -2,11 +2,13 @@
 
 import { useEffect } from 'react'
 import { analyticsEnabled, startAnalytics, track } from '@/lib/analytics'
+import { isAdminPath } from '@/lib/admin/path'
 
 /** Page view (via PostHog), scroll depth milestones and one event per section seen. */
 export function Analytics() {
   useEffect(() => {
-    if (!analyticsEnabled()) return
+    // Nothing is tracked on the internal /admin pages.
+    if (!analyticsEnabled() || isAdminPath()) return
 
     const begin = () => void startAnalytics()
     if ('requestIdleCallback' in window) window.requestIdleCallback(begin, { timeout: 3000 })

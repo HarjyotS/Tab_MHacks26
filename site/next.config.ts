@@ -38,6 +38,14 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       { source: '/:path*', headers: securityHeaders },
+      // Internal admin pages (src/proxy.ts sets these too, including on its 401s and 404s).
+      {
+        source: '/admin/:path*',
+        headers: [
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+          { key: 'Cache-Control', value: 'no-store, private' },
+        ],
+      },
       {
         source: '/phone-frame.webp',
         headers: [{ key: 'Cache-Control', value: 'public, max-age=31536000, immutable' }],

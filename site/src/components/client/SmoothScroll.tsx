@@ -3,6 +3,7 @@
 import { useEffect } from 'react'
 import { isTouchFirst, prefersReducedMotion } from '@/lib/motion-prefs'
 import { onFirstInteraction } from '@/lib/interaction'
+import { isAdminPath } from '@/lib/admin/path'
 
 /**
  * Lenis smooth scrolling for mouse and trackpad, driven by GSAP's ticker so
@@ -11,7 +12,8 @@ import { onFirstInteraction } from '@/lib/interaction'
  */
 export function SmoothScroll() {
   useEffect(() => {
-    if (prefersReducedMotion() || isTouchFirst()) return
+    // The admin tables scroll sideways; native scrolling is better there.
+    if (prefersReducedMotion() || isTouchFirst() || isAdminPath()) return
     let cleanup: (() => void) | undefined
     let cancelled = false
 
