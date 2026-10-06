@@ -9,7 +9,8 @@ reference in `../landing/` (`Main.dc.html`), which stays untouched.
 - **Motion** for the bubble wall (spring pops, drag with momentum), the two-endings toggle and the three looping phones.
 - **Lenis** smooth scrolling on mouse and trackpad only, driven by GSAP's ticker.
 - **Waitlist**: a server action writing to **AWS DynamoDB**, optional **Cloudflare Turnstile**, phone numbers
-  normalized to E.164 with `libphonenumber-js`.
+  normalized to E.164 with `libphonenumber-js`. After signing up, people see their real spot and an invite link
+  (`/i/<code>`) that moves them up (see [Referrals](#referrals)).
 - **PostHog** analytics, only when a key is set.
 
 ## Run it locally
@@ -25,6 +26,9 @@ With no env vars at all, `next dev` uses the dev fallbacks, and the server logs 
 - sign-ups go to an **in-memory list** (lost on restart),
 - Turnstile uses Cloudflare's documented always-pass test keys (`1x00000000000000000000AA` / `1x0000000000000000000000000000000AA`),
 - IPs are hashed with a fixed dev secret.
+
+Invite links are built from `NEXT_PUBLIC_SITE_URL`, so to click through them locally run
+`NEXT_PUBLIC_SITE_URL=http://localhost:3000 npm run dev`.
 
 To try the production build locally with the same fallbacks:
 
@@ -55,7 +59,7 @@ Every variable is listed in `.env.example`.
 | `NEXT_PUBLIC_POSTHOG_HOST` | Optional | Default `https://us.i.posthog.com`. |
 | `TAB_SIGNUP_WEBHOOK_URL` | Optional | Where new sign-ups are POSTed (contract below). Unset means a logged no-op. |
 | `TAB_SIGNUP_WEBHOOK_SECRET` | With the URL | HMAC key for signing that webhook. |
-| `NEXT_PUBLIC_SITE_URL` | Optional | Canonical URL, default `https://addtab.app`. |
+| `NEXT_PUBLIC_SITE_URL` | Optional | Canonical URL and the base of invite links, default `https://addtab.app`. |
 | `WAITLIST_DEV_FALLBACK` | Local only | `1` allows the dev fallbacks under `next start`. |
 
 **Never failing silently.** The Vercel production build stops with a clear error if `AWS_REGION`,
@@ -90,8 +94,15 @@ number that is already on the list is never overwritten. That case shows "You're
 | `signup_location` | `hero` or `footer` | Which form was used. |
 | `created_at`, `updated_at` | ISO 8601 | |
 | `notified_at` | ISO 8601 | Set once the signup webhook accepts the item. |
+| `ref_code` | `s2dq8nb3` | This person's invite code: 8 chars from `23456789abcdefghjkmnpqrstuvwxyz` (no 0/o/1/i/l). Unique (checked on the index, retried on a clash). Rows from before referrals get one lazily the next time they're looked up (a conditional update, only if absent). |
+| `referred_by` | `8ps8xth4` | The `ref_code` whose invite link brought them. Only set when it belongs to a real row with a different phone number. |
+| `referral_count` | `2` | Friends who joined with their link. Starts at 0, incremented with `ADD referral_count :one`. Missing on older rows means 0. |
 
-Minimal IAM policy for the site's key (add `dynamodb:Scan` only on the separate key you use for exports):
+**Index.** Invite codes are looked up through the GSI **`by_ref_code`** (hash key `ref_code`, String, `KEYS_ONLY`),
+also managed outside this code. Until it exists, sign-ups still work: codes are issued unchecked (with a warning),
+invite links show no banner, and nobody gets credit.
+
+Minimal IAM policy for the site's key:
 
 ```json
 {
@@ -99,12 +110,20 @@ Minimal IAM policy for the site's key (add `dynamodb:Scan` only on the separate 
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem"],
+      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Scan"],
       "Resource": "arn:aws:dynamodb:us-east-1:<ACCOUNT_ID>:table/tab-waitlist"
+    },
+    {
+      "Effect": "Allow",
+      "Action": ["dynamodb:Query"],
+      "Resource": "arn:aws:dynamodb:us-east-1:<ACCOUNT_ID>:table/tab-waitlist/index/by_ref_code"
     }
   ]
 }
 ```
+
+`Scan` is for the position ranking (it reads only `phone`, `created_at` and `referral_count`); `GetItem` is for
+giving older rows their invite code.
 
 **Rate limiting.** Sign-up attempts are limited to 8 per hashed IP per hour by an in-memory counter
 (`src/lib/waitlist/rate-limit.ts`). Each serverless instance keeps its own counts, so this slows casual abuse
@@ -119,8 +138,44 @@ npm run waitlist:export > waitlist.csv
 ```
 
 `scripts/export-waitlist.ts` scans the table (read-only) and prints CSV with `phone, created_at, status,
-utm_source`, oldest first. Values that start with `=`, `+`, `-` or `@` (other than phone numbers) are prefixed
+utm_source, ref_code, referred_by, referral_count`, oldest first. Values that start with `=`, `+`, `-` or `@` (other than phone numbers) are prefixed
 with `'` so a spreadsheet won't run them as formulas. It runs on Node's built-in TypeScript support (Node 22.18+).
+
+## Referrals
+
+Every number shown is real: the position is a rank over the actual rows, the total is the real row count, and
+there is no simulated counter, starting offset or padding. The settings live in
+`src/lib/waitlist/referral-config.ts`: `SPOTS_PER_REFERRAL = 5`, `BETA_GROUP_LIMIT = 20`, and `SHOW_TOTAL_FROM = 25`
+(the "N people are waiting" line only shows from 25 sign-ups, so a tiny list doesn't look empty).
+
+**Position** (`src/lib/waitlist/position.ts`): scan `phone, created_at, referral_count`, sort by `created_at` to get
+each row's join order (1-based), subtract `referral_count x SPOTS_PER_REFERRAL`, clamp at 1, then rank by that score
+with ties going to whoever joined first. Positions run 1..total with no gaps. Example: 13 people have joined and A
+was 13th. Two friends join with A's link, so A's score is 13 - 2 x 5 = 3. The 3rd person to join also has score 3
+but joined earlier, so A is **#4** of 15.
+
+The scan result is cached in memory for 30 seconds per server instance (dropped on that instance after any
+sign-up, and refreshed whenever the person being shown isn't in it yet). This is fine at this scale; **past a few
+thousand rows, move it to a counter or a sorted index** instead of scanning on every sign-up.
+
+**Crediting** (`src/lib/waitlist/signup.ts`): a sign-up is credited when its code (the invite page's hidden form
+field, or else the `tab_ref` cookie) belongs to a real row with a different phone number, and the sign-up is
+new. Duplicates and self-referrals never count. A duplicate sign-up shows the same result card for the existing
+row.
+
+**Pages**
+
+- `/i/<code>`: the landing page with "A friend invited you to Tab" on top. Both forms carry the code in a hidden
+  field, and a first-party `tab_ref` cookie (30 days, `SameSite=Lax`) keeps the credit if the visitor browses
+  around first. An unknown code renders the normal page with no banner and no error. The page only learns whether
+  a code is real; the referrer's phone number never leaves the server. `noindex`, canonical `/`, title "You're
+  invited to Tab", and its own preview image (`src/app/i/[code]/opengraph-image.tsx`, the same for every code).
+- `/w/<code>`: check your spot later. The same result card, found by the code, without the phone number. Note
+  the invite code is in every link a person shares, so anyone holding an invite can see that person's position and
+  friend count (never their number).
+
+**Sharing.** "Share your invite" uses the native share sheet on touch devices with the Web Share API; otherwise (or
+if that is cancelled) a custom sheet opens with the link, Copy, Messages, WhatsApp, X and Email.
 
 ## Signup webhook (double opt-in through Tab)
 
@@ -183,7 +238,9 @@ export function verifyTabSignature(rawBody: string, timestamp: string, header: s
 4. Under **Settings > Domains**, add `addtab.app` (and `www.addtab.app` redirecting to it). Vercel shows the exact
    DNS records to create at the registrar (an `A` record for the apex and a `CNAME` for `www`).
 5. In Cloudflare Turnstile, add `addtab.app` to the widget's hostnames.
-6. Check `https://addtab.app/opengraph-image` and paste the link into an iMessage to see the preview.
+6. Check `https://addtab.app/opengraph-image` and paste the link into an iMessage to see the preview. Do the same
+   with an invite link (`https://addtab.app/i/<code>`, preview at `/i/<code>/opengraph-image`).
+7. Make sure the `by_ref_code` index is `ACTIVE` and the site's IAM key has the policy above before deploying.
 
 ## How the page is put together
 
@@ -198,8 +255,11 @@ export function verifyTabSignature(rawBody: string, timestamp: string, header: s
   bezel is a CSS 3-slice `border-image`, so the pinned phone can be shortened on small screens.
 - **Vegas story** (`enhancers/VegasTimeline.tsx`): one ScrollTrigger timeline with `scrub`, pinned with
   `gsap.matchMedia` timelines for phones (shorter scroll, compact receipt, 100svh stage) and desktop.
-- Analytics events (no form contents ever): `$pageview`, `scroll_depth` (25/50/75/100), `section_viewed`,
-  `waitlist_form_started`, `waitlist_submitted`, `waitlist_succeeded`, `waitlist_failed` (with a reason code).
+- Analytics events (no form contents or phone numbers ever): `$pageview`, `scroll_depth` (25/50/75/100),
+  `section_viewed`, `waitlist_form_started`, `waitlist_submitted`, `waitlist_succeeded` (with `duplicate` and
+  `referred`), `waitlist_failed` (with a reason code), `waitlist_position_shown` (with a `position_bucket` like
+  `11-25`, never the exact spot), `invite_share_clicked` (with `method`: `native`, `copy`, `sms`, `whatsapp`, `x`,
+  `email`; `native` is sent once the native share completes), `invite_page_viewed` (with `valid`).
 - SEO: metadata and Open Graph/Twitter image (`opengraph-image.tsx`, generated with `next/og` from the hero),
   `robots.txt`, `sitemap.xml`, and JSON-LD for `SoftwareApplication` and `FAQPage` (built from `src/content/faq.ts`,
   the same data the FAQ renders).

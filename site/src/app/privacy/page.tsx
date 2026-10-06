@@ -32,6 +32,17 @@ const SECTIONS: LegalSection[] = [
     ),
   },
   {
+    id: 'invites',
+    title: 'Invite links',
+    body: (
+      <p>
+        Everyone on the waitlist gets an invite link with a random code in it. If you join through a friend&apos;s link, we note which code it was
+        and add one to their count of friends who joined, which moves them up the list. The link never shows your phone number, or theirs, to
+        anyone. When you open an invite link, this site stores the code in a cookie for 30 days so the invite still counts if you look around first.
+      </p>
+    ),
+  },
+  {
     id: 'chat',
     title: 'If Tab is in your group chat',
     body: (
