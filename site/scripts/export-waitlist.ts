@@ -8,7 +8,7 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb'
 import { DynamoDBDocumentClient, ScanCommand } from '@aws-sdk/lib-dynamodb'
 
-const COLUMNS = ['phone', 'created_at', 'status', 'utm_source', 'ref_code', 'referred_by', 'referral_count'] as const
+export const COLUMNS = ['phone', 'created_at', 'status', 'utm_source', 'ref_code', 'referred_by', 'referral_count'] as const
 
 export function csvCell(value: unknown): string {
   const s = value == null ? '' : String(value)
@@ -17,9 +17,10 @@ export function csvCell(value: unknown): string {
   return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe
 }
 
-export function toCsv(items: Record<string, unknown>[]): string {
+/** CSV of `items`, oldest first. The admin export (src/app/admin/export.csv) passes these columns plus position. */
+export function toCsv(items: Record<string, unknown>[], columns: readonly string[] = COLUMNS): string {
   const sorted = [...items].sort((a, b) => String(a.created_at ?? '').localeCompare(String(b.created_at ?? '')))
-  return [COLUMNS.join(','), ...sorted.map((it) => COLUMNS.map((c) => csvCell(it[c])).join(','))].join('\n') + '\n'
+  return [columns.join(','), ...sorted.map((it) => columns.map((c) => csvCell(it[c])).join(','))].join('\n') + '\n'
 }
 
 async function main() {
