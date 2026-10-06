@@ -61,3 +61,21 @@ export interface WaitlistItem {
   updated_at: string
   notified_at?: string
 }
+
+/** The fields the admin page and CSV export read from each row (one Scan, see store.listItems). */
+export type ListedItem = Pick<WaitlistItem, 'phone' | 'created_at' | 'status'> &
+  Partial<
+    Pick<
+      WaitlistItem,
+      | 'consent_version'
+      | 'consent_at'
+      | 'referrer'
+      | 'utm_source'
+      | 'utm_medium'
+      | 'utm_campaign'
+      | 'signup_location'
+      | 'ref_code'
+      | 'referred_by'
+      | 'referral_count'
+    >
+  >

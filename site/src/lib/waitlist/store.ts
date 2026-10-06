@@ -3,7 +3,7 @@ import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { DynamoConfig } from './env'
 import { REF_CODE_ALPHABET, REF_CODE_LENGTH } from './referral-config'
-import type { NewSignup, RankingRow, SignupRow, WaitlistItem } from './types'
+import type { ListedItem, NewSignup, RankingRow, SignupRow, WaitlistItem } from './types'
 
 /** The GSI on `ref_code` (KEYS_ONLY). Managed outside this code, like the table. */
 export const REF_CODE_INDEX = 'by_ref_code'
@@ -20,6 +20,35 @@ export interface WaitlistStore {
   addReferral(referrerPhoneE164: string): Promise<void>
   /** phone, created_at and referral_count for every row, for the ranking. */
   rankingRows(): Promise<RankingRow[]>
+  /** Every row with the fields the admin page and export need (no IP hash, user agent or consent text). Read-only. */
+  listItems(): Promise<ListedItem[]>
+}
+
+/** Attributes read by listItems. Everything goes through #names, since some (status) are reserved words. */
+const LISTED_FIELDS = [
+  'phone',
+  'created_at',
+  'status',
+  'consent_version',
+  'consent_at',
+  'referrer',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'signup_location',
+  'ref_code',
+  'referred_by',
+  'referral_count',
+] as const
+
+function toListed(it: Record<string, unknown>): ListedItem | null {
+  if (typeof it.phone !== 'string') return null
+  const out: Record<string, unknown> = {}
+  for (const f of LISTED_FIELDS) if (it[f] != null) out[f] = it[f]
+  out.created_at = String(it.created_at ?? '')
+  out.status = String(it.status ?? 'pending_confirmation')
+  if (it.referral_count != null) out.referral_count = Number(it.referral_count) || 0
+  return out as ListedItem
 }
 
 /** A random invite code from the unambiguous alphabet (unbiased: randomInt). */
@@ -213,6 +242,29 @@ export class DynamoStore implements WaitlistStore {
     } while (start)
     return rows
   }
+
+  async listItems(): Promise<ListedItem[]> {
+    const names = Object.fromEntries(LISTED_FIELDS.map((f, i) => [`#f${i}`, f]))
+    const items: ListedItem[] = []
+    let start: Record<string, unknown> | undefined
+    do {
+      const page = await this.doc.send(
+        new ScanCommand({
+          TableName: this.table,
+          ProjectionExpression: Object.keys(names).join(', '),
+          ExpressionAttributeNames: names,
+          ConsistentRead: true,
+          ExclusiveStartKey: start,
+        }),
+      )
+      for (const it of page.Items ?? []) {
+        const listed = toListed(it)
+        if (listed) items.push(listed)
+      }
+      start = page.LastEvaluatedKey
+    } while (start)
+    return items
+  }
 }
 
 /** Dev-only stand-in so the site runs without AWS. Lost on restart. */
@@ -245,6 +297,10 @@ class MemoryStore implements WaitlistStore {
 
   async rankingRows(): Promise<RankingRow[]> {
     return [...this.rows.values()].map((r) => ({ phone: r.phoneE164, createdAt: r.createdAt.toISOString(), referralCount: r.referralCount }))
+  }
+
+  async listItems(): Promise<ListedItem[]> {
+    return [...this.rows.values()].map((r) => toListed(toItem(r) as unknown as Record<string, unknown>)!)
   }
 }
 
