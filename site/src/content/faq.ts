@@ -13,7 +13,7 @@ export const FAQ: FaqItem[] = [
   },
   {
     q: 'Does Tab read our whole chat?',
-    a: 'Tab reads messages to spot money, keeps only the ones about expenses, and deletes the rest right after reading them. It never sells your data or shows ads.',
+    a: "Tab's AI doesn't. A separate screening model checks each message for one thing: is it a shared expense? If it isn't, the text is deleted right after that check and never reaches Tab's AI. Only expenses are kept, and your data is never sold or used for ads.",
   },
   {
     q: 'How do payments work?',

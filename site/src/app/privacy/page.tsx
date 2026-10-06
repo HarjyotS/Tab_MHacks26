@@ -13,7 +13,11 @@ const SECTIONS: LegalSection[] = [
     title: 'The short version',
     body: (
       <ul>
-        <li>Tab only keeps messages that are about money. Everything else in your group chat is deleted right after Tab reads it.</li>
+        <li>
+          Every message is first checked by a separate screening model that only decides whether it&apos;s about a shared expense. Messages that
+          aren&apos;t are deleted right after that check and never reach Tab&apos;s AI.
+        </li>
+        <li>Tab only keeps messages that are about money.</li>
         <li>Tab never holds, moves, or has access to your money or your bank account.</li>
         <li>Your data is never sold and never used for ads.</li>
         <li>You can have your data deleted at any time.</li>
@@ -48,7 +52,8 @@ const SECTIONS: LegalSection[] = [
     body: (
       <>
         <p>
-          Tab reads messages in the group to tell which ones are about money. Messages that aren&apos;t about money are not kept. Messages that are,
+          A screening model checks each message in the group to tell whether it&apos;s about money. It can&apos;t reply or take any action. Messages
+          that aren&apos;t about money are deleted right after that check and are never passed to Tab&apos;s AI. Messages that are,
           like amounts, who paid, and receipt photos, are kept so Tab can track and settle the tab. Tab also keeps the first names people give it and
           their phone numbers, so it knows who owes whom.
         </p>
@@ -69,7 +74,7 @@ const SECTIONS: LegalSection[] = [
     title: 'Who helps run Tab',
     body: (
       <p>
-        A few service providers handle data only to run Tab: message delivery, AI that reads money messages and receipts, hosting and storage, and
+        A few service providers handle data only to run Tab: message delivery, the screening model, AI that reads money messages and receipt photos, hosting and storage, and
         website analytics. They aren&apos;t allowed to use your data for anything else.
       </p>
     ),

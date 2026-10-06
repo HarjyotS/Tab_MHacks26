@@ -93,19 +93,67 @@ export function HowSection() {
 }
 
 const TRUST = [
-  { title: 'It keeps only money messages', body: 'Tab reads the chat to spot expenses and deletes everything else right after.' },
-  { title: 'Nothing moves without your yes', body: 'Every payment needs your own approval, every single time.' },
-  { title: 'Tab never holds your money', body: 'You pay each other directly, through apps you already trust.' },
-  { title: 'Leaving takes one text', body: 'Remove Tab like any contact, or text "@tab forget us" to erase your group\'s data.' },
+  {
+    title: 'A screener reads first, not a chatbot',
+    body: 'Every message goes to a separate model with one job: decide if it’s a shared expense. It can’t reply, look things up, or take any action.',
+  },
+  {
+    title: 'Everything else is erased',
+    body: 'If a text isn’t about money, its words are deleted right after that check. Tab’s AI never sees them.',
+  },
+  {
+    title: 'Code does the math',
+    body: 'Amounts and splits are worked out by plain code, and every number Tab sends has to match your group’s ledger.',
+  },
+  {
+    title: 'Nothing moves without your yes',
+    body: 'Only your own 👍 approves a payment. Tab’s AI can’t send money for anyone.',
+  },
+  {
+    title: 'Tab never holds your money',
+    body: 'You pay each other directly, through apps you already trust. Tab never asks for a bank login.',
+  },
+  {
+    title: 'Only where you invite it',
+    body: 'Tab listens only in chats where it’s been turned on, and stops the moment you turn it off or remove it.',
+  },
+]
+
+/** The screener at work: what happens to a few real-looking texts. */
+const SCREENED = [
+  { text: 'the fountain show was unreal 😭', money: false },
+  { text: 'covered club entry for all of us, $200', money: true },
+  { text: 'who’s down for the buffet tomorrow', money: false },
+  { text: 'airbnb cleaning fee was $90 btw', money: true },
 ]
 
 export function TrustSection() {
   return (
     <section id="trust" className="trust" aria-labelledby="trust-title" data-section="trust">
       <div className="trust__inner wrap">
-        <h2 id="trust-title" className="h2 h2--56 trust__title" data-split="">
-          Built to be trusted with your group chat.
-        </h2>
+        <div className="trust__head">
+          <h2 id="trust-title" className="h2 h2--56 trust__title" data-split="">
+            Private by design.
+          </h2>
+          <p className="trust__lede">
+            Most of your group chat has nothing to do with money, so Tab is built to never see it. Before Tab&apos;s AI reads anything, a separate
+            screening model asks one question.
+          </p>
+        </div>
+        <figure className="screen" aria-label="How Tab screens messages">
+          <figcaption className="screen__q">
+            <span className="screen__dot" aria-hidden="true" />
+            Is this a shared expense?
+          </figcaption>
+          <ul className="screen__list">
+            {SCREENED.map((m) => (
+              <li key={m.text} className={m.money ? 'screen__row is-money' : 'screen__row'}>
+                <span className="screen__msg">{m.text}</span>
+                <span className="screen__verdict">{m.money ? 'Logged for your group' : 'Erased, never seen by AI'}</span>
+              </li>
+            ))}
+          </ul>
+        </figure>
         <div className="trust__grid">
           {TRUST.map((t) => (
             <div className="trust__item" key={t.title}>
@@ -115,7 +163,8 @@ export function TrustSection() {
           ))}
         </div>
         <p className="trust__note">
-          Tab will never ask for your bank login or Social Security number in a text. If something claiming to be Tab does, it isn&apos;t us.
+          Your data is never sold or used for ads. Tab will never ask for your bank login or Social Security number in a text. If something claiming
+          to be Tab does, it isn&apos;t us.
         </p>
       </div>
     </section>

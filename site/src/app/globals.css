@@ -380,6 +380,44 @@ summary:focus-visible,
   max-width: 33em;
 }
 
+/* Privacy, said up front: a highlighted clause in the lede and a short proof line. */
+.hero__private {
+  background: linear-gradient(transparent 58%, rgba(255, 91, 31, 0.24) 58%);
+  color: var(--ink);
+  padding: 0 0.08em;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+.hero__proof {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 10px;
+  max-width: 34em;
+  margin-top: -6px;
+  padding: 10px 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  color: var(--ink-2);
+  font-size: 15px;
+  line-height: 1.45;
+  text-align: left;
+  text-decoration: none;
+  transition: border-color 0.2s;
+}
+.hero__proof strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.hero__proof:hover {
+  border-color: var(--line-2);
+}
+.hero__shield {
+  flex: none;
+  margin-top: 1px;
+  color: var(--green);
+}
+
 /* ---------- waitlist cards and form ---------- */
 
 .join-card {
@@ -2334,13 +2372,96 @@ button.wall__bubble:hover {
 .trust__title {
   max-width: 14em;
 }
+.trust__head {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.trust__lede {
+  margin: 0;
+  max-width: 34em;
+  font-size: clamp(18px, 1.6vw, 21px);
+  line-height: 1.5;
+  color: var(--on-dark);
+}
+/* The screener: a few texts, and what happens to each one. */
+.screen {
+  margin: 0;
+  border: 1px solid var(--ink-2);
+  border-radius: 20px;
+  overflow: hidden;
+}
+.screen__q {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--ink-2);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  color: var(--paper);
+}
+.screen__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px rgba(255, 91, 31, 0.2);
+}
+.screen__list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 0;
+}
+.screen__row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 20px;
+}
+@media (min-width: 640px) {
+  .screen__row {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 24px;
+  }
+}
+.screen__msg {
+  align-self: flex-start;
+  min-width: 0;
+  padding: 8px 14px;
+  border-radius: 18px;
+  background: #2c2925;
+  color: var(--on-dark);
+  font-size: 15px;
+  line-height: 1.35;
+}
+.screen__row:not(.is-money) .screen__msg {
+  color: #8e8980;
+  text-decoration: line-through;
+  text-decoration-color: rgba(207, 203, 194, 0.45);
+}
+.screen__row.is-money .screen__msg {
+  background: var(--paper);
+  color: var(--ink);
+}
+.screen__verdict {
+  flex: none;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: #8e8980;
+}
+.screen__row.is-money .screen__verdict {
+  color: var(--accent);
+}
 .trust__grid {
   display: flex;
   flex-wrap: wrap;
   gap: 40px 56px;
 }
 .trust__item {
-  flex: 1 1 240px;
+  flex: 1 1 280px;
   min-width: 0;
   display: flex;
   flex-direction: column;
