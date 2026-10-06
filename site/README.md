@@ -150,7 +150,7 @@ X-Tab-Signature: v1=<hex HMAC-SHA256(TAB_SIGNUP_WEBHOOK_SECRET, "<timestamp>.<ra
     "id": "1ff32e26-0d3c-4f49-ba16-088fa93d9025",
     "phone_e164": "+14155552671",
     "status": "pending_confirmation",
-    "consent_text": "Text me when Tab is ready. I agree that Tab may text this number about the beta and its launch, usually just a few messages. Message and data rates may apply. Reply STOP anytime to opt out. See our Privacy Policy and Terms.",
+    "consent_text": "Text me when Tab is ready. I agree that Tab may text this number about the beta and its launch, usually just a few messages. Message and data rates may apply. Reply STOP anytime to opt out. ",
     "consent_version": "2026-10-06.v1",
     "consent_at": "2026-10-06T07:30:00.000Z",
     "signup_location": "hero"
@@ -203,11 +203,7 @@ export function verifyTabSignature(rawBody: string, timestamp: string, header: s
 - SEO: metadata and Open Graph/Twitter image (`opengraph-image.tsx`, generated with `next/og` from the hero),
   `robots.txt`, `sitemap.xml`, and JSON-LD for `SoftwareApplication` and `FAQPage` (built from `src/content/faq.ts`,
   the same data the FAQ renders).
-- `/privacy` and `/terms` are full plain-English drafts marked "Draft for lawyer review". They are `noindex` and
-  left out of the sitemap until the reviewed text replaces them.
 
 ## Placeholders still to fill
 
-- `[COMPANY LEGAL NAME AND ADDRESS, to be added]` in the Privacy Policy and Terms.
-- `[STATE]` (governing law) and the liability wording note in the Terms.
 - The demo conversations, names and amounts are the design's illustrative copy.

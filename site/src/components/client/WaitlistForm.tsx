@@ -166,7 +166,7 @@ export function WaitlistForm({ location, siteKey }: { location: Location; siteKe
           <label className="join-form__consent">
             <input type="checkbox" name="consent" className="join-form__check" onChange={() => error === ERRORS.consent && setError(null)} />
             <span>
-              {CONSENT_LEAD} <a href="/privacy">Privacy Policy</a> and <a href="/terms">Terms</a>.
+              {CONSENT_LEAD}
             </span>
           </label>
           <div ref={widgetBox} className="join-form__captcha" />
