@@ -10,7 +10,7 @@ import { getWaitlistConfig } from '@/lib/waitlist/env'
 import { getStore } from '@/lib/waitlist/store'
 import s from './admin.module.css'
 
-// Internal, read-only. Rendered per request on the server; nothing is cached or prerendered.
+// Internal. Rendered per request on the server; nothing is cached or prerendered.
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
 
@@ -81,7 +81,7 @@ export default async function AdminPage() {
         <div className={s.brand}>
           <span className="mark mark--sm" aria-hidden="true" />
           <h1 className={s.h1}>Tab admin</h1>
-          <span className={s.tag}>Waitlist, read-only</span>
+          <span className={s.tag}>Waitlist</span>
         </div>
         <nav className={s.headerLinks} aria-label="Admin">
           <a href="/admin/export.csv" download>

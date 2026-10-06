@@ -112,7 +112,7 @@ Minimal IAM policy for the site's key:
   "Statement": [
     {
       "Effect": "Allow",
-      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Scan"],
+      "Action": ["dynamodb:PutItem", "dynamodb:UpdateItem", "dynamodb:GetItem", "dynamodb:Scan", "dynamodb:DeleteItem"],
       "Resource": "arn:aws:dynamodb:us-east-1:<ACCOUNT_ID>:table/tab-waitlist"
     },
     {
@@ -125,7 +125,7 @@ Minimal IAM policy for the site's key:
 ```
 
 `Scan` is for the position ranking (it reads only `phone`, `created_at` and `referral_count`) and for the
-read-only [admin page](#admin-page) and its CSV (every row, without `ip_hash`, `user_agent` or `consent_text`);
+[admin page](#admin-page) (which can also delete rows) and its CSV (every row, without `ip_hash`, `user_agent` or `consent_text`);
 `GetItem` is for giving older rows their invite code.
 
 **Rate limiting.** Sign-up attempts are limited to 8 per hashed IP per hour by an in-memory counter
@@ -146,7 +146,7 @@ with `'` so a spreadsheet won't run them as formulas. It runs on Node's built-in
 
 ## Admin page
 
-`/admin` is an internal, read-only dashboard of the waitlist. Set `ADMIN_USER` and `ADMIN_PASSWORD`, open
+`/admin` is an internal dashboard of the waitlist. Set `ADMIN_USER` and `ADMIN_PASSWORD`, open
 `https://addtab.app/admin` and sign in with them in the browser's password prompt.
 
 - **Access.** HTTP Basic auth in `src/proxy.ts` (Next 16's name for `middleware.ts`), compared in constant time
@@ -162,6 +162,11 @@ with `'` so a spreadsheet won't run them as formulas. It runs on Node's built-in
   summary tiles (sign-ups today, 7 and 30 days, referred vs direct, credits, status), sign-ups per day for 30 days,
   the top 25 referrers, every sign-up (sortable, searchable by phone or code, phones masked until you tick "Show
   full numbers"), and counts by `utm_source` and referrer host. Days are calendar days in America/Detroit.
+- **Deleting.** Tick rows in "All sign-ups" and press "Delete selected", then confirm. Each row is removed from
+  DynamoDB (`DeleteItem`, so the IAM policy above needs it), and if it joined through someone's invite, that person's
+  `referral_count` goes down by one so positions stay real. The server action (`src/app/admin/actions.ts`) checks the
+  admin credentials itself, takes at most 200 numbers per call, and never logs them. Use it for opt-outs and deletion
+  requests. It can't be undone, but point-in-time recovery on the table covers the last 35 days.
 - **Export.** `/admin/export.csv` returns the same columns as `npm run waitlist:export` plus `position`, oldest first,
   behind the same auth.
 - **Read-only.** No edits or deletes, and phone numbers are never logged.

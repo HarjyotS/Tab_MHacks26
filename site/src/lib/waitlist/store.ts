@@ -1,6 +1,6 @@
 import { randomInt, randomUUID } from 'node:crypto'
 import { ConditionalCheckFailedException, DynamoDBClient } from '@aws-sdk/client-dynamodb'
-import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
+import { DeleteCommand, DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb'
 import type { DynamoConfig } from './env'
 import { REF_CODE_ALPHABET, REF_CODE_LENGTH } from './referral-config'
 import type { ListedItem, NewSignup, RankingRow, SignupRow, WaitlistItem } from './types'
@@ -18,6 +18,10 @@ export interface WaitlistStore {
   ensureRefCode(phoneE164: string): Promise<string | null>
   /** +1 friend for the referrer, atomically. */
   addReferral(referrerPhoneE164: string): Promise<void>
+  /** -1 friend for the referrer (never below 0). For when someone they referred is deleted. */
+  removeReferral(referrerPhoneE164: string): Promise<void>
+  /** Deletes a row. Returns the invite code it joined with (`referred_by`), or `deleted: false` if there was no row. */
+  deleteSignup(phoneE164: string): Promise<{ deleted: boolean; referredBy: string | null }>
   /** phone, created_at and referral_count for every row, for the ranking. */
   rankingRows(): Promise<RankingRow[]>
   /** Every row with the fields the admin page and export need (no IP hash, user agent or consent text). Read-only. */
@@ -221,6 +225,32 @@ export class DynamoStore implements WaitlistStore {
     )
   }
 
+  async removeReferral(referrerPhoneE164: string): Promise<void> {
+    try {
+      await this.doc.send(
+        new UpdateCommand({
+          TableName: this.table,
+          Key: { phone: referrerPhoneE164 },
+          UpdateExpression: 'ADD referral_count :minus SET updated_at = :now',
+          ConditionExpression: 'attribute_exists(phone) AND referral_count > :zero',
+          ExpressionAttributeValues: { ':minus': -1, ':zero': 0, ':now': new Date().toISOString() },
+        }),
+      )
+    } catch (err) {
+      // Referrer gone, or already at 0: nothing to take back.
+      if (!(err instanceof ConditionalCheckFailedException)) throw err
+    }
+  }
+
+  async deleteSignup(phoneE164: string): Promise<{ deleted: boolean; referredBy: string | null }> {
+    const res = await this.doc.send(
+      new DeleteCommand({ TableName: this.table, Key: { phone: phoneE164 }, ReturnValues: 'ALL_OLD' }),
+    )
+    if (!res.Attributes) return { deleted: false, referredBy: null }
+    const by = res.Attributes.referred_by
+    return { deleted: true, referredBy: typeof by === 'string' && by ? by : null }
+  }
+
   async rankingRows(): Promise<RankingRow[]> {
     const rows: RankingRow[] = []
     let start: Record<string, unknown> | undefined
@@ -293,6 +323,18 @@ class MemoryStore implements WaitlistStore {
   async addReferral(referrerPhoneE164: string): Promise<void> {
     const row = this.rows.get(referrerPhoneE164)
     if (row) row.referralCount += 1
+  }
+
+  async removeReferral(referrerPhoneE164: string): Promise<void> {
+    const row = this.rows.get(referrerPhoneE164)
+    if (row && row.referralCount > 0) row.referralCount -= 1
+  }
+
+  async deleteSignup(phoneE164: string): Promise<{ deleted: boolean; referredBy: string | null }> {
+    const row = this.rows.get(phoneE164)
+    if (!row) return { deleted: false, referredBy: null }
+    this.rows.delete(phoneE164)
+    return { deleted: true, referredBy: row.referredBy }
   }
 
   async rankingRows(): Promise<RankingRow[]> {

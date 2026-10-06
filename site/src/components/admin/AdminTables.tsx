@@ -1,7 +1,9 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import s from '@/app/admin/admin.module.css'
+import { deleteSignups } from '@/app/admin/actions'
 import type { AdminRow } from '@/lib/admin/data'
 
 type SortKey = 'position' | 'phone' | 'joined' | 'status' | 'referralCount' | 'referredBy' | 'refCode' | 'source' | 'consentVersion'
@@ -66,6 +68,14 @@ export function AdminTables({ rows, topReferrers }: { rows: AdminRow[]; topRefer
   const [showFull, setShowFull] = useState(false)
   const [query, setQuery] = useState('')
   const [sort, setSort] = useState<Sort>({ key: 'position', dir: 'asc' })
+  const [picked, setPicked] = useState<Set<string>>(() => new Set())
+  const [confirming, setConfirming] = useState(false)
+  const [notice, setNotice] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
+  const [busy, startDelete] = useTransition()
+  const router = useRouter()
+
+  // Only rows still on the list count (a refresh may have removed some).
+  const selected = useMemo(() => rows.filter((r) => picked.has(r.phone)), [rows, picked])
 
   const phone = (r: AdminRow) => (showFull ? r.phoneFull : r.phoneMasked)
 
@@ -80,6 +90,36 @@ export function AdminTables({ rows, topReferrers }: { rows: AdminRow[]; topRefer
     })
     return out
   }, [rows, query, sort])
+
+  const allVisiblePicked = visible.length > 0 && visible.every((r) => picked.has(r.phone))
+  const togglePick = (phone: string) =>
+    setPicked((cur) => {
+      const next = new Set(cur)
+      if (next.has(phone)) next.delete(phone)
+      else next.add(phone)
+      return next
+    })
+  const toggleAllVisible = () =>
+    setPicked((cur) => {
+      const next = new Set(cur)
+      for (const r of visible) {
+        if (allVisiblePicked) next.delete(r.phone)
+        else next.add(r.phone)
+      }
+      return next
+    })
+  const runDelete = () =>
+    startDelete(async () => {
+      const res = await deleteSignups(selected.map((r) => r.phone))
+      setConfirming(false)
+      if (res.ok) {
+        setPicked(new Set())
+        setNotice({ kind: 'ok', text: `Deleted ${res.deleted} sign-up${res.deleted === 1 ? '' : 's'}.` })
+        router.refresh()
+      } else {
+        setNotice({ kind: 'error', text: res.error })
+      }
+    })
 
   const toggleSort = (key: SortKey) =>
     setSort((cur) => (cur.key === key ? { key, dir: cur.dir === 'asc' ? 'desc' : 'asc' } : { key, dir: key === 'referralCount' ? 'desc' : 'asc' }))
@@ -154,10 +194,59 @@ export function AdminTables({ rows, topReferrers }: { rows: AdminRow[]; topRefer
             />
           </label>
         </div>
+        <div className={s.bulk} role="region" aria-label="Delete sign-ups">
+          {confirming && selected.length > 0 ? (
+            <>
+              <span className={s.bulkWarn}>
+                Delete {selected.length} sign-up{selected.length === 1 ? '' : 's'} for good? This can&apos;t be undone.
+              </span>
+              <button type="button" className={`${s.button} ${s.danger}`} onClick={runDelete} disabled={busy}>
+                {busy ? 'Deleting…' : 'Delete'}
+              </button>
+              <button type="button" className={s.ghost} onClick={() => setConfirming(false)} disabled={busy}>
+                Cancel
+              </button>
+            </>
+          ) : (
+            <>
+              <button
+                type="button"
+                className={`${s.button} ${s.danger}`}
+                onClick={() => {
+                  setNotice(null)
+                  setConfirming(true)
+                }}
+                disabled={selected.length === 0}
+              >
+                Delete selected{selected.length ? ` (${selected.length})` : ''}
+              </button>
+              {selected.length > 0 && (
+                <button type="button" className={s.ghost} onClick={() => setPicked(new Set())}>
+                  Clear selection
+                </button>
+              )}
+              <span className={s.muted}>Tick rows to delete them. A friend who invited them loses that referral credit.</span>
+            </>
+          )}
+          {notice && (
+            <span className={notice.kind === 'ok' ? s.bulkOk : s.bulkWarn} role="status">
+              {notice.text}
+            </span>
+          )}
+        </div>
         <div className={s.tableScroll}>
           <table className={s.table}>
             <thead>
               <tr>
+                <th scope="col" className={s.pick}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all shown"
+                    checked={allVisiblePicked}
+                    onChange={toggleAllVisible}
+                    disabled={visible.length === 0}
+                  />
+                </th>
                 {COLUMNS.map((c) => {
                   const active = sort.key === c.key
                   return (
@@ -180,7 +269,15 @@ export function AdminTables({ rows, topReferrers }: { rows: AdminRow[]; topRefer
             </thead>
             <tbody>
               {visible.map((r) => (
-                <tr key={r.phone}>
+                <tr key={r.phone} className={picked.has(r.phone) ? s.picked : undefined}>
+                  <td className={s.pick}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${r.phoneMasked}`}
+                      checked={picked.has(r.phone)}
+                      onChange={() => togglePick(r.phone)}
+                    />
+                  </td>
                   <td className={s.num}>#{r.position}</td>
                   <td className={`${s.mono} ${s.nowrap}`}>{phone(r)}</td>
                   <td className={s.nowrap}>{r.joined}</td>
@@ -208,7 +305,7 @@ export function AdminTables({ rows, topReferrers }: { rows: AdminRow[]; topRefer
               ))}
               {visible.length === 0 && (
                 <tr>
-                  <td colSpan={COLUMNS.length} className={s.empty}>
+                  <td colSpan={COLUMNS.length + 1} className={s.empty}>
                     {rows.length ? 'No sign-ups match that search.' : 'No sign-ups yet.'}
                   </td>
                 </tr>
