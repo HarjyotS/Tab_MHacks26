@@ -1,6 +1,6 @@
 'use client'
 
-import { CHATS, IGNORED_AT, LEDGER, SETTLE_AT } from '@/content/chats'
+import { CHATS, IGNORED_AT, ITEM_SPLIT_FROM, ITEM_SPLIT_TO, LEDGER, SETTLE_AT } from '@/content/chats'
 import { chatFrames, money } from '@/lib/thread'
 import { gsap, ScrollTrigger, scheduleRefresh, useGSAP } from '@/lib/gsap'
 import type { EnhancerProps } from '../client/Enhance'
@@ -61,6 +61,7 @@ export default function VegasTimeline({ root }: EnhancerProps) {
           const listen = q('[data-listen]')[0] as HTMLElement
           const settledRows = q('[data-settled]') as HTMLElement[]
           const stamp = q('[data-stamp]')[0] as HTMLElement
+          const isplit = q('[data-isplit]')[0] as HTMLElement | undefined
           const out = {
             ignored: q('[data-ignored]')[0] as HTMLElement,
             expenses: q('[data-expenses]')[0] as HTMLElement,
@@ -126,6 +127,7 @@ export default function VegasTimeline({ root }: EnhancerProps) {
           q('[data-delivered]').forEach((d) => at0(d, { autoAlpha: 0 }))
           q('.t-react').forEach((r) => at0(r, { autoAlpha: 0, scale: 0.4 }))
           at0(items, HIDDEN)
+          if (isplit) at0(isplit, { autoAlpha: 0, x: 24, rotation: 0 })
           at0(lines, { autoAlpha: 0, y: -8 })
 
           const reactAt = items.map((_, i) => (msgs[i]?.react ? reactionFrame(i) : -1))
@@ -179,6 +181,16 @@ export default function VegasTimeline({ root }: EnhancerProps) {
             const pt = totalsAt(p)
             if (t.ignored !== pt.ignored || t.expenses !== pt.expenses || t.cents !== pt.cents) {
               tl.fromTo(counters, { ...pt }, { ...t, duration: 0.5, ease: 'none', onUpdate: write }, at + 0.15)
+            }
+
+            // The by-item card slides in as Tab reads the brunch receipt and leaves a few messages later.
+            if (isplit) {
+              const on = (fr: { count: number }) => fr.count > ITEM_SPLIT_FROM && fr.count <= ITEM_SPLIT_TO
+              if (on(f) && !on(p)) {
+                tl.fromTo(isplit, { autoAlpha: 0, x: 24, rotation: 0 }, { autoAlpha: 1, x: 0, rotation: -3, duration: 0.5, ease: 'back.out(1.6)' }, at + 0.25)
+              } else if (!on(f) && on(p)) {
+                tl.fromTo(isplit, { autoAlpha: 1, x: 0, rotation: -3 }, { autoAlpha: 0, x: 24, rotation: 0, duration: 0.3 }, at)
+              }
             }
 
             if (k === SETTLED_FRAME) {

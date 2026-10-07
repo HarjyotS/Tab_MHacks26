@@ -1,4 +1,4 @@
-import { CHATS, IGNORED_AT, LEDGER, VEGAS_PEOPLE } from '@/content/chats'
+import { CHATS, IGNORED_AT, ITEM_SPLIT, LEDGER, VEGAS_PEOPLE } from '@/content/chats'
 import { buildThread, money, type MsgItem } from '@/lib/thread'
 import { Phone } from '../phone/Phone'
 import { ThreadParts } from '../phone/ThreadView'
@@ -25,22 +25,37 @@ export function VegasSection() {
   return (
     <section className="vegas" aria-label="Tab logging a Vegas trip over a weekend" data-enhance="" data-section="vegas">
       <div className="vegas__stage">
-        <Phone header={{ title: 'Vegas Trip 2026 🎰', avatars: [maya, jordan] }} className="vegas__phone">
-          <div className="vegas-col" data-col="">
-            {items.map((it, i) => (
-              <div
-                key={it.key}
-                className={'ti ti--' + it.type + (it.type === 'msg' ? (it.incoming ? ' ti--in' : ' ti--out') : '')}
-                data-i={i}
-              >
-                <ThreadParts item={it} deliveredMode="absolute" />
+        <div className="vegas__phonewrap">
+          <aside className="isplit" data-isplit="" aria-label="The brunch receipt, split by item">
+            <p className="isplit__title">Or split it by item</p>
+            <p className="isplit__sub">Just say what you had.</p>
+            <ul className="isplit__list">
+              {ITEM_SPLIT.map((l) => (
+                <li key={l.item}>
+                  <span>{l.item}</span>
+                  <span className="isplit__fill" aria-hidden="true" />
+                  <span className="isplit__who">{l.who}</span>
+                </li>
+              ))}
+            </ul>
+          </aside>
+          <Phone header={{ title: 'Vegas Trip 2026 🎰', avatars: [maya, jordan] }} className="vegas__phone">
+            <div className="vegas-col" data-col="">
+              {items.map((it, i) => (
+                <div
+                  key={it.key}
+                  className={'ti ti--' + it.type + (it.type === 'msg' ? (it.incoming ? ' ti--in' : ' ti--out') : '')}
+                  data-i={i}
+                >
+                  <ThreadParts item={it} deliveredMode="absolute" />
+                </div>
+              ))}
+              <div className="ti ti--msg ti--in ti--typing is-off" data-typing="" aria-hidden="true">
+                <ThreadParts item={typing} />
               </div>
-            ))}
-            <div className="ti ti--msg ti--in ti--typing is-off" data-typing="" aria-hidden="true">
-              <ThreadParts item={typing} />
             </div>
-          </div>
-        </Phone>
+          </Phone>
+        </div>
 
         <div className="receipt" data-receipt="">
           <div className="receipt__bar" aria-hidden="true" />

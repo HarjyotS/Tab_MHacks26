@@ -1524,6 +1524,66 @@ html.is-sheet-open {
     --s: 0.8;
   }
 }
+/* The brunch receipt split by item: a small card beside the phone, wide screens only. */
+.vegas__phonewrap {
+  position: relative;
+  display: flex;
+}
+.isplit {
+  display: none;
+}
+@media (min-width: 1200px) {
+  .isplit {
+    display: block;
+    position: absolute;
+    z-index: 2;
+    right: calc(100% - 28px);
+    top: 54%;
+    width: 228px;
+    padding: 14px 16px 12px;
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 10px 30px rgba(28, 26, 23, 0.12);
+    transform: rotate(-3deg);
+  }
+}
+.isplit__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.isplit__sub {
+  margin: 2px 0 10px;
+  font-size: 13px;
+  color: var(--ink-3);
+}
+.isplit__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--ink-2);
+}
+.isplit__list li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.isplit__fill {
+  flex: 1;
+  border-bottom: 1px dotted var(--line-2);
+}
+.isplit__who {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 /* No-JS / reduced motion: the finished chat, with "Delivered" under the last message. */
 .vegas-col {
   padding-bottom: 18px;
