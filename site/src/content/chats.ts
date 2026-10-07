@@ -171,6 +171,21 @@ export const IGNORED_AT = [5, 6, 15]
 /** Index of Tab's summary, where the receipt settles. */
 export const SETTLE_AT = 22
 
+/**
+ * The side card in the Vegas story: the brunch receipt split by item instead of evenly. It shows
+ * while ITEM_SPLIT_FROM < shown messages <= ITEM_SPLIT_TO (from "Tab read the receipt" until the buffet).
+ */
+export const ITEM_SPLIT: { item: string; who: string }[] = [
+  { item: 'Eggs Benny', who: 'Maya' },
+  { item: 'Chx + waffles', who: 'You' },
+  { item: 'Avo toast', who: 'Ava' },
+  { item: 'Fries', who: 'Sam' },
+  { item: 'Mimosa x6', who: 'Everyone' },
+  { item: 'Tax + tip', who: 'Proportional' },
+]
+export const ITEM_SPLIT_FROM = 9
+export const ITEM_SPLIT_TO = 14
+
 export type WallMsg = { text: string; react?: string }
 
 /** The money texts every group chat has sent. Popping one brings up the next. */
