@@ -171,32 +171,46 @@ export const IGNORED_AT = [5, 6, 15]
 /** Index of Tab's summary, where the receipt settles. */
 export const SETTLE_AT = 22
 
-export const WALL_POOL = [
-  'wait who paid for the airbnb',
-  'i venmo’d you right??',
-  'can someone just make a spreadsheet',
-  'jake still owes me from cancún btw',
-  'what was my part of the uber from like 3 weeks ago',
-  'who has the receipt',
-  'ok i did the math and everyone owes me $47.18?? recount',
-  'sending the splitwise link again 🙃',
-  'i’ll just eat it, it’s fine',
-  'it was not fine',
-  'did you request me or did i request you',
-  'venmo says i paid you twice??',
-  'we said we’d split gas right',
-  'why does the spreadsheet have 3 tabs now',
-  'i got the last dinner so you get this one',
-  'rent’s due tomorrow, who’s sending utilities',
-  'did anyone keep the costco receipt',
-  'not trying to be that guy but',
-  'ok but who ordered the second bottle',
-  'let’s just settle up after the trip',
-  'i’ll venmo you when i get paid',
-  'was the tip included or',
-  'remind me what i owe you',
-  'the airbnb guy charged a cleaning fee??',
+export type WallMsg = { text: string; react?: string }
+
+/** The money texts every group chat has sent. Popping one brings up the next. */
+export const WALL_POOL: WallMsg[] = [
+  { text: 'wait who paid for the airbnb 🏠' },
+  { text: 'i venmo’d you right?? 🤨' },
+  { text: 'can someone just make a spreadsheet 📊' },
+  { text: 'jake still owes me from cancún btw 🌴', react: '‼️' },
+  { text: 'ok i did the math and everyone owes me $47.18?? 🧮' },
+  { text: 'why does the spreadsheet have 3 tabs now 😭', react: '😂' },
+  { text: 'who has the receipt 🧾' },
+  { text: 'i’ll just eat it, it’s fine 🙂' },
+  { text: 'it was not fine 💀', react: '😂' },
+  { text: 'did you request me or did i request you 🔄' },
+  { text: 'venmo says i paid you twice?? 💸💸', react: '❓' },
+  { text: 'we said we’d split gas right ⛽' },
+  { text: 'i only had a side salad 🥗', react: '👎' },
+  { text: 'can i pay you in vibes ✨' },
+  { text: 'it’s been 3 business days 📆' },
+  { text: 'just round it to $20 and we’re even 🤝' },
+  { text: 'why am i being requested $0.37 😐', react: '😂' },
+  { text: 'per person or total?? 😵‍💫' },
+  { text: 'sending the splitwise link again 🙃' },
+  { text: 'not trying to be that guy but 👀' },
+  { text: 'ok but who ordered the second bottle 🍾', react: '‼️' },
+  { text: 'i’ll venmo you when i get paid 🫠' },
+  { text: 'was the tip included or 🤔' },
+  { text: 'remind me what i owe you 🥲' },
+  { text: 'the airbnb guy charged a cleaning fee?? 🧹' },
+  { text: '“i’ll get you back” 🗓️ march 2024', react: '😂' },
+  { text: 'did anyone keep the costco receipt 🛒' },
+  { text: 'what was my part of the uber from like 3 weeks ago 🚕' },
+  { text: 'i paid the deposit, that counts 🫡' },
+  { text: 'i’m not paying for drinks i didn’t drink 🧃', react: '👎' },
+  { text: 'rent’s due tomorrow, who’s sending utilities 💡' },
+  { text: 'let’s just settle up after the trip ✌️' },
 ]
 export const WALL_TILT = [-2, 1.5, 2, -1, -2.5, 1, -1.5, 2.5, -2, 1.5, -1, 2]
-export const WALL_BLUE = [false, false, true, true, false, false, false, true, false, false, false, true]
+/** Starting colors for the 12 cells, blues scattered (about 1 in 3). Popped bubbles roll a new color. */
+export const WALL_START_BLUE = [false, true, false, true, false, false, false, false, true, false, true, false]
+/** Odds a freshly popped bubble comes back blue. */
+export const WALL_BLUE_ODDS = 0.3
 export const WALL_JUSTIFY = ['flex-end', 'center', 'flex-start', 'center', 'flex-start', 'flex-end', 'flex-start', 'flex-end', 'center', 'flex-end', 'center', 'flex-start'] as const
