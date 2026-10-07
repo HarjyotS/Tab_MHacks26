@@ -2,7 +2,7 @@
 
 import { useRef, useState, type RefObject } from 'react'
 import { AnimatePresence, motion, useReducedMotion, useScroll, useTransform, type MotionValue } from 'motion/react'
-import { WALL_POOL } from '@/content/chats'
+import { WALL_BLUE_ODDS, WALL_POOL, WALL_START_BLUE, type WallMsg } from '@/content/chats'
 import { isPhoneWidth, isTouchFirst } from '@/lib/motion-prefs'
 import { WALL_CELLS, bubbleClass, bubbleStyle, cellStyle, floatStyle } from '../sections/wall-style'
 
@@ -15,7 +15,8 @@ export default function WallLive() {
   const reduced = useReducedMotion() ?? false
   const [touch] = useState(isTouchFirst)
   const [narrow] = useState(isPhoneWidth)
-  const [wall, setWall] = useState(() => Array.from({ length: WALL_CELLS }, (_, i) => i))
+  // Each cell: which message it shows and its color. Starts fixed (so it matches the server render).
+  const [wall, setWall] = useState(() => Array.from({ length: WALL_CELLS }, (_, i) => ({ pi: i, blue: WALL_START_BLUE[i] })))
   const next = useRef(WALL_CELLS)
   const cooldown = useRef<number[]>([])
 
@@ -30,25 +31,26 @@ export default function WallLive() {
     setWall((cur) => {
       let n = next.current
       let guard = 0
-      while (cur.includes(n) && guard < WALL_POOL.length) {
+      while (cur.some((c) => c.pi === n) && guard < WALL_POOL.length) {
         n = (n + 1) % WALL_POOL.length
         guard++
       }
       next.current = (n + 1) % WALL_POOL.length
       const copy = cur.slice()
-      copy[cell] = n
+      copy[cell] = { pi: n, blue: Math.random() < WALL_BLUE_ODDS }
       return copy
     })
   }
 
   return (
     <div className="wall" ref={wallRef}>
-      {wall.map((pi, i) => (
+      {wall.map((c, i) => (
         <Cell
           key={i}
           cell={i}
-          text={WALL_POOL[pi]}
-          poolIndex={pi}
+          msg={WALL_POOL[c.pi]}
+          blue={c.blue}
+          poolIndex={c.pi}
           progress={scrollYProgress}
           travel={DEPTH[i] * depth}
           wallRef={wallRef}
@@ -63,7 +65,8 @@ export default function WallLive() {
 
 function Cell({
   cell,
-  text,
+  msg,
+  blue,
   poolIndex,
   progress,
   travel,
@@ -73,7 +76,8 @@ function Cell({
   onPop,
 }: {
   cell: number
-  text: string
+  msg: WallMsg
+  blue: boolean
   poolIndex: number
   progress: MotionValue<number>
   travel: number
@@ -92,9 +96,9 @@ function Cell({
             <motion.button
               key={poolIndex}
               type="button"
-              className={bubbleClass(cell) + ' wallbtn'}
+              className={bubbleClass(blue) + ' wallbtn'}
               style={bubbleStyle(cell)}
-              aria-label={'Pop: ' + text}
+              aria-label={'Pop: ' + msg.text}
               // On touch screens only sideways flicks, so a vertical swipe still scrolls the page.
               drag={touch ? 'x' : true}
               dragConstraints={wallRef}
@@ -119,7 +123,12 @@ function Cell({
                   : { opacity: [1, 1, 0], scale: [1, 1.1, 1.22], transition: { duration: 0.22, ease: 'easeIn' } }
               }
             >
-              {text}
+              {msg.text}
+              {msg.react ? (
+                <span className="wall__react" aria-hidden="true">
+                  {msg.react}
+                </span>
+              ) : null}
             </motion.button>
           </AnimatePresence>
         </span>

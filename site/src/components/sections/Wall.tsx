@@ -1,4 +1,4 @@
-import { WALL_POOL } from '@/content/chats'
+import { WALL_POOL, WALL_START_BLUE } from '@/content/chats'
 import { WALL_CELLS, bubbleClass, bubbleStyle, cellStyle, floatStyle } from './wall-style'
 import { WallIsland } from '../client/Islands'
 
@@ -9,8 +9,13 @@ function StaticWall() {
         <span className="wall__cell" style={cellStyle(i)} key={i}>
           <span className="wall__par">
             <span className="wall__float bob" style={floatStyle(i)}>
-              <span className={bubbleClass(i)} style={bubbleStyle(i)}>
-                {WALL_POOL[i]}
+              <span className={bubbleClass(WALL_START_BLUE[i])} style={bubbleStyle(i)}>
+                {WALL_POOL[i].text}
+                {WALL_POOL[i].react ? (
+                  <span className="wall__react" aria-hidden="true">
+                    {WALL_POOL[i].react}
+                  </span>
+                ) : null}
               </span>
             </span>
           </span>
