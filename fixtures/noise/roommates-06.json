@@ -1,0 +1,245 @@
+{
+  "id": "roommates-06",
+  "title": "Roommates, utilities week",
+  "kind": "roommates",
+  "members": [
+    "Priya",
+    "Jake",
+    "Nina"
+  ],
+  "messages": [
+    {
+      "from": "Jake",
+      "text": "yo anyone else hear that weird noise in the walls last night",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "omg yes i thought i was imagining it",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "i didn't hear anything but i had headphones in",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "might be mice fr",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "we gotta do something about it",
+      "gap_s": 5,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "like set traps or call someone",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "lmao jake is scared of a lil mouse",
+      "gap_s": 42,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "rent is going up again next month istg",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "how much this time??",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "like 80 bucks i think",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "yeah it's ridiculous",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "i saw flights to miami are only 180 rn",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "we should all go for a weekend",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "i'd pay like a grand to have my own bathroom again",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "LMAOOOO same",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "but fr we need to talk about the electric bill soon",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "it's been high af lately",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "i got paid yesterday finally",
+      "gap_s": 80,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "feels good man",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "congrats dude",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "what was the final score last night??",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "lakers won by 12 i think",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "i lost 50 on that game 💀",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "omw home with groceries, fridge is gonna be full",
+      "gap_s": 110,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "also the ac is busted again",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "ugh not again",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "we're like 3 months behind on fixing shit lmao",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    }
+  ]
+}

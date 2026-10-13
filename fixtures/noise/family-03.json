@@ -1,0 +1,201 @@
+{
+  "id": "family-03",
+  "title": "Family group chat",
+  "kind": "family",
+  "members": [
+    "Priya",
+    "Jake",
+    "Nina"
+  ],
+  "messages": [
+    {
+      "from": "Priya",
+      "text": "hey everyone just got back from the farmer's market",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "whatd you get??",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "avocados are like 2 for 5 bucks now it's insane",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "also grabbed some flowers for the table",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "lol same the price of everything is wild rn",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "wait till you see rent around here",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "it's up another 200 this year",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "how is anyone supposed to afford it",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "omggg tell me about it",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "mom said she's thinking of getting that new couch",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "it's like 1200 at the store but maybe cheaper online",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "i'd pay 1000 to skip having to move it upstairs tho 💀",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "LMAO",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "remember when we got that old one for like 300 bucks at the yard sale",
+      "gap_s": 20,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "yesss that was such a steal",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "btw dad wants us all over for dinner next weekend",
+      "gap_s": 210,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "he's gonna make his famous biryani",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "sounds good but flights are running 450 rn if i come from the city",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "just drive it's only 3 hrs",
+      "gap_s": 50,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "fine fine i'll carpool with someone",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "lol he always says that and ends up driving alone",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

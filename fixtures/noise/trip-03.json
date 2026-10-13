@@ -1,0 +1,255 @@
+{
+  "id": "trip-03",
+  "title": "NYC trip crew",
+  "kind": "trip",
+  "members": [
+    "Chris",
+    "Dani",
+    "Marcus",
+    "Tess"
+  ],
+  "messages": [
+    {
+      "from": "Dani",
+      "text": "we made it!!!",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "this hotel is actually fire",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "lol the lobby smells like cleaning supplies but ok",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "who's down for dinner later",
+      "gap_s": 48,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "im starving already",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "also i grabbed the train tickets from jfk",
+      "gap_s": 25,
+      "label": {
+        "kind": "expense_part",
+        "group": "d1"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "was like 92 bucks total",
+      "gap_s": 8,
+      "label": {
+        "kind": "expense_part",
+        "group": "d1"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "for all of us right?",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "yep split between us 4",
+      "gap_s": 12,
+      "label": {
+        "kind": "expense",
+        "group": "d1",
+        "amount_cents": 9200,
+        "payer": "Dani",
+        "participants": "everyone",
+        "description": "jfk train tickets"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "legend",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "LMAOOO wait till you see the pic i just took of marcus",
+      "gap_s": 62,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "he looks so lost",
+      "gap_s": 4,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "in front of the empire state like a tourist",
+      "gap_s": 6,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "shut uppp i was reading the map",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i paid for the museum tix earlier",
+      "gap_s": 110,
+      "label": {
+        "kind": "expense_part",
+        "group": "t1"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "it was 110 for the four of us",
+      "gap_s": 9,
+      "label": {
+        "kind": "expense_part",
+        "group": "t1"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "met museum",
+      "gap_s": 15,
+      "label": {
+        "kind": "expense",
+        "group": "t1",
+        "amount_cents": 11000,
+        "payer": "Tess",
+        "participants": "everyone",
+        "description": "met museum tickets"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "omg thank youuu",
+      "gap_s": 42,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "i still owe you for that right",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "got the snacks and drinks for the room",
+      "gap_s": 130,
+      "label": {
+        "kind": "expense_part",
+        "group": "c1"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "like 27 total",
+      "gap_s": 11,
+      "label": {
+        "kind": "expense_part",
+        "group": "c1"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "for all of us",
+      "gap_s": 7,
+      "label": {
+        "kind": "expense",
+        "group": "c1",
+        "amount_cents": 2700,
+        "payer": "Chris",
+        "participants": "everyone",
+        "description": "snacks and drinks"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "wait i think the museum was actually 125 not 110",
+      "gap_s": 95,
+      "label": {
+        "kind": "correction",
+        "fixes": 16,
+        "amount_cents": 12500
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i just double checked the receipt",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "lol classic",
+      "gap_s": 38,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "should we uber to dinner or walk",
+      "gap_s": 67,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "walking sounds good ngl my feet hurt tho",
+      "gap_s": 29,
+      "label": {
+        "kind": "noise"
+      }
+    }
+  ]
+}

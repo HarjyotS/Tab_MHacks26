@@ -1,0 +1,119 @@
+{
+  "id": "dinner-06",
+  "title": "Dinner group chat",
+  "kind": "dinner",
+  "members": [
+    "Priya",
+    "Jake",
+    "Nina"
+  ],
+  "messages": [
+    {
+      "from": "Jake",
+      "text": "yo where we eating tonight im craving tacos so bad",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "that new place on 5th looks good but their menu prices are insane lol",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "id pay $1000 to never have to decide where to eat again istg",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "same fr",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "or like if money grew on trees",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "we'd be at michelin star every night 😂",
+      "gap_s": 5,
+      "label": {
+        "kind": "noise",
+        "trap": "sarcasm"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "LMAOOOO imagine",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "i'd send my waiter a 500% tip and tell him to keep the change king",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "ok but real talk i grabbed the apps last time so this round is on you two clowns",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "fine fine i venmo'd you the $27 from last week",
+      "gap_s": 120,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "wait did u? lemme check",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "yep just came thru thx king 👑",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

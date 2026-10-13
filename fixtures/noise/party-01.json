@@ -1,0 +1,158 @@
+{
+  "id": "party-01",
+  "title": "Party supplies run",
+  "kind": "party",
+  "members": [
+    "Priya",
+    "Jake",
+    "Nina"
+  ],
+  "messages": [
+    {
+      "from": "Jake",
+      "text": "yo what time we starting this thing friday",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "i'm thinking 8? gotta finish setting up",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "8 works for me, should we do a booze run or just tell everyone to BYOB",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "BYOB is lame",
+      "gap_s": 20,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "i can grab beer and some wine but we need mixers and chips and shit",
+      "gap_s": 5,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "ok so total drinks probably like 80-100 bucks? we splitting or what",
+      "gap_s": 60,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "i'll do a costco run tomorrow after work",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "they have those big packs of seltzers and the giant bag of tortilla chips",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "sick, grab some of those little pizza rolls too fr",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "LMAO we having 40 people or what",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "don't forget cups and ice too",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "just left costco, cart was ridiculous",
+      "gap_s": 1250,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "got the seltzers, beer, chips, those pizza things and a bunch of other stuff",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "came out to $127 total",
+      "gap_s": 25,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 12700,
+        "payer": "Priya",
+        "participants": "everyone",
+        "description": "costco party supplies"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "damn u went all out",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "legend ty priya, venmo me 45 whenever",
+      "gap_s": 30,
+      "label": {
+        "kind": "payment"
+      }
+    }
+  ]
+}

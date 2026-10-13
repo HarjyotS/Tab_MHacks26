@@ -1,0 +1,174 @@
+{
+  "id": "team-02",
+  "title": "Q3 campaign brainstorm",
+  "kind": "team",
+  "members": [
+    "Omar",
+    "Lily",
+    "Ben",
+    "Zoe",
+    "Raj",
+    "Kat"
+  ],
+  "messages": [
+    {
+      "from": "Omar",
+      "text": "morning team, let's lock in the promo swag for the conference next week",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "yeah we need branded notebooks, pens, and maybe some stickers",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Ben",
+      "text": "how many people are we expecting? like 300?",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "closer to 250 I think",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Raj",
+      "text": "I found a supplier, notebooks are around $4.50 each if we order 300",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "pens would be like $1.20 each, stickers $0.80",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "ok let's do 250 of each to stay under budget",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "i can reach out to the vendor today",
+      "gap_s": 60,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Ben",
+      "text": "also we should get some coffee for the booth setup",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "LMAO Ben is always thinking about coffee",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "just ordered the swag from the vendor",
+      "gap_s": 240,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "they charged my card $187.50 total for 250 notebooks, pens + stickers",
+      "gap_s": 12,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 18750,
+        "payer": "Lily",
+        "participants": "everyone",
+        "description": "promo swag"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "should arrive by next monday",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Raj",
+      "text": "nice, thx lily",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "i grabbed coffees and pastries for the team meeting this morning, $42 on my card",
+      "gap_s": 420,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 4200,
+        "payer": "Kat",
+        "participants": "everyone",
+        "description": "coffees and pastries"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "omw to the office, did we decide on the tshirt colors yet?",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "still debating, maybe later today",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

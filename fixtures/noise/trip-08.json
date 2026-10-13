@@ -1,0 +1,227 @@
+{
+  "id": "trip-08",
+  "title": "NYC trip crew",
+  "kind": "trip",
+  "members": [
+    "Priya",
+    "Jake",
+    "Nina"
+  ],
+  "messages": [
+    {
+      "from": "Jake",
+      "text": "just got to the airbnb, this place is sick",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "omw from penn station, traffic looks brutal",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "yall remember that hostel we stayed in during the denver trip last year? lmao what a dump",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "bro I still have the receipt from that one",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "we paid like 240 total and it was nasty",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "HAHAHA the bunk beds",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "anyway I just grabbed coffees for us from that cart on the corner, $16.50 total",
+      "gap_s": 180,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 1650,
+        "payer": "Priya",
+        "participants": "everyone",
+        "description": "coffees"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "nice",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "my coworker just asked if I can cover his ticket to the game tomorrow, he's out of town",
+      "gap_s": 210,
+      "label": {
+        "kind": "noise",
+        "trap": "other_group"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "it's $89 but I don't even like the team that much",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "other_group"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "lol don't do it",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "yo I paid the cab from jfk, came out to 68 bucks",
+      "gap_s": 340,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6800,
+        "payer": "Jake",
+        "participants": "everyone",
+        "description": "cab from jfk"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "with the tip and everything",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "thanks jake",
+      "gap_s": 50,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "remember when we went to miami two summers ago",
+      "gap_s": 280,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "and that random guy charged us double for the boat",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "we ended up paying him 300 cash total and just dipped",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "ISTG that was a scam",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "I just venmo'd my sister 45 for her bday gift from last month",
+      "gap_s": 190,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "finally",
+      "gap_s": 20,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "should we do tacos tonight? the spot near us has good reviews",
+      "gap_s": 150,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "I'm down",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "btw I covered the museum tix earlier while you were in the shower nina, they were 18 each",
+      "gap_s": 110,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 5400,
+        "payer": "Jake",
+        "participants": "everyone",
+        "description": "museum tickets"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "ah thanks!!",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise"
+      }
+    }
+  ]
+}

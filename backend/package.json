@@ -6,6 +6,7 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit",
     "extract": "tsx scripts/extract.ts",
+    "noise-eval": "tsx scripts/noise-eval.ts",
     "db:check": "tsx scripts/db-check.ts",
     "start": "tsx src/main.ts"
   },

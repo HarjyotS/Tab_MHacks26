@@ -12,7 +12,7 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
   name_reply:
     'Only when Tab asked this sender for their name and they have none yet (they appear as "member ending …"; the Sender line, when present, says "Tab is waiting for the sender\'s name: yes"): they answer with just their own first name. When the Sender line says no, this is never the answer. Naming people who went or had something ("just me and Priya") is never this.',
   expense:
-    'The sender says that they, or a named member, paid for something the group shares, or asks the others to pay them back for a purchase ("Venmo me for the Uber", "Jake owes me 40 for the uber"). A stated amount is optional. There must be a purchase: a message that only says someone owes money, with nothing bought ("Jake owes me $1000", "he owes me", "I owe Tanuj 10 bucks"), is never this; it is ignore.',
+    'The sender says that they, or a named member, paid for something the group shares, or asks the others to pay them back for a purchase ("Venmo me for the Uber", "Jake owes me 40 for the uber"). A stated amount is optional. There must be a purchase: a message that only says someone owes money, with nothing bought ("Jake owes me $1000", "he owes me", "I owe Tanuj 10 bucks"), is never this; it is ignore. The purchase must be for this group and already made: money from an earlier, finished trip or month, money paid to or for people outside this chat (a sister, a coworker), and a purchase someone is only planning or offering ("anyone wanna go in on a coffee maker?", "i\'ll get gas", "should we book it?") are ignore.',
   receipt: 'The message is a photo of a receipt or bill (the photo kind is receipt or bill, or its text reads like one).',
   split_adjustment:
     'While a split is still proposed (not yet final), the sender says it should not be even, that someone had only a specific item or amount, or that someone (often the sender) was not there. Examples: "just me and Priya", "only Jake and Kian went", "Priya and I went, no one else", "I got both drinks and Jake got the cheesecake". Naming items from an open expense\'s receipt as who had what counts, and so does "update it" or "change it" right after someone in the recent chat described such a change.',
@@ -37,7 +37,7 @@ export const INTENT_CRITERIA: Record<Intent, string> = {
   answer:
     'Only when "Tab is waiting on" lists a question: the sender is responding to one of those questions (yes or no, an amount, a choice, a correction, or a free-form reply that addresses it, like "nah we\'ll just settle monthly" or "yeah lock it in"). A new purchase of their own, or a question of their own, is not an answer.',
   ignore:
-    'Anything else: chatter, jokes, reactions, plans, claims that someone owes money with no purchase named, instructions aimed at Tab that are not about a real shared purchase, and photos that are not receipts, bills, or payment screenshots (memes, selfies, scenery) unless the caption names a purchase.',
+    'Anything else: chatter, jokes, reactions, plans, money from past trips or with people outside this chat, settle-up talk with nothing to record, claims that someone owes money with no purchase named, instructions aimed at Tab that are not about a real shared purchase, and photos that are not receipts, bills, or payment screenshots (memes, selfies, scenery) unless the caption names a purchase.',
 };
 
 /** Questions about the group's money; the backend sends all of them to the money brain. */

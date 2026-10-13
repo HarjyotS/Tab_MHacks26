@@ -1,0 +1,278 @@
+{
+  "id": "dinner-03",
+  "title": "Dinner plans",
+  "kind": "dinner",
+  "members": [
+    "Ella",
+    "Noah"
+  ],
+  "messages": [
+    {
+      "from": "Ella",
+      "text": "hey you free tonight? craving thai",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "yeah i'm down",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "my lunch was trash tho, spent like 14 on that burrito and it was soggy af",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "ew nooo",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "pad see ew is like 18 bucks here usually but sometimes they do lunch specials",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "flights to la this weekend are going for 340 rn btw if we ever wanted to dip",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "omg i wish",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "i only have 120 in my checking after rent lol",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "same, just paid my cc bill, that shit was 890 this month",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "wait i think i can do 8:30 at thai palace",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "cool i'll meet you there",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "just grabbed an uber, $12.50",
+      "gap_s": 420,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 1250,
+        "payer": "Noah",
+        "participants": "everyone",
+        "description": "uber"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "i'm already here lol",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "table by the window",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "k",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "this menu is all over the place, curries are 22 now??",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "damn inflation hitting hard",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "i lost 45 on that stupid game last night btw",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "rip",
+      "gap_s": 20,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "we splitting the bill or what",
+      "gap_s": 210,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "yeah sounds good",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "got the bill, came to 67 total",
+      "gap_s": 840,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6700,
+        "payer": "Ella",
+        "participants": "everyone",
+        "description": "dinner"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "wait shit i forgot i had that groupon",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "can we do 33 each then",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "sure",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "also i still owe you that 25 from last week movie tickets",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "i need to venmo my sister 80 for her bday gift still ugh",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "no rush tho",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "lmao jordan just texted me he's eating cereal for dinner again",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

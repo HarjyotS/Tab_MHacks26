@@ -1,0 +1,176 @@
+{
+  "id": "trip-01",
+  "title": "Beach trip planning",
+  "kind": "trip",
+  "members": [
+    "Maya",
+    "Jordan",
+    "Sam",
+    "Ava",
+    "Leo"
+  ],
+  "messages": [
+    {
+      "from": "Maya",
+      "text": "just booked my flight, $187 one way 😩",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "same i got the 9am one for like 210",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "guys hotels in that area are going up like 80 a night rn",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "istg if we don't lock in the airbnb soon we'll get screwed",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "i grabbed the snacks and drinks for the car, came out to 42 bucks",
+      "gap_s": 45,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 4200,
+        "payer": "Ava",
+        "participants": "everyone",
+        "description": "snacks and drinks"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "got the good chips and those sour gummies yall like",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "omg the beach looks insane in these pics",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "can't wait to just chill and not check my phone",
+      "gap_s": 6,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "who's bringing the volleyball tho",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "bruh",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "flights back are like 300 rn if we don't go on a tues",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "i covered the group parking at the beach lot, $28 total",
+      "gap_s": 67,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 2800,
+        "payer": "Jordan",
+        "participants": "everyone",
+        "description": "parking"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "i'm down like 120 on this dumb stock i bought last week",
+      "gap_s": 33,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "lol same my rent is up another 150 this month too",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "wait i also paid the tolls on the drive up, another 14",
+      "gap_s": 50,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 1400,
+        "payer": "Ava",
+        "participants": "everyone",
+        "description": "tolls"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "LMAOOO",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "who's bringing the speaker i forgot mine",
+      "gap_s": 42,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    }
+  ]
+}

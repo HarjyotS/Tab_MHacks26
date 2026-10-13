@@ -1,0 +1,206 @@
+{
+  "id": "trip-05",
+  "title": "Road trip crew",
+  "kind": "trip",
+  "members": [
+    "Ella",
+    "Noah"
+  ],
+  "messages": [
+    {
+      "from": "Ella",
+      "text": "we're finally on the road omg",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "took us long enough 😂 what time did you end up waking up",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "like 6:15, set my alarm for 6 but snoozed twice",
+      "gap_s": 32,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "respect. i was up at 5:50 packing the cooler",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "we should hit the state line by like 10:30 if traffic isn't trash",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "bet. also the gps says 187 miles to the first stop",
+      "gap_s": 41,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "187?? i thought it was closer",
+      "gap_s": 19,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "yeah the route changed last night",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "lol ok. also i grabbed coffees before we left, $9.50 total",
+      "gap_s": 95,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 950,
+        "payer": "Ella",
+        "participants": "everyone",
+        "description": "coffees"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "nice thanks",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "yo check the score",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "our team is down 3-1 already in the 4th",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "no wayyyy",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "istg if they lose today i'm done",
+      "gap_s": 38,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "same. also we need gas soon, tank is at 28%",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "pulling up the map rn",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "next exit is 3 miles, then the address is 1428 pine grove lane for that cheap spot",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "perfect. also i paid for the campsite reservation last night, it was 62 bucks for the night",
+      "gap_s": 210,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6200,
+        "payer": "Noah",
+        "participants": "everyone",
+        "description": "campsite"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "wait really? i thought it was gonna be more",
+      "gap_s": 52,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "nah they had a weekday deal",
+      "gap_s": 29,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "sick. also what time are we aiming to get to the trailhead tomorrow? like 8am?",
+      "gap_s": 140,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    }
+  ]
+}

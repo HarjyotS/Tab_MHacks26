@@ -36,6 +36,8 @@ npm run fixtures -- stub
 npm run fixtures -- jev messages-extended 3
 ```
 
-Last run (2026-10-03, 2 runs each): **spec fixtures 36/36, extended 150/150, and 0 wrong-and-confident results.** Median latency is about 125 ms, p95 about 200 ms.
+Last run (2026-10-13, 1 run each, after the noise-eval rule changes): **spec fixtures 18/18; extended 112/115.** Two of the misses were #158 and #159, inline amounts to Tab's "how much was the uber?" that Jev reads as `answer` (they failed the same way on the old rules, and `answer` reaches the same handler, so they now accept either). The third is #212, an old trip ("we paid like 240 total and it was nasty") still read as `expense` at 0.68, which the backend now asks about instead of logging. The 9 cases from the noise eval (#212 to #220) went from 3 of 9 passing on the old rules to 8 of 9. Median latency about 165 ms, p95 about 310 ms.
+
+For whole conversations with noise, see `fixtures/noise/` and `npm run noise-eval` in `backend/`.
 
 Like the seed scripts, this reads `.env` from the package folder; use `DOTENV_CONFIG_PATH=$PWD/.env` from the repo root.

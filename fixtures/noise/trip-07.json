@@ -1,0 +1,188 @@
+{
+  "id": "trip-07",
+  "title": "Beach trip crew",
+  "kind": "trip",
+  "members": [
+    "Maya",
+    "Jordan",
+    "Sam",
+    "Ava",
+    "Leo"
+  ],
+  "messages": [
+    {
+      "from": "Maya",
+      "text": "just landed in miami!! so ready for this",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "same omw to baggage claim",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "Loved “just landed in miami!! so ready for this”",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "yo i slept through my alarm istg",
+      "gap_s": 3600,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "Laughed at “yo i slept through my alarm istg”",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "leo u better hurry or we're leaving u 😂",
+      "gap_s": 180,
+      "reply_to": 4,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "got the rental car, $89 for the week",
+      "gap_s": 7200,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 8900,
+        "payer": "Sam",
+        "participants": "everyone",
+        "description": "rental car"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "legend",
+      "gap_s": 25,
+      "reply_to": 6,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "finally here, traffic was brutal",
+      "gap_s": 14400,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "we're at the airbnb, grabbed some snacks on the way. $27 total",
+      "gap_s": 300,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 2700,
+        "payer": "Ava",
+        "participants": "everyone",
+        "description": "snacks"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "Loved “we're at the airbnb, grabbed some snacks on the way. $27 total”",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "beach later?",
+      "gap_s": 1800,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "i'm down",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "wait did someone already pay for parking at the lot? it was like 15 bucks earlier",
+      "gap_s": 7200,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "nah that was last year lol",
+      "gap_s": 90,
+      "reply_to": 13,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "ugh the line at the bar is so long",
+      "gap_s": 14400,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "finally got served tho",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "got the first round of drinks, $62",
+      "gap_s": 25,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6200,
+        "payer": "Maya",
+        "participants": "everyone",
+        "description": "drinks"
+      }
+    }
+  ]
+}

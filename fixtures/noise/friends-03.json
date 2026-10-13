@@ -1,0 +1,146 @@
+{
+  "id": "friends-03",
+  "title": "Movie night plans",
+  "kind": "friends",
+  "members": [
+    "Ella",
+    "Noah"
+  ],
+  "messages": [
+    {
+      "from": "Ella",
+      "text": "omg have you seen the new trailer for that horror movie?? looks insane",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "yesss the one with the haunted cabin? i watched it like 3 times already lmao",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "i'm dying to go see it",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "same but tickets are like $18 rn which is kinda steep",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "fr??? last time i went it was only 12 bucks",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "inflation hitting the movies too ig",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "we should just wait for it to hit streaming",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "i'd pay $1000 to skip work tomorrow tho istg",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "LMAOOO same",
+      "gap_s": 20,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "my boss is being the worst rn",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "keeps talking about how we're all getting 5% raises but like",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "that barely covers rent going up $200 next month",
+      "gap_s": 5,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "brutal",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Noah",
+      "text": "anyway what time you free this weekend? we could do a cheap movie night at my place instead",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Ella",
+      "text": "sunday after 6?? im down",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

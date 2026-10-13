@@ -1,0 +1,129 @@
+{
+  "id": "roommates-04",
+  "title": "Roommates-04",
+  "kind": "roommates",
+  "members": [
+    "Sofia",
+    "Diego",
+    "Hannah",
+    "Ty"
+  ],
+  "messages": [
+    {
+      "from": "Hannah",
+      "text": "rent due in 3 days and my account is crying rn",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "sarcasm"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "same here but i’d pay $1k to never hear ‘venmo request’ again",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "LMAO imagine",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "if we all just threw our wallets in a fire we’d be even",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "sarcasm"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "jk don’t",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Hannah",
+      "text": "i sent you $87 for last month’s utilities",
+      "gap_s": 65,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "wait really? thx",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "yo i still owe hannah like 45 from that one grocery run right",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "or was it 50",
+      "gap_s": 5,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "idk man my brain is broke too",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "sarcasm"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "me paying rent on time would be the real meme",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "sarcasm"
+      }
+    },
+    {
+      "from": "Hannah",
+      "text": "fr i’d pay a hundo just to watch that happen",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "same 💀",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

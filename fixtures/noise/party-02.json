@@ -1,0 +1,222 @@
+{
+  "id": "party-02",
+  "title": "Party group chat",
+  "kind": "party",
+  "members": [
+    "Chris",
+    "Dani",
+    "Marcus",
+    "Tess"
+  ],
+  "messages": [
+    {
+      "from": "Dani",
+      "text": "guys the place looks insane already",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "i'm like 20 mins out",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "omw too lmao traffic is a nightmare",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "just grabbed some supplies for the party",
+      "gap_s": 120,
+      "label": {
+        "kind": "expense_part",
+        "group": "supplies"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "like 87 bucks total at the store",
+      "gap_s": 8,
+      "label": {
+        "kind": "expense_part",
+        "group": "supplies"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "for everyone",
+      "gap_s": 5,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 8700,
+        "payer": "Chris",
+        "participants": "everyone",
+        "description": "party supplies",
+        "group": "supplies"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "yesss thank u",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "did u get the good tequila",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "duh and the mixer stuff too",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "LMAO someone already broke a glass",
+      "gap_s": 240,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "wait nvm it was plastic",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "i ordered wings and pizza",
+      "gap_s": 180,
+      "label": {
+        "kind": "expense_part",
+        "group": "food"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "came out to 112",
+      "gap_s": 15,
+      "label": {
+        "kind": "expense_part",
+        "group": "food"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "for all of us",
+      "gap_s": 10,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 11200,
+        "payer": "Dani",
+        "participants": "everyone",
+        "description": "wings and pizza",
+        "group": "food"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "sick im starving already",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "yo i think i messed up the first total",
+      "gap_s": 300,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "the supplies were actually 76 not 87",
+      "gap_s": 12,
+      "label": {
+        "kind": "correction",
+        "fixes": 5,
+        "amount_cents": 7600
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "haha classic",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "anybody got the ice yet??",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "i did",
+      "gap_s": 25,
+      "label": {
+        "kind": "expense_part",
+        "group": "ice"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "was only 14",
+      "gap_s": 8,
+      "label": {
+        "kind": "expense_part",
+        "group": "ice"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "for the group",
+      "gap_s": 7,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 1400,
+        "payer": "Dani",
+        "participants": "everyone",
+        "description": "ice",
+        "group": "ice"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "this playlist is fire ngl",
+      "gap_s": 150,
+      "label": {
+        "kind": "noise"
+      }
+    }
+  ]
+}
