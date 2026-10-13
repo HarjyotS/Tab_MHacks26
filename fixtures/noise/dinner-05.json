@@ -1,0 +1,223 @@
+{
+  "id": "dinner-05",
+  "title": "Dinner plans",
+  "kind": "dinner",
+  "members": [
+    "Maya",
+    "Jordan",
+    "Sam",
+    "Ava",
+    "Leo"
+  ],
+  "messages": [
+    {
+      "from": "Jordan",
+      "text": "guys i'm so down for tacos tonight",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "hell yes",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "omw but traffic is dumb",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "i can grab the food on my way",
+      "gap_s": 90,
+      "label": {
+        "kind": "expense_part",
+        "group": "tacos1"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "LMAO jordan you better not order 10 tacos again",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "shut up i only did that once",
+      "gap_s": 20,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "also can we get extra guac",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "okay got the order in, it was like 92 bucks",
+      "gap_s": 180,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 9200,
+        "payer": "Maya",
+        "participants": "everyone",
+        "description": "tacos",
+        "group": "tacos1"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "wait did that include the chips and salsa?",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "nah i think we still owe for drinks",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "i stopped at the store",
+      "gap_s": 120,
+      "label": {
+        "kind": "expense_part",
+        "group": "drinks1"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "grabbed some beers and that spicy marg mix",
+      "gap_s": 8,
+      "label": {
+        "kind": "expense_part",
+        "group": "drinks1"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "came to 27 even",
+      "gap_s": 12,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 2700,
+        "payer": "Leo",
+        "participants": "everyone",
+        "description": "drinks",
+        "group": "drinks1"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "leo youre a saint",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "fr tho",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "wait i just saw the receipt on the table",
+      "gap_s": 140,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "maya it was actually 84 not 92",
+      "gap_s": 15,
+      "label": {
+        "kind": "correction",
+        "fixes": 7,
+        "amount_cents": 8400
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "oh shit my bad",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "lmao classic",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "anyone down for ice cream after or are we too full",
+      "gap_s": 110,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "im so full rn but maybe later",
+      "gap_s": 50,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "venmo'd you back for my share of the tacos maya, 17",
+      "gap_s": 95,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "wait what time is it, i have an early meeting tmr",
+      "gap_s": 80,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "its only 9:30 chill",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise"
+      }
+    }
+  ]
+}

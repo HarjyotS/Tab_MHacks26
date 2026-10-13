@@ -1,0 +1,292 @@
+{
+  "id": "friends-05",
+  "title": "Squad catching up",
+  "kind": "friends",
+  "members": [
+    "Maya",
+    "Jordan",
+    "Sam",
+    "Ava",
+    "Leo"
+  ],
+  "messages": [
+    {
+      "from": "Sam",
+      "text": "yo anyone down for happy hour later",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "im in!!",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "ugh my boss just told me my bonus is only 800 this year lmao",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "brutal",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "wait what time",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "7ish at the usual spot",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "they have that new cocktail menu",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "im omw but traffic is a nightmare rn",
+      "gap_s": 240,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "flights to miami next month are like 320 roundtrip wtf",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "yeah i saw that too",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "i lost 120 at poker last night istg",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "lmaooo rip",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "got the uber here, 27 bucks",
+      "gap_s": 310,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 2700,
+        "payer": "Sam",
+        "participants": "everyone",
+        "description": "uber"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "wait for me outside",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "i literally just paid my phone bill, 95 bucks this month",
+      "gap_s": 85,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "rent is going up again in my building like 150 more",
+      "gap_s": 110,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "this city is trying to kill me",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "i grabbed apps for the table, 42 total",
+      "gap_s": 220,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 4200,
+        "payer": "Maya",
+        "participants": "everyone",
+        "description": "apps"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "nice",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "my new headphones were 180 tho",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "bro why",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "i'd pay like a hundo to have a personal chef rn im so hungry",
+      "gap_s": 140,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "same",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "anyone seen the new prices at whole foods? 7 bucks for like 3 bananas",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "lol i put the first round on my card, 68",
+      "gap_s": 310,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6800,
+        "payer": "Sam",
+        "participants": "everyone",
+        "description": "drinks"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "legend",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "this place is packed",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "also the nachos look insane",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "wait i venmo'd you 25 earlier right",
+      "gap_s": 75,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "this pasta is bussin but yeah ngl my car insurance just hit me for 450 quarterly",
+      "gap_s": 160,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    }
+  ]
+}

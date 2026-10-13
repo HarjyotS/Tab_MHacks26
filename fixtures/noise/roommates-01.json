@@ -1,0 +1,344 @@
+{
+  "id": "roommates-01",
+  "title": "Roommates, utilities week",
+  "kind": "roommates",
+  "members": [
+    "Chris",
+    "Dani",
+    "Marcus",
+    "Tess"
+  ],
+  "messages": [
+    {
+      "from": "Dani",
+      "text": "guys the trash is overflowing again who’s turn is it",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "mine i think but i’m at work till 8",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i’ll take it out when i get home, nbd",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "thx tess ur a saint",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "btw i grabbed paper towels and dish soap from costco yesterday",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "came out to like 49 bucks total but whatever",
+      "gap_s": 8,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 4900,
+        "payer": "Chris",
+        "participants": "everyone",
+        "description": "costco run"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "lol how much was the soap alone",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "i need to stop ordering doordash every night",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "spent 28 on thai last night and i’m still full",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "same i dropped 42 on sushi yesterday and now my bank account is crying",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "rent is due in 4 days and i’m only halfway there",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "why is everything so expensive rn",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "i paid the internet bill this morning btw, $67 after taxes",
+      "gap_s": 140,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6700,
+        "payer": "Chris",
+        "participants": "everyone",
+        "description": "internet"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "legend",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "wait i thought it was 62 last month??",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "they jacked it up again",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "i just bought new running shoes… 135 bucks 😭",
+      "gap_s": 200,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "they better last me a year",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "yo we need more toilet paper like yesterday",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i got a big pack at target earlier, 18 bucks",
+      "gap_s": 50,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 1800,
+        "payer": "Tess",
+        "participants": "everyone",
+        "description": "toilet paper"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "also picked up some laundry detergent while i was there",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "dani you still owe me 15 from last week’s tacos",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "shit yeah i’ll venmo you tonight",
+      "gap_s": 30,
+      "label": {
+        "kind": "payment",
+        "amount_cents": 1500,
+        "payer": "Dani",
+        "participants": [
+          "Marcus"
+        ]
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "anyone wanna go in on a new coffee maker? the one we have is dying",
+      "gap_s": 160,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "saw one at best buy for 89",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "lmaooo i’m down but only if it makes espresso too",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "my electric bill just hit… 112 this month wtf",
+      "gap_s": 140,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "i’m literally eating instant ramen for the next two weeks",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "send help or snacks",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i bought a new plant for the living room btw, 25 bucks",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "cute but does it actually help with the smell from the kitchen",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "ok i just paid the water bill, it was 94 total",
+      "gap_s": 210,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 9400,
+        "payer": "Marcus",
+        "participants": "everyone",
+        "description": "water bill"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "thanks marcus 🙏",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "i lost 60 bucks at the casino last weekend and i’m still mad about it",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "never again right? lmao",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

@@ -1,0 +1,190 @@
+{
+  "id": "friends-01",
+  "title": "Friends-01",
+  "kind": "friends",
+  "members": [
+    "Chris",
+    "Dani",
+    "Marcus",
+    "Tess"
+  ],
+  "messages": [
+    {
+      "from": "Marcus",
+      "text": "yo anyone down for the game tonight??",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "im in but only if it starts after 8",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "starts at 7:30",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "perfect i get off work at 6",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "sick",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "i grabbed some wings and beer on the way",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "was like 27 bucks",
+      "gap_s": 8,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 2700,
+        "payer": "Marcus",
+        "participants": "everyone",
+        "description": "wings and beer"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "legend",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "what channel is it on again??",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "ESPN i think",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "also who tf is driving",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "not it",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "i already got the snacks",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i can drive but my car only fits 4 lol",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "wait did anyone watch the last game",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "final score was 112-98",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "yep and that 3 pointer at the buzzer?? insane",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "omw now, picking up Marcus first",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "cool, i just paid for the uber actually, $31 total to get the extra drinks and ice",
+      "gap_s": 65,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 3100,
+        "payer": "Chris",
+        "participants": "everyone",
+        "description": "drinks and ice"
+      }
+    }
+  ]
+}

@@ -1,0 +1,215 @@
+{
+  "id": "dinner-02",
+  "title": "Dinner crew catchup",
+  "kind": "dinner",
+  "members": [
+    "Omar",
+    "Lily",
+    "Ben",
+    "Zoe",
+    "Raj",
+    "Kat"
+  ],
+  "messages": [
+    {
+      "from": "Lily",
+      "text": "guys finally free this friday??",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "im down, that new thai spot?",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ben",
+      "text": "yes please, their curry is insane",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "wait i might have to bail early, got a thing after",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Raj",
+      "text": "lmaooo zoe always has a \"thing\"",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "count me in, i need this after last week",
+      "gap_s": 40,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "ok cool 7:30?",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "works for me",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "btw i still owe my sister from that nyc trip last month",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "she covered our bar tab like $180",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "venmoing her now",
+      "gap_s": 15,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Ben",
+      "text": "lmao you still haven't paid her back? savage",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "speaking of, my coworker mike paid for our whole team lunch yesterday",
+      "gap_s": 80,
+      "label": {
+        "kind": "noise",
+        "trap": "other_group"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "like $120 for 6 of us, i sent him 25 on venmo",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "other_group"
+      }
+    },
+    {
+      "from": "Raj",
+      "text": "nice",
+      "gap_s": 20,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "wait did anyone watch the game last night??",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "that last shot was crazy",
+      "gap_s": 5,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "i was screaming at my tv",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "omg i missed it but saw the highlights",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ben",
+      "text": "got the reservation confirmed for 7:30, they had a table for 6",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Raj",
+      "text": "i grabbed some snacks on the way, $22 total for everyone if we want them before",
+      "gap_s": 90,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 2200,
+        "payer": "Raj",
+        "participants": "everyone",
+        "description": "snacks"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "perfect, thx raj",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

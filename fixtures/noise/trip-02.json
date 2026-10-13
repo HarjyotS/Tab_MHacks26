@@ -1,0 +1,189 @@
+{
+  "id": "trip-02",
+  "title": "Vegas squad",
+  "kind": "trip",
+  "members": [
+    "Priya",
+    "Jake",
+    "Nina"
+  ],
+  "messages": [
+    {
+      "from": "Jake",
+      "text": "yo so we booking this weekend for real?",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "100% I'm down",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "me too but flights are like 280 rn 😭",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "delta has a 2:15pm that lands at 4",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "we could split an uber from the airport",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "also should we do the dayclub thing or nah",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "wait I think I found cheaper ones hold up",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "lol jake is already looking at pool party tickets",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "they're 65 each but idk if we do dayclub both days",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "omg just booked my flight!!",
+      "gap_s": 240,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "southwest 179 bucks not bad",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "nice which one",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "the 11am one",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "bet I'm grabbing the same",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "just paid for the airbnb guys, it was 420 after fees for the two nights",
+      "gap_s": 380,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 42000,
+        "payer": "Nina",
+        "participants": "everyone",
+        "description": "airbnb"
+      }
+    },
+    {
+      "from": "Jake",
+      "text": "legend 🙌",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "wait what about the resort fee they mentioned?",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Nina",
+      "text": "I covered that too it was like another 80",
+      "gap_s": 30,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 8000,
+        "payer": "Nina",
+        "participants": "everyone",
+        "description": "resort fee"
+      }
+    },
+    {
+      "from": "Priya",
+      "text": "LMAO I just realized my card is gonna cry",
+      "gap_s": 85,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    }
+  ]
+}

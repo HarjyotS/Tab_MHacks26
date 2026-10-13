@@ -1,0 +1,151 @@
+{
+  "id": "family-02",
+  "title": "Family catch up",
+  "kind": "family",
+  "members": [
+    "Maya",
+    "Jordan",
+    "Sam",
+    "Ava",
+    "Leo"
+  ],
+  "messages": [
+    {
+      "from": "Maya",
+      "text": "just got back from the farmers market, got some stuff for sunday dinner",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "sounds good, what time are we eating?",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "Loved “just got back from the farmers market, got some stuff for sunday dinner”",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "i'm running late from soccer practice, can someone grab milk on the way home?",
+      "gap_s": 3600,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "i'll stop by the store after work",
+      "gap_s": 1800,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "btw i covered the new soccer cleats for leo, they were 65 bucks",
+      "gap_s": 14400,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6500,
+        "payer": "Maya",
+        "participants": [
+          "Leo"
+        ],
+        "description": "soccer cleats"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "thx mom ❤️",
+      "gap_s": 300,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "Laughed at “i'm running late from soccer practice, can someone grab milk on the way home?”",
+      "gap_s": 7200,
+      "reply_to": 3,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Ava",
+      "text": "wait those cleats were on sale right? i saw them for like 50",
+      "gap_s": 1800,
+      "reply_to": 5,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Jordan",
+      "text": "anyone wanna split the cost of dad's birthday gift? i found a nice grill set",
+      "gap_s": 21600,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Maya",
+      "text": "i picked up groceries earlier, whole thing came to 87 even after coupons",
+      "gap_s": 14400,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 8700,
+        "payer": "Maya",
+        "participants": "everyone",
+        "description": "groceries"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "omw home now, traffic is brutal today",
+      "gap_s": 3600,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "also did anyone feed the dog this morning??",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Leo",
+      "text": "i dont see any food in his bowl",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise"
+      }
+    },
+    {
+      "from": "Sam",
+      "text": "i venmo'd you 20 for the cleats maya",
+      "gap_s": 10800,
+      "label": {
+        "kind": "payment"
+      }
+    }
+  ]
+}

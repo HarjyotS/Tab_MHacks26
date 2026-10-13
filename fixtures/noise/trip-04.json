@@ -1,0 +1,141 @@
+{
+  "id": "trip-04",
+  "title": "Beach trip planning",
+  "kind": "trip",
+  "members": [
+    "Omar",
+    "Lily",
+    "Ben",
+    "Zoe",
+    "Raj",
+    "Kat"
+  ],
+  "messages": [
+    {
+      "from": "Lily",
+      "text": "guys the weather looks insane this weekend",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "fr i just checked, 82 and sunny every day",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ben",
+      "text": "i'm bringing my speaker but someone else gotta handle snacks",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "wait flights are like 280 rn if we book today",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Raj",
+      "text": "lmao i already bought mine last month for 190",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "omg i would pay 500 bucks to never fly spirit again istg",
+      "gap_s": 52,
+      "label": {
+        "kind": "noise",
+        "trap": "hypothetical"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "same",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "did u see the airbnb has a firepit",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Lily",
+      "text": "we should def use it",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Ben",
+      "text": "yo the group size is 6 right",
+      "gap_s": 65,
+      "label": {
+        "kind": "noise",
+        "trap": "numbers_not_money"
+      }
+    },
+    {
+      "from": "Zoe",
+      "text": "yeah",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Omar",
+      "text": "i'm down to split the cost of a case of beer or whatever",
+      "gap_s": 110,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Raj",
+      "text": "lmao remember last year when kat lost 80 at mini golf",
+      "gap_s": 80,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Kat",
+      "text": "SHUT UP RAJ it was a one time thing 💀",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "sarcasm"
+      }
+    }
+  ]
+}

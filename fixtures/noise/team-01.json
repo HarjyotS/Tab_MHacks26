@@ -1,0 +1,273 @@
+{
+  "id": "team-01",
+  "title": "Q3 campaign brainstorms",
+  "kind": "team",
+  "members": [
+    "Chris",
+    "Dani",
+    "Marcus",
+    "Tess"
+  ],
+  "messages": [
+    {
+      "from": "Marcus",
+      "text": "morning team, did everyone see the new sales deck?",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "yep looks solid",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "lmao the stock images are so bad",
+      "gap_s": 32,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "fr, that one dude looks like he’s from 2012",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "anyway we need to lock in the offsite venue this week",
+      "gap_s": 95,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i just paid my cc bill, $890 gone 😭",
+      "gap_s": 67,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "same, rent is killing me this month",
+      "gap_s": 41,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "i grabbed the team lunch from that new thai place, came to $127",
+      "gap_s": 134,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 12700,
+        "payer": "Chris",
+        "participants": "everyone",
+        "description": "team lunch"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "thanks chris!",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "omg i would have died for pad see ew rn",
+      "gap_s": 55,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "flights to the conference are like $450 rn",
+      "gap_s": 78,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "if we book today maybe cheaper?",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "i lost 40 bucks on that dumb betting app last night",
+      "gap_s": 145,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "lol",
+      "gap_s": 19,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "i covered the new wireless keyboard for the conference room, $65 on my card",
+      "gap_s": 102,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 6500,
+        "payer": "Tess",
+        "participants": "everyone",
+        "description": "keyboard"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "the old one was dying",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "anyone else need one while i’m ordering?",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "perfect",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "my starbucks run this morning was $9.50, why is everything so expensive",
+      "gap_s": 88,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "wait did we decide on the ad budget yet",
+      "gap_s": 76,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "marketing wants another 12k this quarter",
+      "gap_s": 52,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "oof",
+      "gap_s": 14,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "i venmo'd marcus 35 for the parking last week btw",
+      "gap_s": 131,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "received, thx",
+      "gap_s": 27,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "guys i just got the prototype stickers printed, $210 total and they look sick",
+      "gap_s": 184,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 21000,
+        "payer": "Chris",
+        "participants": "everyone",
+        "description": "stickers"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "yesss send pics",
+      "gap_s": 41,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "i'm so broke after buying that new monitor, $420 down the drain",
+      "gap_s": 97,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "lmao same energy, my grocery bill was $180 this week wtf",
+      "gap_s": 64,
+      "label": {
+        "kind": "noise",
+        "trap": "personal_money"
+      }
+    }
+  ]
+}

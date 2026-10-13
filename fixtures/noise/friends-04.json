@@ -1,0 +1,222 @@
+{
+  "id": "friends-04",
+  "title": "Friends, catching up",
+  "kind": "friends",
+  "members": [
+    "Sofia",
+    "Diego",
+    "Hannah",
+    "Ty"
+  ],
+  "messages": [
+    {
+      "from": "Hannah",
+      "text": "omg you guys i just got back from that weekend at the lake with my cousins",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "how was it",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Hannah",
+      "text": "so fun but we spent a fortune on the airbnb",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "how much was it again?",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Hannah",
+      "text": "like 850 for the three nights but it was already settled",
+      "gap_s": 12,
+      "label": {
+        "kind": "noise",
+        "trap": "past_trip"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "yo anyone down for tacos tonight? im craving",
+      "gap_s": 120,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "i can pick some up",
+      "gap_s": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "planning"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "im in but only if we do the truck on 5th",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "LMAO ty is always down for tacos",
+      "gap_s": 22,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Hannah",
+      "text": "i cant tonight sorry, have plans with my roommate",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "ugh fine more for us",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "also just paid my sister back for that concert ticket from last month",
+      "gap_s": 80,
+      "label": {
+        "kind": "noise",
+        "trap": "other_group"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "venmo'd her the $65",
+      "gap_s": 5,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "wait you still owed her??",
+      "gap_s": 28,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "speaking of i grabbed coffee for me and my coworker this morning",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "other_group"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "her treat next time tho",
+      "gap_s": 10,
+      "label": {
+        "kind": "noise",
+        "trap": "other_group"
+      }
+    },
+    {
+      "from": "Hannah",
+      "text": "lol yall are always buying coffees",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "wait omw to the taco truck now",
+      "gap_s": 240,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "they're doing a deal, got 12 tacos for $28",
+      "gap_s": 25,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 2800,
+        "payer": "Diego",
+        "participants": "everyone",
+        "description": "tacos"
+      }
+    },
+    {
+      "from": "Sofia",
+      "text": "omg save me 3 pls",
+      "gap_s": 18,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Ty",
+      "text": "dude i literally said i was picking up 😭",
+      "gap_s": 15,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Diego",
+      "text": "too late i already paid and im heading back",
+      "gap_s": 30,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Hannah",
+      "text": "next time we gotta plan the beach trip better, flights are like 180 rn",
+      "gap_s": 420,
+      "label": {
+        "kind": "noise",
+        "trap": "price_talk"
+      }
+    }
+  ]
+}

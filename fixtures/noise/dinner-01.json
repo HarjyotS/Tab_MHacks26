@@ -1,0 +1,227 @@
+{
+  "id": "dinner-01",
+  "title": "Dinner crew",
+  "kind": "dinner",
+  "members": [
+    "Chris",
+    "Dani",
+    "Marcus",
+    "Tess"
+  ],
+  "messages": [
+    {
+      "from": "Dani",
+      "text": "guysss what time are we meeting for dinner tonight",
+      "gap_s": 0,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "7:30 work for everyone?",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "yeah im good with that",
+      "gap_s": 45,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "perfect see you there",
+      "gap_s": 90,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "Loved “yeah im good with that”",
+      "gap_s": 7200,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "just got here, place is packed lol",
+      "gap_s": 1800,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "omw, running like 10 min late sorry",
+      "gap_s": 300,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "grabbed us a table by the window",
+      "gap_s": 240,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "i'm here too",
+      "gap_s": 420,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "ordered some apps already",
+      "gap_s": 5,
+      "label": {
+        "kind": "expense_part",
+        "group": "apps"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "calamari was 14 bucks",
+      "gap_s": 8,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 1400,
+        "payer": "Dani",
+        "participants": "everyone",
+        "description": "calamari",
+        "group": "apps"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "Laughed at “i'm here too”",
+      "gap_s": 35,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "dani you legend",
+      "gap_s": 120,
+      "reply_to": 8,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "finally here, sorry traffic was insane",
+      "gap_s": 5400,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "we ordered you the salmon, hope thats cool",
+      "gap_s": 180,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "yeah perfect",
+      "gap_s": 360,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "btw i covered the drinks round",
+      "gap_s": 12,
+      "label": {
+        "kind": "expense_part",
+        "group": "drinks"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "came to like 42 total",
+      "gap_s": 6,
+      "label": {
+        "kind": "expense",
+        "amount_cents": 4200,
+        "payer": "Tess",
+        "participants": "everyone",
+        "description": "drinks",
+        "group": "drinks"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "Loved “yeah perfect”",
+      "gap_s": 25,
+      "label": {
+        "kind": "noise",
+        "trap": "reaction_text"
+      }
+    },
+    {
+      "from": "Marcus",
+      "text": "im still dying from that story you told about your boss lmao",
+      "gap_s": 7200,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Chris",
+      "text": "wait i venmo'd you for my half of the apps earlier right dani?",
+      "gap_s": 450,
+      "label": {
+        "kind": "payment"
+      }
+    },
+    {
+      "from": "Dani",
+      "text": "yep all good",
+      "gap_s": 80,
+      "label": {
+        "kind": "noise",
+        "trap": "none"
+      }
+    },
+    {
+      "from": "Tess",
+      "text": "this tiramisu is insane, we splitting dessert? its 18",
+      "gap_s": 1200,
+      "label": {
+        "kind": "ambiguous"
+      }
+    }
+  ]
+}
