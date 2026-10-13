@@ -49,6 +49,10 @@ const MONEY_INTENTS = new Set<Intent>([
 // A question about an amount that already exists, not a new expense.
 const AMOUNT_QUESTION = /^(why|what'?s|whats|how|where)\b.*\d|\b(from|for)\?\s*$/i;
 const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
+// "why?", "wait why", "how come": not "why is everything so expensive rn".
+const shortWhy = (text?: string) => (text ?? "").trim().split(/\s+/).length <= 4;
+// The gate is this sure a message is chatter: it answers none of Tab's questions.
+const SURE_CHATTER = 0.8;
 
 // Intents that ask Tab something rather than tell it.
 const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
@@ -73,6 +77,12 @@ const CONFIRM_QUESTION: Partial<Record<Intent, string>> = {
 // Intents that only read data or point to the 👍: answered even when unsure.
 // Not `receipt`: an unsure photo gets a question, not the receipt read (§19).
 const ANSWER_ANYWAY = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question", "approval"]);
+const QUESTIONS = new Set<Intent>(["balance_query", "breakdown_request", "money_question"]);
+// Put to Tab: it names Tab, it's a DM, or it replies to one of Tab's messages.
+function askingTab(ctx: BrainCtx, m: Message): boolean {
+  if (m.is_dm || /\btab\b/i.test(m.text ?? "")) return true;
+  return Boolean(m.reply_to_id && ctx.store.outbox().some((o) => o.sent_photon_id === m.reply_to_id));
+}
 
 // iPhones type curly quotes ("I’m", "didn’t"); every parser expects ASCII.
 export function normalizeText(text: string | undefined): string | undefined {
@@ -100,6 +110,9 @@ function trackWrites(base: BrainCtx): { ctx: BrainCtx; wrote: () => boolean } {
 // money brain. "answer" is the open-threads intent (#35).
 const FALLBACK_INTENTS = new Set<string>([...MONEY_INTENTS, "answer"]);
 const FALLBACK_MIN_CONFIDENCE = 0.3;
+// Talk about an open split or receipt ("update it", "same as before"): still
+// worth a question even below the clarify bar, while something is open.
+const SPLIT_TALK = new Set<string>(["split_adjustment", "name_reply", "claim"]);
 
 // Why a message that got no reply and changed nothing should still get one
 // (Harjyot: "it just gives up"), or undefined to stay quiet (P1). Chatter
@@ -116,7 +129,15 @@ export function fallbackReason(
 ): string | undefined {
   if (m.kind !== "text" || !m.text?.trim() || result.prefiltered || result.intent === "ignore") return undefined;
   if (result.confidence < FALLBACK_MIN_CONFIDENCE) return undefined;
+  // Noise eval: the money brain answering messages the gate didn't pass, or
+  // settle-up talk ("i venmo'd marcus 35 for the parking"), was most of Tab's
+  // chatter. Those get a reply only when they reply to Tab inline.
+  if (decision === "ignore" && !input.message.reply_to_tab && !SPLIT_TALK.has(result.intent)) return undefined;
   if (decision === "ignore" && !threadsOpen && !input.message.reply_to_tab) return undefined;
+  if (result.intent === "payment_reported" && !input.message.reply_to_tab) return undefined;
+  // A half-sure expense or correction, or an unsure question not put to Tab:
+  // clarify() already chose to ask or stay quiet.
+  if ((result.intent === "expense" || result.intent === "correction" || QUESTIONS.has(result.intent)) && decision === "clarify") return undefined;
   if (FALLBACK_INTENTS.has(result.intent)) return `unsure_${result.intent}`;
   if (input.message.reply_to_tab) return "reply_to_tab";
   if (input.tab_question_open) return "open_question";
@@ -157,7 +178,11 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       const result = await ctx.classify(input);
       intent = result.intent;
       confidence = result.confidence;
-      const decision = decide(result, input);
+      let decision = decide(result, input);
+      // Just under the clarify bar, but it plainly states a purchase or a cost
+      // with an amount ("got the bill, came to 67 total" at 0.41): ask rather
+      // than drop it. In the noise eval these were real expenses 5 times in 5.
+      if (decision === "ignore" && result.intent === "expense" && result.confidence >= NEAR_CLARIFY && statesSpend(m.text)) decision = "clarify";
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent) && intent !== "answer";
       ctx.log("classified", {
         message_id: m.message_id, group_id: m.group_id, intent, confidence, decision,
@@ -177,7 +202,7 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       // is answered as itself.
       const why =
         !breakdown && !answered && !(decision !== "ignore" && intent === "money_question") &&
-        WHY.test((m.text ?? "").trim()) && lastTabPurpose(ctx, m) === "balance_reply";
+        WHY.test((m.text ?? "").trim()) && shortWhy(m.text) && lastTabPurpose(ctx, m) === "balance_reply";
       // With nothing open, "why?" says what "it" was or their last payment (§7.8 History).
       if (why) await handleShortWhy(ctx, m, () => historyFallback(ctx, m));
       // "@tab ledger" (§12.3): addressed to Tab, or a question the gate passed.
@@ -371,6 +396,10 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   // A possible name is acted on only right after Tab asked an unnamed sender
   // for theirs; otherwise never guess a name (P3).
   if (intent === "name_reply") return answeringNamePrompt(ctx, m) ? act(ctx, m, intent) : undefined;
+  // An unsure question is answered only when it's put to Tab (noise eval:
+  // "lol how much was the soap alone", asked of a roommate, got a ledger link).
+  if (QUESTIONS.has(intent) && !askingTab(ctx, m))
+    return ctx.log("clarify_quiet", { message_id: m.message_id, intent, confidence });
   if (ANSWER_ANYWAY.has(intent)) return act(ctx, m, intent);
   if (intent === "claim") {
     // An open item list: ask which. An even receipt: confirm the change.
@@ -391,12 +420,21 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   // outright ("paid", an amount) it's logged; otherwise Tab asks to split it.
   // An unsure "expense" that plainly states a purchase is logged too: the
   // split message is the confirmation, and it invites objections.
-  if (ctx.eyes && intent === "expense" && STATES_PURCHASE.test(m.text ?? "") && !AMOUNT_QUESTION.test(m.text ?? "")) return act(ctx, m, "expense");
+  // Fairly sure only (noise eval: "we paid like 240 total and it was nasty",
+  // about a trip last year, was logged at 0.74); less sure, it asks below.
+  if (ctx.eyes && confidence >= FAIRLY_SURE && intent === "expense" && STATES_PURCHASE.test(m.text ?? "") && !AMOUNT_QUESTION.test(m.text ?? "")) return act(ctx, m, "expense");
   if (intent === "correction" && !repliedExpense(ctx, m))
     return STATES_PURCHASE.test(m.text ?? "") ? act(ctx, m, "expense") : clarify(ctx, m, "expense", id, confidence);
   // "whats the $90.70 from?" asks about a balance; offering to split it as a
   // new expense would be wrong. Point to the command instead (live run).
   if (intent === "expense" && AMOUNT_QUESTION.test(m.text ?? "")) return hintBreakdown(ctx, m);
+  // Half sure, with no purchase stated: ask only when it states what
+  // something cost ("pizza was $48 lol"). Anything else stays quiet (noise
+  // eval: "want me to split that?" fired 36 times, mostly on chatter like
+  // "anyone wanna go in on a new coffee maker?" and "lmaooo i'm down").
+  // The rest of an answer ("yep, and I got gas $30") still asks first (Joe's review on #35).
+  if (intent === "expense" && !id.endsWith(":rest") && !STATES_COST.test(m.text ?? "") && !STATES_PURCHASE.test(m.text ?? ""))
+    return ctx.log("clarify_quiet", { message_id: m.message_id, intent, confidence });
   // §6.4: an unsure adjustment is about an open expense, so ask rather than
   // stay silent: explain what's wrong, or confirm before applying.
   if (intent === "split_adjustment") {
@@ -462,11 +500,23 @@ type Reply = {
 async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, decision: Decision): Promise<Reply> {
   const no: Reply = { answered: false };
   if (m.kind !== "text" || !m.text) return no;
-  const mine = openThreads(ctx, chatOf(m)).filter((t) => mayAnswer(t, m));
-  if (mine.length === 0) return no; // nothing open: exactly as before
+  const anyOpen = openThreads(ctx, chatOf(m)).filter((t) => mayAnswer(t, m));
+  if (anyOpen.length === 0) return no; // nothing open: exactly as before
   const passed = decision !== "ignore";
   // An inline reply picks its question for certain, but lowers no bar.
-  const replied = threadForReply(ctx, m, mine);
+  const replied = threadForReply(ctx, m, anyOpen);
+  // Chatter the gate is sure about answers nothing (noise eval: "why is
+  // everything so expensive rn" got a reply about Costco supplies).
+  if (!replied && result.intent === "ignore" && result.confidence >= SURE_CHATTER) return no;
+  // A new expense the gate is sure about starts fresh (noise eval: "yo I paid
+  // the cab, 68 bucks" was taken as who paid for an earlier expense, and the
+  // cab was never logged). Only the sender's own question about a missing
+  // amount, or a question they reply to inline, can take it as an answer.
+  const fresh = !replied && decision === "act" && result.intent === "expense";
+  const mine = fresh
+    ? anyOpen.filter((t) => t.data.kind === "expense" && isAsker(t, m) && t.data.problems.some((p) => p.kind === "missing_amount"))
+    : anyOpen;
+  if (mine.length === 0) return no;
   const pool = replied ? [replied] : mine;
 
   // 1. Today's parsers, for a plain answer to exactly one question: no Grok
@@ -524,8 +574,12 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   const grok = await askGrok(ctx, m, result, decision, pool.filter((t) => t !== reask));
   if (grok.answered) return grok;
   // Grok matched a question it couldn't read an answer to, or the parsers
-  // and the re-read couldn't.
-  const unresolved = grok.matched && !INVITES.has(grok.matched.data.kind) ? grok.matched : stuck;
+  // and the re-read couldn't. Only a message that is clearly an answer (the
+  // gate says so, or it replies inline) gets "hm didn't catch that": anything
+  // else is handled as itself (noise eval: "dinner at that taco truck was $55"
+  // got a follow-up instead of being logged).
+  const matched = grok.matched && !INVITES.has(grok.matched.data.kind) && (result.intent === "answer" || grok.matched === replied) ? grok.matched : undefined;
+  const unresolved = matched ?? stuck;
   return unresolved ? followUp(ctx, m, unresolved) : no;
 }
 
@@ -1183,7 +1237,13 @@ function amountAfterPhoto(ctx: BrainCtx, m: Message): string | undefined {
 }
 
 // "just paid for 47 uber", "got dinner 60", "i covered the tickets, $40".
-const STATES_PURCHASE = /^(?=.*\d)(?=.*\b(paid|pay(?:ed)?|got|bought|covered|spent|grabbed|picked up)\b)/i;
+const STATES_PURCHASE = /^(?=.*\d)(?=.*\b(paid|pay(?:ed)?|got|bought|covered|spent|grabbed|picked up|filled (?:it |her |the tank )?up|charged|on my card)\b)/i;
+const NEAR_CLARIFY = 0.3;
+const statesSpend = (text?: string) =>
+  (STATES_PURCHASE.test(text ?? "") || STATES_COST.test(text ?? "")) && !AMOUNT_QUESTION.test(text ?? "");
+// "pizza was $48", "came to 67", "cost us 30", "$84 total": what something cost.
+// A bare "dinner 40" (a few words and an amount) counts too.
+const STATES_COST = /^(?=.*\d)(?:(?=.*\b(was|were|came to|came out to|cost|costs|total)\b)|\W*[a-z][a-z' ]{0,24}\s\$?\d+(?:\.\d{2})?\W*$)/i;
 
 // Live chats: Tab's newest message here is a question from the last three
 // minutes (the money brain's own questions aren't tracked as threads), so a

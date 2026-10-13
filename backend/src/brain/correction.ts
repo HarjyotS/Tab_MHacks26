@@ -44,6 +44,12 @@ export function namedCorrectionTarget(ctx: BrainCtx, m: Message): Expense | unde
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
 }
 
+// The amount a correction says was wrong: "62 not 55", "instead of $38".
+export function oldAmountCents(text: string): number | undefined {
+  const m = /\b(?:not|instead of|wasn'?t)\s+\$?(\d+(?:\.\d{1,2})?)\b/i.exec(text);
+  return m ? Math.round(Number(m[1]) * 100) : undefined;
+}
+
 export async function handleCorrection(
   ctx: BrainCtx,
   m: Message,
@@ -65,7 +71,11 @@ export async function handleCorrection(
     (result.target_expense_id
       ? ctx.store.expense(result.target_expense_id)
       : undefined);
-  if (!target) {
+  // "the tacos were actually 62 not 55" with no $55 expense on the tab: ask
+  // which one instead of rewriting the newest (noise eval: it turned a $120
+  // surfboard rental into "tacos $120.00").
+  const was = oldAmountCents(m.text ?? "");
+  if (!target || (!bound && was !== undefined && was !== target.total_cents)) {
     await tapback(ctx, m, "question");
     return ask(T.whichToCorrect());
   }

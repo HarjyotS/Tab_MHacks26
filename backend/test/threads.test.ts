@@ -284,7 +284,8 @@ describe("free-form answers (Grok resolves them)", () => {
     const pizza = await w.say("Priya", "pizza was $48 lol");
     await w.say("Priya", "yes");
     const ride = await w.say("Joe", text);
-    expect(calls).toEqual([text]);
+    // The gate is sure it's a new expense, so no question can claim it: no Grok call needed.
+    expect(calls).toEqual([]);
     expect(w.db.expense(`exp_${pizza.message_id}`)).toMatchObject({ status: "needs_info", payer_phone: undefined });
     expect(w.db.expense(`exp_${ride.message_id}`)).toMatchObject({ status: "proposed", payer_phone: PEOPLE.Joe, total_cents: 3000 });
   });

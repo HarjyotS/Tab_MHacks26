@@ -1051,9 +1051,12 @@
         "reply": true
       },
       "expect": {
-        "intent": "expense"
+        "one_of": [
+          "answer",
+          "expense"
+        ]
       },
-      "note": "Bare number as an inline reply to Tab's question"
+      "note": "Bare number as an inline reply to Tab's question; an inline reply to Tab's question: answer and expense both reach the answer handler"
     },
     {
       "id": 159,
@@ -1080,8 +1083,12 @@
         "reply": true
       },
       "expect": {
-        "intent": "expense"
-      }
+        "one_of": [
+          "answer",
+          "expense"
+        ]
+      },
+      "note": "an inline reply to Tab's question: answer and expense both reach the answer handler"
     },
     {
       "id": 160,
@@ -2017,6 +2024,152 @@
         "intent": "breakdown_request"
       },
       "note": "Money brain: why a debt is what it is"
+    },
+    {
+      "id": 212,
+      "context": [
+        {
+          "from": "Priya",
+          "text": "yall remember that hostel we stayed in during the denver trip last year? lmao what a dump"
+        },
+        {
+          "from": "Jake",
+          "text": "bro I still have the receipt from that one"
+        }
+      ],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "we paid like 240 total and it was nasty"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "noise eval: an old trip, already paid"
+    },
+    {
+      "id": 213,
+      "context": [
+        {
+          "from": "Joe",
+          "text": "btw i still owe my sister from that nyc trip last month"
+        }
+      ],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "she covered our bar tab like $180"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "noise eval: someone outside the chat, an old trip"
+    },
+    {
+      "id": 214,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "just booked my flight, $187 one way 😩"
+      },
+      "expect": {
+        "not_acted_as": "expense"
+      },
+      "note": "noise eval: a personal purchase"
+    },
+    {
+      "id": 215,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "anyone wanna go in on a new coffee maker? the one we have is dying"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "noise eval: planning, nothing bought"
+    },
+    {
+      "id": 216,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "also the kayak thing tomorrow is like 80 each"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "noise eval: a price for something not bought yet"
+    },
+    {
+      "id": 217,
+      "context": [
+        {
+          "from": "Joe",
+          "text": "remember when we went to miami two summers ago"
+        },
+        {
+          "from": "Joe",
+          "text": "and that random guy charged us double for the boat"
+        }
+      ],
+      "open_items": [],
+      "message": {
+        "from": "Joe",
+        "text": "we ended up paying him 300 cash total and just dipped"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "noise eval: an old trip"
+    },
+    {
+      "id": 218,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Kian",
+        "text": "my coworker asked me to cover his ticket to the game, it's $89"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "noise eval: money with someone outside the chat"
+    },
+    {
+      "id": 219,
+      "context": [],
+      "open_items": [],
+      "message": {
+        "from": "Jake",
+        "text": "i'll get the first gas fillup"
+      },
+      "expect": {
+        "intent": "ignore"
+      },
+      "note": "noise eval: an offer, not a purchase"
+    },
+    {
+      "id": 220,
+      "context": [
+        {
+          "from": "Jake",
+          "text": "bro I still have the receipt from that one"
+        }
+      ],
+      "open_items": [],
+      "message": {
+        "from": "Priya",
+        "text": "anyway I just grabbed coffees for us from that cart on the corner, $16.50 total"
+      },
+      "expect": {
+        "intent": "expense",
+        "min_confidence": 0.85
+      },
+      "note": "noise eval control: a real shared purchase right after old-trip talk"
     }
   ]
 }
