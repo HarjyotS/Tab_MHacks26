@@ -286,12 +286,46 @@ export const DESCRIBE_TIMEOUT_MS = 6_000;
 
 class DescribeTimeout extends Error {}
 
+// §19 screening for photos: text that could be about money, in the photo
+// (read on the Tab Mac) or its caption. Generous on purpose, so a receipt is
+// never screened out; a selfie or a meme with no prices is.
+const MONEY_TEXT =
+  /\$\s?\d|\d[.,]\d{2}\b|\b(?:total|subtotal|tax|tip|gratuity|amount|balance|due|paid|payment|receipt|invoice|bill|order|venmo|cash ?app|zelle|paypal|usd)\b/i;
+
+export const mayBeMoney = (photoText: string | undefined, caption: string | undefined): boolean =>
+  MONEY_TEXT.test(photoText ?? "") || /\d/.test(caption ?? "") || MONEY_TEXT.test(caption ?? "");
+
+const SCREENED_OUT = "a photo with no prices, totals, or payments in it (its text was read on the device; no AI looked at the image)";
+
+// The text in a photo, read on the Mac, or undefined if that failed (then
+// only the caption can let the photo through: fail closed).
+async function photoText(ctx: BrainCtx, m: Pick<Message, "message_id" | "image_url">): Promise<string | undefined> {
+  try {
+    return await ctx.extract.screen!(m.image_url!);
+  } catch (err) {
+    ctx.log("screen_failed", { message_id: m.message_id, error: String(err) });
+    return undefined;
+  }
+}
+
 // What Grok vision sees in a photo (§7.4), from memory or described now.
-// An image that's gone, unreadable, or too slow is skipped, and not tried
-// again.
+// First the screen (§19): a photo whose own text and caption say nothing
+// about money is noted from its on-device text alone and never sent to
+// Grok. An image that's gone, unreadable, or too slow is skipped, and not
+// tried again.
 export async function describePhoto(ctx: BrainCtx, m: Pick<Message, "message_id" | "image_url" | "text">): Promise<PhotoNote | undefined> {
   if (ctx.memory.photos.has(m.message_id)) return ctx.memory.photos.get(m.message_id);
-  if (!m.image_url || !ctx.extract.describe) return undefined;
+  if (!m.image_url) return undefined;
+  if (ctx.extract.screen) {
+    const text = await photoText(ctx, m);
+    if (!mayBeMoney(text, m.text)) {
+      const note: PhotoNote = { kind: "photo", description: SCREENED_OUT, transcription: (text ?? "").slice(0, 2000), money_related: false };
+      ctx.memory.photos.set(m.message_id, note);
+      ctx.log("photo_screened_out", { message_id: m.message_id, read: text !== undefined });
+      return note;
+    }
+  }
+  if (!ctx.extract.describe) return undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const timeout = new Promise<never>((_, reject) => {
     timer = setTimeout(() => reject(new DescribeTimeout(`no description after ${DESCRIBE_TIMEOUT_MS} ms`)), DESCRIBE_TIMEOUT_MS);

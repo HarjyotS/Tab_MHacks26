@@ -381,3 +381,46 @@ describe("Joe's review on #41", () => {
     await expect(retry.get("https://img/f")).resolves.toMatch(/^data:image\/png;base64,/); // a failure isn't kept
   });
 });
+
+describe("photos are screened on the device first (§19)", () => {
+  it("never sends a photo with no money in its text or caption to Grok", async () => {
+    const w = world({ screen: { selfie: "" }, describe: { selfie: MEME_SEEN } });
+    const describe = vi.spyOn(w.ctx.extract, "describe");
+    const receipt = vi.spyOn(w.ctx.extract, "receipt");
+    const seen = contextJev(w, {});
+    const m = await w.photo("Priya", "selfie");
+    expect(describe).not.toHaveBeenCalled();
+    expect(receipt).not.toHaveBeenCalled();
+    expect(m).toMatchObject({ status: "done", intent: "ignore" });
+    expect(seen[0]!.message.photo).toMatchObject({ kind: "photo", money_related: false });
+    expect(w.transcript.filter((l) => l.startsWith("Tab"))).toEqual([]);
+  });
+
+  it("a meme's own words don't get it through, but a receipt's prices do", async () => {
+    const w = world({
+      screen: { meme: "ONE DOES NOT SIMPLY SKIP BRUNCH", bistro: "THE BISTRO\nBURGER DELUXE $14.99\nTOTAL $42.07" },
+      receipt: { bistro: BISTRO },
+      describe: { meme: MEME_SEEN, bistro: RECEIPT_SEEN },
+    });
+    const describe = vi.spyOn(w.ctx.extract, "describe");
+    await w.photo("Priya", "meme");
+    expect(describe).not.toHaveBeenCalled();
+    await w.photo("Joe", "bistro");
+    expect(describe).toHaveBeenCalledTimes(1);
+    expect(w.db.expenses()[0]).toMatchObject({ description: "THE BISTRO", status: "proposed" });
+  });
+
+  it("a caption about money lets a plain photo through", async () => {
+    const w = world({ screen: { pizza: "" }, describe: { pizza: described("photo", "Two pizzas on a table.") } });
+    const describe = vi.spyOn(w.ctx.extract, "describe");
+    await w.photo("Joe", "pizza", "dinner was 60, i got it");
+    expect(describe).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed: a photo whose text couldn't be read stays away from Grok unless the caption is about money", async () => {
+    const w = world({ screen: {}, describe: { gone: RECEIPT_SEEN } });
+    const describe = vi.spyOn(w.ctx.extract, "describe");
+    await w.photo("Joe", "gone");
+    expect(describe).not.toHaveBeenCalled();
+  });
+});

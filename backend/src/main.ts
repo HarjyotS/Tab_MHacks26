@@ -77,6 +77,14 @@ const ctx: BrainCtx = {
     // Every photo in an enabled chat, before the gate (§7.4, §19).
     // Shares its download with the receipt read (Joe's review on #41).
     describe: async (url, caption) => describeImage(xai, grok.model, await images.get(url), caption),
+    // §19: the photo's text, read on the Tab Mac by the bridge (GET .txt
+    // next to the .jpg). Grok sees a photo only if this or the caption could
+    // be about money.
+    screen: async (url) => {
+      const res = await fetch(url.replace(/\.jpg(?=$|\?)/, ".txt"), { signal: AbortSignal.timeout(6_000) });
+      if (!res.ok) throw new Error(`photo text: HTTP ${res.status}`);
+      return res.text();
+    },
   },
   wit: (w) => witLine(xai, grok.model, w),
   eyes: process.env.TAB_EYES !== "off",

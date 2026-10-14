@@ -132,6 +132,10 @@ export type Extractors = {
   answer: (input: ExtractInput, threads: OpenThread[]) => Promise<AnswerResolution>;
   // What a photo shows, before the gate (§7.4). Absent: photos go undescribed.
   describe?: (image_url: string, caption?: string) => Promise<PhotoNote>;
+  // §19: the text in a photo, read on the Tab Mac (the bridge's .txt next
+  // to each image), so a photo that can't be about money never reaches
+  // Grok. main.ts always sets it; only older tests run without it.
+  screen?: (image_url: string) => Promise<string>;
 };
 
 export type AskAgent = {

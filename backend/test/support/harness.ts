@@ -83,6 +83,9 @@ export type Script = {
   // image_url → raw image description { kind, description, transcription,
   // money_related }. Missing: the photo goes undescribed, as when it's gone.
   describe?: Record<string, object>;
+  // image_url → the text read on the Mac (§19 screening). Without this map
+  // the older photo tests run unscreened; a URL missing from it fails to read.
+  screen?: Record<string, string>;
 };
 
 // A raw answer resolution with everything null except what's given.
@@ -152,6 +155,15 @@ export function world(
         if (!out) throw missing("describe", url);
         return describeImage(grok(out), "m", url, caption);
       },
+      ...(script.screen
+        ? {
+            screen: async (url: string) => {
+              const text = script.screen?.[url];
+              if (text === undefined) throw missing("screen", url);
+              return text;
+            },
+          }
+        : {}),
     },
     timing: timing({ DEMO_MODE: "true" }),
     // The older settle tests cover the simulated flow; payment-link tests set "links".
