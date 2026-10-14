@@ -1,0 +1,11 @@
+Edit image 1 (the restaurant photo). Keep everything else exactly the same: same camera angle and framing, same lighting, same restaurant, same food, and every other person unchanged, especially the man in the plain light-blue hoodie at the far side center, whose face and hoodie must not change.
+
+Reference images: image 1 is the photo to edit. Image 2 is the baby costume, image 3 is the wizard costume, image 4 is the CEO costume. Images 5 and 6 are the real man's face, front and side. Ignore the plain studio backgrounds of images 2 to 4.
+
+Make only these four changes:
+1. The baby in the white high chair (far side, just to the right of the man in the light-blue hoodie): replace the infant with the same grown adult man as everyone else at the table, full adult size, with the face from images 5 and 6. He wears an oversized frilly white baby bonnet, a plain white bib over a yellow onesie, a pacifier on a clip, and holds a sippy cup, exactly like image 2. He sits in a giant oversized wooden high chair, taller than the dining chairs, so he sits higher than everyone else. He is a grown man, not a child.
+2. The astronaut: make his spacesuit plain white. Remove the flag patch on his arm and the chest patch with writing. No flags, no patches, no badges, no text on the suit.
+3. The wizard in round glasses at the near left: change his scarf and robe trim to plum-purple and mustard-yellow stripes like image 3 (no red, no maroon, no gold). Plain black robe, no crest.
+4. The CEO in the navy suit, seated left of the man in the hoodie: put dark sunglasses on him, and have him press a phone to each ear, like image 4.
+
+No text, no lettering, no logos anywhere. Photorealistic, same cinematic film look, natural hands with five fingers.
