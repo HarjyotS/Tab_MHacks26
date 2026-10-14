@@ -24,6 +24,13 @@ export type OutboxPurpose =
   | "dispute_followup"
   | "help_reply"
   | "tapback"
+  // §7.6 payment links: a DM with someone's link, the payee's "did it
+  // arrive?", and the one-time ask for a Venmo or Cash App handle.
+  | "payment_link"
+  | "payment_check"
+  | "handle_prompt"
+  // §19: confirms a STOP or a deletion. The only DM a person who texted STOP gets.
+  | "opt_out"
   | "other";
 
 export type MessageStatus = "new" | "processing" | "done" | "error";
@@ -95,6 +102,16 @@ export type EnqueueOutbox = {
   expense_id?: string;
   purpose: OutboxPurpose;
   send_after: Date;
+};
+
+export type PaymentProvider = "venmo" | "cashapp" | "other";
+
+export type RecordPayment = {
+  transfer_id: string;
+  expense_id: string;
+  from_phone: string;
+  message_id: string; // the report (from the person who owed) or the payee's word
+  provider: PaymentProvider;
 };
 
 export type CreateTransfer = {

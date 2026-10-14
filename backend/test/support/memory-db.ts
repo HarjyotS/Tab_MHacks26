@@ -13,6 +13,7 @@ import type {
   Member,
   Message,
   Outbox,
+  Person,
   Share,
   Store,
   Transfer,
@@ -38,6 +39,8 @@ export class MemoryDb implements Store {
   ledgerSecrets = new Map<string, string>();
   // group_settings: groups that chose a settle mode (no row means ledger).
   settings = new Map<string, SettleMode>();
+  // people: STOPs and payment handles, by phone (§19).
+  ppl = new Map<string, Person>();
   constructor(private now: () => Date) {}
 
   // ── Store (backend_messages only shows new and processing rows) ────────
@@ -54,6 +57,7 @@ export class MemoryDb implements Store {
   shares = (id: string) =>
     [...this.shrs.values()].filter((s) => s.expense_id === id);
   transfers = () => [...this.trs.values()];
+  person = (phone: string) => this.ppl.get(phone);
   lineItems = (id: string) =>
     [...this.items.values()]
       .filter((i) => i.expense_id === id)
@@ -127,6 +131,12 @@ export class MemoryDb implements Store {
   }
 
   // ── The module's reducers ──────────────────────────────────────────────
+  private settleIfAllPaid(expense_id: string) {
+    const e = this.exps.get(expense_id);
+    const live = this.shares(expense_id).filter((s) => s.role === "participant" && s.status !== "opted_out");
+    if (e?.status === "finalized" && live.every((s) => s.status === "paid")) e.status = "settled";
+  }
+
   private recompute(expense_id: string) {
     const e = this.exps.get(expense_id)!;
     if (["finalized", "settled", "void"].includes(e.status))
@@ -185,7 +195,7 @@ export class MemoryDb implements Store {
       g.onboarding_status = a.status as Group["onboarding_status"];
     },
     upsertExpense: async (a: Args<"upsertExpense">) => {
-      if (a.totalCents < 0n || (a.totalCents === 0n && a.status !== "needs_info")) {
+      if (a.totalCents < 0n || (a.totalCents === 0n && a.status !== "needs_info" && a.status !== "void")) {
         throw new Error("Expense total must be positive unless more information is needed");
       }
       const bySource = [...this.exps.values()].find(
@@ -244,6 +254,8 @@ export class MemoryDb implements Store {
       this.recompute(a.expenseId),
     enqueueOutbox: async (a: Args<"enqueueOutbox">) => {
       if (this.out.has(a.actionId)) return;
+      // The module skips DMs to anyone who texted STOP, except the confirmation.
+      if (a.kind === "dm" && a.toPhone && a.purpose !== "opt_out" && this.ppl.get(a.toPhone)?.opted_out) return;
       this.out.set(a.actionId, {
         action_id: a.actionId,
         kind: a.kind as Outbox["kind"],
@@ -300,10 +312,115 @@ export class MemoryDb implements Store {
         from_phone: a.fromPhone,
         to_phone: e.payer_phone,
         amount_cents: share.amount_cents,
+        provider: "spacetime_simulated",
         status: "pending",
         approved_by_message_id: a.approvedByMessageId,
         created_at: this.now(),
       });
+    },
+    // §7.6 payment links, in the module's order of checks.
+    recordPayment: async (a: Args<"recordPayment">) => {
+      if (!["venmo", "cashapp", "other"].includes(a.provider)) throw new Error(`Invalid payment provider: ${a.provider}`);
+      if ([...this.trs.values()].some((t) => t.approved_by_message_id === a.messageId && t.expense_id === a.expenseId)) return;
+      const e = this.exps.get(a.expenseId);
+      if (!e?.payer_phone) throw new Error("Expense has no payer");
+      if (e.status !== "finalized") throw new Error("Expense is not ready for settlement");
+      if (a.fromPhone === e.payer_phone) throw new Error("Payer does not pay themselves");
+      const message = this.msgs.get(a.messageId);
+      const byPayee = message?.sender_phone === e.payer_phone;
+      if (!message || (message.sender_phone !== a.fromPhone && !byPayee))
+        throw new Error("Only the two people involved can report a payment");
+      const share = this.shrs.get(`${a.expenseId}:${a.fromPhone}`);
+      if (share?.status === "paid") return;
+      if (!share || share.role !== "participant" || !(share.status === "locked" || (byPayee && share.status === "approved")))
+        throw new Error("Share is not payable");
+      const earlier = [...this.trs.values()].find((t) => byPayee && t.expense_id === a.expenseId && t.from_phone === a.fromPhone && t.status === "reported");
+      if (earlier) {
+        earlier.status = "done";
+        earlier.completed_at = this.now();
+        share.status = "paid";
+        this.settleIfAllPaid(a.expenseId);
+        return;
+      }
+      share.status = byPayee ? "paid" : "approved";
+      this.trs.set(a.transferId, {
+        transfer_id: a.transferId,
+        group_id: e.group_id,
+        expense_id: a.expenseId,
+        from_phone: a.fromPhone,
+        to_phone: e.payer_phone,
+        amount_cents: share.amount_cents,
+        provider: a.provider,
+        status: byPayee ? "done" : "reported",
+        approved_by_message_id: a.messageId,
+        created_at: this.now(),
+        completed_at: byPayee ? this.now() : undefined,
+      });
+      if (byPayee) this.settleIfAllPaid(a.expenseId);
+    },
+    confirmPayment: async (a: Args<"confirmPayment">) => {
+      const t = this.trs.get(a.transferId);
+      if (!t) throw new Error("Unknown transfer");
+      if (t.status === "done") return;
+      if (t.status !== "reported") throw new Error("Transfer is not waiting on confirmation");
+      if (this.msgs.get(a.messageId)?.sender_phone !== t.to_phone) throw new Error("Only the payee can confirm a payment");
+      const share = this.shrs.get(`${t.expense_id}:${t.from_phone}`);
+      if (!share || share.status !== "approved") throw new Error("Reported share is missing");
+      t.status = "done";
+      t.completed_at = this.now();
+      share.status = "paid";
+      this.settleIfAllPaid(t.expense_id);
+    },
+    rejectPayment: async (a: Args<"rejectPayment">) => {
+      const t = this.trs.get(a.transferId);
+      if (!t) throw new Error("Unknown transfer");
+      if (t.status !== "reported") throw new Error("Transfer is not waiting on confirmation");
+      if (this.msgs.get(a.messageId)?.sender_phone !== t.to_phone) throw new Error("Only the payee can say it never arrived");
+      t.status = "failed";
+      const share = this.shrs.get(`${t.expense_id}:${t.from_phone}`);
+      if (share?.status === "approved") share.status = "locked";
+    },
+    setOptOut: async (a: Args<"setOptOut">) => {
+      this.ppl.set(a.phone, { ...(this.ppl.get(a.phone) ?? { phone: a.phone }), opted_out: a.optedOut });
+    },
+    setPaymentHandle: async (a: Args<"setPaymentHandle">) => {
+      if (a.venmo !== undefined && !/^[A-Za-z0-9_-]{5,30}$/.test(a.venmo)) throw new Error("Invalid Venmo username");
+      if (a.cashtag !== undefined && !/^(?=.*[A-Za-z])[A-Za-z0-9_]{1,20}$/.test(a.cashtag)) throw new Error("Invalid $cashtag");
+      if (a.venmo === undefined && a.cashtag === undefined) throw new Error("No handle given");
+      const p = this.ppl.get(a.phone) ?? { phone: a.phone, opted_out: false };
+      this.ppl.set(a.phone, { ...p, venmo: a.venmo ?? p.venmo, cashtag: a.cashtag ?? p.cashtag });
+    },
+    // The module's forget_person: their number becomes a placeholder
+    // everywhere, their words and name go, only the opt-out stays.
+    forgetPerson: async (a: Args<"forgetPerson">) => {
+      const phone = a.phone;
+      const gone = `forgotten:${this.now().getTime()}`;
+      for (const m of this.msgs.values())
+        if (m.sender_phone === phone) Object.assign(m, { sender_phone: gone, text: undefined, image_url: undefined });
+      for (const o of this.out.values())
+        if (o.to_phone === phone)
+          Object.assign(o, { to_phone: gone, text: undefined, status: o.status === "queued" || o.status === "sending" ? "cancelled" : o.status });
+      for (const [id, m] of [...this.mems])
+        if (m.phone === phone) {
+          this.mems.delete(id);
+          this.mems.set(`${m.group_id}:${gone}`, { ...m, member_id: `${m.group_id}:${gone}`, phone: gone, name: undefined, left_at: m.left_at ?? this.now() });
+        }
+      for (const [id, s] of [...this.shrs])
+        if (s.phone === phone) {
+          this.shrs.delete(id);
+          this.shrs.set(`${s.expense_id}:${gone}`, { ...s, share_id: `${s.expense_id}:${gone}`, phone: gone });
+        }
+      for (const [id, c] of [...this.clms])
+        if (c.phone === phone) {
+          this.clms.delete(id);
+          this.clms.set(`${c.item_id}:${gone}`, { ...c, claim_id: `${c.item_id}:${gone}`, phone: gone });
+        }
+      for (const e of this.exps.values()) if (e.payer_phone === phone) e.payer_phone = gone;
+      for (const t of this.trs.values()) {
+        if (t.from_phone === phone) t.from_phone = gone;
+        if (t.to_phone === phone) t.to_phone = gone;
+      }
+      this.ppl.set(phone, { phone, opted_out: true });
     },
     setSettleMode: async (a: Args<"setSettleMode">) => {
       if (a.settleMode !== "ledger" && a.settleMode !== "per_expense")

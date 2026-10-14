@@ -1,7 +1,7 @@
 // Store backed by Kian's role-gated backend_* views (subscribed by main.ts).
 import type { Timestamp } from "spacetimedb";
 import { tables, type DbConnection } from "../module_bindings/index.js";
-import type { Claim, Expense, Group, LineItem, Member, Message, Outbox, Share, Store, Transfer } from "./types.js";
+import type { Claim, Expense, Group, LineItem, Member, Message, Outbox, Person, Share, Store, Transfer } from "./types.js";
 
 type Db = DbConnection["db"];
 type Row<K extends keyof Db> = Db[K] extends { iter(): Iterable<infer R> }
@@ -19,6 +19,7 @@ export const BACKEND_VIEWS = [
   tables.backendClaims,
   tables.backendShares,
   tables.backendTransfers,
+  tables.backendPeople,
 ];
 
 function cents(v: bigint): number {
@@ -127,10 +128,18 @@ const transfer = (r: Row<"backendTransfers">): Transfer => ({
   from_phone: r.fromPhone,
   to_phone: r.toPhone,
   amount_cents: cents(r.amountCents),
+  provider: r.provider,
   status: r.status as Transfer["status"],
   approved_by_message_id: r.approvedByMessageId,
   created_at: date(r.createdAt),
   completed_at: optDate(r.completedAt),
+});
+
+const person = (r: Row<"backendPeople">): Person => ({
+  phone: r.phone,
+  opted_out: r.optedOut,
+  venmo: r.venmo,
+  cashtag: r.cashtag,
 });
 
 const lineItem = (r: Row<"backendLineItems">): LineItem => ({
@@ -178,6 +187,10 @@ export function spacetimeStore(db: Db): Store {
         .map(share)
         .filter((s) => s.expense_id === id),
     transfers: () => [...db.backendTransfers.iter()].map(transfer),
+    person: (phone) => {
+      const row = [...db.backendPeople.iter()].find((r) => r.phone === phone);
+      return row ? person(row) : undefined;
+    },
     lineItems: (id) => [...db.backendLineItems.iter()].map(lineItem).filter((i) => i.expense_id === id).sort((a, b) => a.position - b.position),
     claims: (id) => [...db.backendClaims.iter()].map(claim).filter((c) => c.expense_id === id),
   };

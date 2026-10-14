@@ -37,14 +37,18 @@ import {
 import AddClaimReducer from "./add_claim_reducer";
 import CancelOutboxReducer from "./cancel_outbox_reducer";
 import ClaimModuleOwnerReducer from "./claim_module_owner_reducer";
+import ConfirmPaymentReducer from "./confirm_payment_reducer";
 import CreateTransferReducer from "./create_transfer_reducer";
 import EnqueueOutboxReducer from "./enqueue_outbox_reducer";
+import ForgetPersonReducer from "./forget_person_reducer";
 import GrantServiceRoleReducer from "./grant_service_role_reducer";
 import IngestMessageReducer from "./ingest_message_reducer";
 import MarkOutboxReducer from "./mark_outbox_reducer";
 import RecomputeExpenseReducer from "./recompute_expense_reducer";
 import RecordNessieMirrorReducer from "./record_nessie_mirror_reducer";
+import RecordPaymentReducer from "./record_payment_reducer";
 import RedeemLedgerAccessReducer from "./redeem_ledger_access_reducer";
+import RejectPaymentReducer from "./reject_payment_reducer";
 import RemoveClaimReducer from "./remove_claim_reducer";
 import ResolveDisputeReducer from "./resolve_dispute_reducer";
 import SeedCompletedTransferReducer from "./seed_completed_transfer_reducer";
@@ -56,6 +60,8 @@ import SetMemberNameReducer from "./set_member_name_reducer";
 import SetMessageResultReducer from "./set_message_result_reducer";
 import SetNessieBalanceReducer from "./set_nessie_balance_reducer";
 import SetNessieIdsReducer from "./set_nessie_ids_reducer";
+import SetOptOutReducer from "./set_opt_out_reducer";
+import SetPaymentHandleReducer from "./set_payment_handle_reducer";
 import SetSettleModeReducer from "./set_settle_mode_reducer";
 import SetShareReducer from "./set_share_reducer";
 import UpsertExpenseReducer from "./upsert_expense_reducer";
@@ -71,6 +77,7 @@ import BackendLineItemsRow from "./backend_line_items_table";
 import BackendMembersRow from "./backend_members_table";
 import BackendMessagesRow from "./backend_messages_table";
 import BackendOutboxRow from "./backend_outbox_table";
+import BackendPeopleRow from "./backend_people_table";
 import BackendSharesRow from "./backend_shares_table";
 import BackendTransfersRow from "./backend_transfers_table";
 import ClientOutboxRow from "./client_outbox_table";
@@ -145,6 +152,13 @@ const tablesSchema = __schema({
     constraints: [
     ],
   }, BackendOutboxRow),
+  backendPeople: __table({
+    name: 'backend_people',
+    indexes: [
+    ],
+    constraints: [
+    ],
+  }, BackendPeopleRow),
   backendShares: __table({
     name: 'backend_shares',
     indexes: [
@@ -243,14 +257,18 @@ const reducersSchema = __reducers(
   __reducerSchema("add_claim", AddClaimReducer),
   __reducerSchema("cancel_outbox", CancelOutboxReducer),
   __reducerSchema("claim_module_owner", ClaimModuleOwnerReducer),
+  __reducerSchema("confirm_payment", ConfirmPaymentReducer),
   __reducerSchema("create_transfer", CreateTransferReducer),
   __reducerSchema("enqueue_outbox", EnqueueOutboxReducer),
+  __reducerSchema("forget_person", ForgetPersonReducer),
   __reducerSchema("grant_service_role", GrantServiceRoleReducer),
   __reducerSchema("ingest_message", IngestMessageReducer),
   __reducerSchema("mark_outbox", MarkOutboxReducer),
   __reducerSchema("recompute_expense", RecomputeExpenseReducer),
   __reducerSchema("record_nessie_mirror", RecordNessieMirrorReducer),
+  __reducerSchema("record_payment", RecordPaymentReducer),
   __reducerSchema("redeem_ledger_access", RedeemLedgerAccessReducer),
+  __reducerSchema("reject_payment", RejectPaymentReducer),
   __reducerSchema("remove_claim", RemoveClaimReducer),
   __reducerSchema("resolve_dispute", ResolveDisputeReducer),
   __reducerSchema("seed_completed_transfer", SeedCompletedTransferReducer),
@@ -262,6 +280,8 @@ const reducersSchema = __reducers(
   __reducerSchema("set_message_result", SetMessageResultReducer),
   __reducerSchema("set_nessie_balance", SetNessieBalanceReducer),
   __reducerSchema("set_nessie_ids", SetNessieIdsReducer),
+  __reducerSchema("set_opt_out", SetOptOutReducer),
+  __reducerSchema("set_payment_handle", SetPaymentHandleReducer),
   __reducerSchema("set_settle_mode", SetSettleModeReducer),
   __reducerSchema("set_share", SetShareReducer),
   __reducerSchema("upsert_expense", UpsertExpenseReducer),
@@ -289,6 +309,8 @@ type __SchemaWithTableAccessorAliases = Omit<typeof tablesSchema.schemaType, "ta
     readonly "backend_messages": Omit<typeof tablesSchema.schemaType.tables["backendMessages"], "accessorName"> & { readonly accessorName: "backend_messages" };
     /** @deprecated Use `backendOutbox` instead. This alias will be removed in the next major version. */
     readonly "backend_outbox": Omit<typeof tablesSchema.schemaType.tables["backendOutbox"], "accessorName"> & { readonly accessorName: "backend_outbox" };
+    /** @deprecated Use `backendPeople` instead. This alias will be removed in the next major version. */
+    readonly "backend_people": Omit<typeof tablesSchema.schemaType.tables["backendPeople"], "accessorName"> & { readonly accessorName: "backend_people" };
     /** @deprecated Use `backendShares` instead. This alias will be removed in the next major version. */
     readonly "backend_shares": Omit<typeof tablesSchema.schemaType.tables["backendShares"], "accessorName"> & { readonly accessorName: "backend_shares" };
     /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
@@ -341,6 +363,7 @@ const tableAccessorAliases = {
   "backend_members": "backendMembers",
   "backend_messages": "backendMessages",
   "backend_outbox": "backendOutbox",
+  "backend_people": "backendPeople",
   "backend_shares": "backendShares",
   "backend_transfers": "backendTransfers",
   "client_outbox": "clientOutbox",
@@ -390,6 +413,8 @@ export type DbView = __DbViewBase & {
   readonly "backend_messages": __DbViewBase["backendMessages"];
   /** @deprecated Use `backendOutbox` instead. This alias will be removed in the next major version. */
   readonly "backend_outbox": __DbViewBase["backendOutbox"];
+  /** @deprecated Use `backendPeople` instead. This alias will be removed in the next major version. */
+  readonly "backend_people": __DbViewBase["backendPeople"];
   /** @deprecated Use `backendShares` instead. This alias will be removed in the next major version. */
   readonly "backend_shares": __DbViewBase["backendShares"];
   /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */
@@ -436,6 +461,8 @@ export type Tables = __TablesBase & {
   readonly "backend_messages": __TablesBase["backendMessages"];
   /** @deprecated Use `backendOutbox` instead. This alias will be removed in the next major version. */
   readonly "backend_outbox": __TablesBase["backendOutbox"];
+  /** @deprecated Use `backendPeople` instead. This alias will be removed in the next major version. */
+  readonly "backend_people": __TablesBase["backendPeople"];
   /** @deprecated Use `backendShares` instead. This alias will be removed in the next major version. */
   readonly "backend_shares": __TablesBase["backendShares"];
   /** @deprecated Use `backendTransfers` instead. This alias will be removed in the next major version. */

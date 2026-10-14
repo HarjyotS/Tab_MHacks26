@@ -9,6 +9,7 @@ import type {
   EnqueueOutbox,
   GroupStatus,
   LineItemInput,
+  RecordPayment,
   SetMessageResult,
   SettleMode,
   SetShare,
@@ -35,6 +36,12 @@ export type ReducerClient = Pick<
   | "setSettleMode"
   | "resolveDispute"
   | "setLedgerSecret"
+  | "recordPayment"
+  | "confirmPayment"
+  | "rejectPayment"
+  | "setOptOut"
+  | "setPaymentHandle"
+  | "forgetPerson"
 >;
 
 export class ReducerError extends Error {
@@ -251,6 +258,42 @@ export function createReducers(r: ReducerClient) {
       call("set_ledger_secret", { group_id: a.group_id }, () =>
         r.setLedgerSecret({ groupId: a.group_id, secret: a.secret }),
       ),
+
+    // §7.6 payment links: people pay each other in their own apps. A report
+    // from the person who owed waits on the payee; the payee's word settles it.
+    record_payment: (a: RecordPayment) =>
+      call("record_payment", { transfer_id: a.transfer_id, expense_id: a.expense_id }, () =>
+        r.recordPayment({
+          transferId: a.transfer_id,
+          expenseId: a.expense_id,
+          fromPhone: a.from_phone,
+          messageId: a.message_id,
+          provider: a.provider,
+        }),
+      ),
+
+    confirm_payment: (a: { transfer_id: string; message_id: string }) =>
+      call("confirm_payment", { transfer_id: a.transfer_id }, () =>
+        r.confirmPayment({ transferId: a.transfer_id, messageId: a.message_id }),
+      ),
+
+    reject_payment: (a: { transfer_id: string; message_id: string }) =>
+      call("reject_payment", { transfer_id: a.transfer_id }, () =>
+        r.rejectPayment({ transferId: a.transfer_id, messageId: a.message_id }),
+      ),
+
+    // §19: STOP (true) and START (false). Phones stay out of error context.
+    set_opt_out: (a: { phone: string; opted_out: boolean }) =>
+      call("set_opt_out", {}, () => r.setOptOut({ phone: a.phone, optedOut: a.opted_out })),
+
+    set_payment_handle: (a: { phone: string; venmo?: string; cashtag?: string }) =>
+      call("set_payment_handle", {}, () =>
+        r.setPaymentHandle({ phone: a.phone, venmo: a.venmo, cashtag: a.cashtag }),
+      ),
+
+    // §19 "delete my data", once the person confirms.
+    forget_person: (a: { phone: string }) =>
+      call("forget_person", {}, () => r.forgetPerson({ phone: a.phone })),
   };
 }
 

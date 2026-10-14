@@ -205,6 +205,20 @@ const group_settings = table(
   { group_id: t.string().primaryKey(), settle_mode: t.string(), updated_at: t.timestamp() }
 );
 
+// One row per person, across groups (SPEC 19): whether they texted STOP, and
+// the Venmo username or Cash App $cashtag their payment links point to.
+// forget_person keeps only the opt-out, so Tab never texts that number again.
+const people = table(
+  {},
+  {
+    phone: t.string().primaryKey(),
+    opted_out: t.bool(),
+    venmo: t.option(t.string()),
+    cashtag: t.option(t.string()),
+    updated_at: t.timestamp(),
+  }
+);
+
 const service_roles = table(
   {},
   { identity: t.identity().primaryKey(), role: t.string(), created_at: t.timestamp() }
@@ -304,6 +318,7 @@ const spacetime = schema({
   transfers,
   transfer_completion_schedule,
   group_settings,
+  people,
   service_roles,
   module_config,
   ledger_secrets,
@@ -478,7 +493,8 @@ export const upsert_expense = spacetime.reducer(
     requireRole(ctx, 'backend', 'seeder');
     requireValue(input.split_mode, ['even', 'custom', 'itemized'], 'split mode');
     requireValue(input.status, ['needs_info', 'proposed', 'itemizing', 'finalized', 'settled', 'void'], 'expense status');
-    if (input.total_cents < 0n || (input.total_cents === 0n && input.status !== 'needs_info')) {
+    // A $0 total is fine while details are missing, and when such an expense is dropped.
+    if (input.total_cents < 0n || (input.total_cents === 0n && input.status !== 'needs_info' && input.status !== 'void')) {
       throw new Error('Expense total must be positive unless more information is needed');
     }
     const bySource = ctx.db.expenses.source_message_id.find(input.source_message_id);
@@ -618,6 +634,9 @@ export const enqueue_outbox = spacetime.reducer(
   (ctx, input) => {
     requireRole(ctx, 'backend', 'seeder');
     if (ctx.db.outbox.action_id.find(input.action_id)) return;
+    // Someone who texted STOP gets no more DMs (SPEC 19), except the one
+    // that confirms it. Skipped quietly, so no flow fails over it.
+    if (input.kind === 'dm' && input.to_phone && input.purpose !== 'opt_out' && optedOut(ctx, input.to_phone)) return;
     ctx.db.outbox.insert({
       action_id: input.action_id, kind: input.kind, group_id: input.group_id,
       to_phone: input.to_phone, target_message_id: input.target_message_id,
@@ -670,6 +689,200 @@ export const create_transfer = spacetime.reducer(
       scheduled_at: ScheduleAt.time(ctx.timestamp.microsSinceUnixEpoch + delay),
       transfer_id: input.transfer_id,
     });
+  }
+);
+
+// ── Payment links (SPEC 7.6): people pay each other in their own apps ──────
+// Tab never moves money here. The person paying says it's sent (a 👍 on
+// their link, or "sent it"), and the person being paid confirms it arrived.
+// A transfer is `reported` until then, and `done` once they do.
+
+const PAYMENT_PROVIDERS = ['venmo', 'cashapp', 'other'] as const;
+
+function settleIfAllPaid(ctx: any, expenseId: string): void {
+  const allPaid = [...ctx.db.shares.by_expense.filter(expenseId)]
+    .filter((row: any) => row.role === 'participant' && row.status !== 'opted_out')
+    .every((row: any) => row.status === 'paid');
+  const expense = ctx.db.expenses.expense_id.find(expenseId);
+  if (allPaid && expense && expense.status === 'finalized') ctx.db.expenses.expense_id.update({ ...expense, status: 'settled' });
+}
+
+/**
+ * Records a payment someone made outside Tab, for one share. From the person
+ * who owes, it waits for the payee's confirmation (`reported`); from the
+ * payee ("jake paid me"), it's confirmed already (`done`). The module dedupes
+ * on (message, expense), like create_transfer.
+ */
+export const record_payment = spacetime.reducer(
+  { transfer_id: t.string(), expense_id: t.string(), from_phone: t.string(), message_id: t.string(), provider: t.string() },
+  (ctx, input) => {
+    requireRole(ctx, 'backend');
+    requireValue(input.provider, PAYMENT_PROVIDERS, 'payment provider');
+    if (ctx.db.transfers.by_approval_expense.filter([input.message_id, input.expense_id]).next().value) return;
+    const expense = ctx.db.expenses.expense_id.find(input.expense_id);
+    if (!expense || !expense.payer_phone) throw new Error('Expense has no payer');
+    if (expense.status !== 'finalized') throw new Error('Expense is not ready for settlement');
+    if (input.from_phone === expense.payer_phone) throw new Error('Payer does not pay themselves');
+    const message = ctx.db.messages.message_id.find(input.message_id);
+    const byPayee = message?.sender_phone === expense.payer_phone;
+    if (!message || (message.sender_phone !== input.from_phone && !byPayee)) throw new Error('Only the two people involved can report a payment');
+    const share = ctx.db.shares.share_id.find(`${input.expense_id}:${input.from_phone}`);
+    if (share?.status === 'paid') return; // already settled; a repeat of the message
+    if (!share || share.role !== 'participant' || !(share.status === 'locked' || (byPayee && share.status === 'approved'))) {
+      throw new Error('Share is not payable');
+    }
+    // The payee's word settles any earlier unconfirmed report of the same share.
+    for (const earlier of [...ctx.db.transfers.by_expense.filter(input.expense_id)]) {
+      if (byPayee && earlier.from_phone === input.from_phone && earlier.status === 'reported') {
+        ctx.db.transfers.transfer_id.update({ ...earlier, status: 'done', completed_at: ctx.timestamp });
+        ctx.db.shares.share_id.update({ ...share, status: 'paid', updated_at: ctx.timestamp });
+        settleIfAllPaid(ctx, input.expense_id);
+        return;
+      }
+    }
+    ctx.db.shares.share_id.update({ ...share, status: byPayee ? 'paid' : 'approved', updated_at: ctx.timestamp });
+    ctx.db.transfers.insert({
+      transfer_id: input.transfer_id, group_id: expense.group_id, expense_id: input.expense_id,
+      from_phone: input.from_phone, to_phone: expense.payer_phone, amount_cents: share.amount_cents,
+      provider: input.provider, status: byPayee ? 'done' : 'reported', approved_by_message_id: input.message_id,
+      created_at: ctx.timestamp, completed_at: byPayee ? ctx.timestamp : undefined, error: undefined,
+    });
+    if (byPayee) settleIfAllPaid(ctx, input.expense_id);
+  }
+);
+
+/** The payee says a reported payment arrived (a 👍, or "got it"). Only the payee can. */
+export const confirm_payment = spacetime.reducer(
+  { transfer_id: t.string(), message_id: t.string() },
+  (ctx, { transfer_id, message_id }) => {
+    requireRole(ctx, 'backend');
+    const transfer = ctx.db.transfers.transfer_id.find(transfer_id);
+    if (!transfer) throw new Error('Unknown transfer');
+    if (transfer.status === 'done') return;
+    if (transfer.status !== 'reported') throw new Error('Transfer is not waiting on confirmation');
+    if (ctx.db.messages.message_id.find(message_id)?.sender_phone !== transfer.to_phone) throw new Error('Only the payee can confirm a payment');
+    const share = ctx.db.shares.share_id.find(`${transfer.expense_id}:${transfer.from_phone}`);
+    if (!share || share.status !== 'approved') throw new Error('Reported share is missing');
+    ctx.db.transfers.transfer_id.update({ ...transfer, status: 'done', completed_at: ctx.timestamp, error: undefined });
+    ctx.db.shares.share_id.update({ ...share, status: 'paid', updated_at: ctx.timestamp });
+    settleIfAllPaid(ctx, transfer.expense_id);
+  }
+);
+
+/** The payee says a reported payment didn't arrive: the share is owed again. */
+export const reject_payment = spacetime.reducer(
+  { transfer_id: t.string(), message_id: t.string() },
+  (ctx, { transfer_id, message_id }) => {
+    requireRole(ctx, 'backend');
+    const transfer = ctx.db.transfers.transfer_id.find(transfer_id);
+    if (!transfer) throw new Error('Unknown transfer');
+    if (transfer.status !== 'reported') throw new Error('Transfer is not waiting on confirmation');
+    if (ctx.db.messages.message_id.find(message_id)?.sender_phone !== transfer.to_phone) throw new Error('Only the payee can say it never arrived');
+    const share = ctx.db.shares.share_id.find(`${transfer.expense_id}:${transfer.from_phone}`);
+    ctx.db.transfers.transfer_id.update({ ...transfer, status: 'failed', error: 'payee did not see it' });
+    if (share && share.status === 'approved') ctx.db.shares.share_id.update({ ...share, status: 'locked', updated_at: ctx.timestamp });
+  }
+);
+
+// ── People: STOP, payment handles, and deleting someone's data (SPEC 19) ───
+
+function optedOut(ctx: any, phone: string): boolean {
+  return ctx.db.people.phone.find(phone)?.opted_out ?? false;
+}
+
+function upsertPerson(ctx: any, phone: string, change: { opted_out?: boolean; venmo?: string; cashtag?: string; clear_handles?: boolean }): void {
+  const existing = ctx.db.people.phone.find(phone);
+  const row = {
+    phone,
+    opted_out: change.opted_out ?? existing?.opted_out ?? false,
+    venmo: change.clear_handles ? undefined : change.venmo ?? existing?.venmo,
+    cashtag: change.clear_handles ? undefined : change.cashtag ?? existing?.cashtag,
+    updated_at: ctx.timestamp,
+  };
+  if (existing) ctx.db.people.phone.update(row);
+  else ctx.db.people.insert(row);
+}
+
+/** STOP (true) or START (false), from the person themselves. */
+export const set_opt_out = spacetime.reducer(
+  { phone: t.string(), opted_out: t.bool() },
+  (ctx, { phone, opted_out }) => {
+    requireRole(ctx, 'backend');
+    upsertPerson(ctx, phone, { opted_out });
+  }
+);
+
+// Venmo usernames: 5 to 30 letters, numbers, hyphens, underscores. Cash App
+// $cashtags (stored without the $): up to 20, with at least one letter.
+const VENMO_USERNAME = /^[A-Za-z0-9_-]{5,30}$/;
+const CASHTAG = /^(?=.*[A-Za-z])[A-Za-z0-9_]{1,20}$/;
+
+export const set_payment_handle = spacetime.reducer(
+  { phone: t.string(), venmo: t.option(t.string()), cashtag: t.option(t.string()) },
+  (ctx, { phone, venmo, cashtag }) => {
+    requireRole(ctx, 'backend');
+    if (venmo !== undefined && !VENMO_USERNAME.test(venmo)) throw new Error('Invalid Venmo username');
+    if (cashtag !== undefined && !CASHTAG.test(cashtag)) throw new Error('Invalid $cashtag');
+    if (venmo === undefined && cashtag === undefined) throw new Error('No handle given');
+    upsertPerson(ctx, phone, { venmo, cashtag });
+  }
+);
+
+/**
+ * "delete my data" (SPEC 19), confirmed by the person. Their words, photos,
+ * name, and payment handles are deleted, and their number is replaced
+ * everywhere by a placeholder, so the group's amounts still add up but no
+ * longer point to them. They're marked as having left each group, so they're
+ * in no new splits. Only the opt-out stays, keyed by the number, so Tab never
+ * texts them again unless they text START.
+ */
+export const forget_person = spacetime.reducer(
+  { phone: t.string() },
+  (ctx, { phone }) => {
+    requireRole(ctx, 'backend');
+    const gone = `forgotten:${ctx.timestamp.microsSinceUnixEpoch}`;
+    for (const m of [...ctx.db.messages]) {
+      if (m.sender_phone === phone) ctx.db.messages.message_id.update({ ...m, sender_phone: gone, text: undefined, image_url: undefined });
+    }
+    for (const o of [...ctx.db.outbox]) {
+      if (o.to_phone !== phone) continue;
+      const pending = o.status === 'queued' || o.status === 'sending';
+      ctx.db.outbox.action_id.update({ ...o, to_phone: gone, text: undefined, status: pending ? 'cancelled' : o.status });
+    }
+    for (const member of [...ctx.db.members]) {
+      if (member.phone !== phone) continue;
+      ctx.db.members.delete(member);
+      const seeded = ctx.db.nessie_seed_progress.member_id.find(member.member_id);
+      if (seeded) ctx.db.nessie_seed_progress.delete(seeded);
+      const balance = ctx.db.nessie_balances.member_id.find(member.member_id);
+      if (balance) ctx.db.nessie_balances.delete(balance);
+      ctx.db.members.insert({
+        ...member, member_id: `${member.group_id}:${gone}`, phone: gone, name: undefined,
+        nessie_customer_id: undefined, nessie_account_id: undefined, left_at: member.left_at ?? ctx.timestamp,
+      });
+    }
+    for (const share of [...ctx.db.shares]) {
+      if (share.phone !== phone) continue;
+      ctx.db.shares.delete(share);
+      ctx.db.shares.insert({ ...share, share_id: `${share.expense_id}:${gone}`, phone: gone });
+    }
+    for (const claim of [...ctx.db.claims]) {
+      if (claim.phone !== phone) continue;
+      ctx.db.claims.delete(claim);
+      ctx.db.claims.insert({ ...claim, claim_id: `${claim.item_id}:${gone}`, phone: gone });
+    }
+    for (const expense of [...ctx.db.expenses]) {
+      if (expense.payer_phone === phone) ctx.db.expenses.expense_id.update({ ...expense, payer_phone: gone });
+    }
+    for (const transfer of [...ctx.db.transfers]) {
+      if (transfer.from_phone !== phone && transfer.to_phone !== phone) continue;
+      ctx.db.transfers.transfer_id.update({
+        ...transfer,
+        from_phone: transfer.from_phone === phone ? gone : transfer.from_phone,
+        to_phone: transfer.to_phone === phone ? gone : transfer.to_phone,
+      });
+    }
+    upsertPerson(ctx, phone, { opted_out: true, clear_handles: true });
   }
 );
 
@@ -955,6 +1168,12 @@ export const backend_claims = spacetime.view(
 export const backend_shares = spacetime.view(
   { name: 'backend_shares', public: true }, t.array(shares.rowType), ctx =>
     canReadBackendViews(ctx) ? [...ctx.db.shares] : []
+);
+
+/** STOPs and payment handles (SPEC 19), keyed by phone. */
+export const backend_people = spacetime.view(
+  { name: 'backend_people', public: true }, t.array(people.rowType), ctx =>
+    canReadBackendViews(ctx) ? [...ctx.db.people] : []
 );
 
 export const backend_transfers = spacetime.view(

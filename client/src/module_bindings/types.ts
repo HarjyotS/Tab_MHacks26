@@ -51,6 +51,9 @@ export type BackendMessages = __Infer<typeof BackendMessages>;
 export const BackendOutbox = __t.object("BackendOutbox", {});
 export type BackendOutbox = __Infer<typeof BackendOutbox>;
 
+export const BackendPeople = __t.object("BackendPeople", {});
+export type BackendPeople = __Infer<typeof BackendPeople>;
+
 export const BackendShares = __t.object("BackendShares", {});
 export type BackendShares = __Infer<typeof BackendShares>;
 
@@ -371,6 +374,15 @@ export const Outbox = __t.object("Outbox", {
   error: __t.option(__t.string()),
 });
 export type Outbox = __Infer<typeof Outbox>;
+
+export const People = __t.object("People", {
+  phone: __t.string(),
+  optedOut: __t.bool(),
+  venmo: __t.option(__t.string()),
+  cashtag: __t.option(__t.string()),
+  updatedAt: __t.timestamp(),
+});
+export type People = __Infer<typeof People>;
 
 export const SeederMember = __t.object("SeederMember", {
   memberId: __t.string(),
