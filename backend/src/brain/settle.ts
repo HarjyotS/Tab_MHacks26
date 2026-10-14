@@ -512,8 +512,9 @@ export async function announceSettlements(ctx: BrainCtx) {
   for (const [key, ts] of byApproval) {
     const approval = key.split("\n")[0]!;
     const simulated = ts.every((t) => (t.provider ?? "spacetime_simulated") === "spacetime_simulated");
-    // A simulated 👍 is always the payer's own, so one receipt per approval.
-    const id = simulated ? `payment_receipt:${approval}` : `payment_receipt:${approval}:${ts[0]!.from_phone}`;
+    // A simulated 👍 is always the payer's own, so one receipt per approval;
+    // "|" keeps the person apart from the approval (history.ts reads it).
+    const id = simulated ? `payment_receipt:${approval}` : `payment_receipt:${approval}|${ts[0]!.from_phone}`;
     const said = messages.get(approval);
     if (!said || (simulated && said.kind !== "reaction") || sent.has(id) || ts.some((t) => t.status !== "done")) continue;
     const e = ctx.store.expense(ts[0]!.expense_id);
@@ -611,7 +612,8 @@ export async function approvalFollowups(ctx: BrainCtx) {
     const group_id = request.group_id!;
     const expenses = requestExpenses(ctx, request.action_id).filter((e) => e.status === "finalized");
     const byPerson = new Map<string, { e: Expense; s: Share }[]>();
-    for (const e of expenses)
+    // Nobody is reminded about a debt to someone who deleted their data.
+    for (const e of expenses.filter((x) => !x.payer_phone?.startsWith("forgotten:")))
       for (const s of owing(ctx, e)) byPerson.set(s.phone, [...(byPerson.get(s.phone) ?? []), { e, s }]);
     for (const [phone, owed] of byPerson) {
       // The module skips DMs to someone who texted STOP, so the step would

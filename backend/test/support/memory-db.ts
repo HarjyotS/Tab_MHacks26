@@ -259,8 +259,9 @@ export class MemoryDb implements Store {
       this.recompute(a.expenseId),
     enqueueOutbox: async (a: Args<"enqueueOutbox">) => {
       if (this.out.has(a.actionId)) return;
-      // The module skips DMs to anyone who texted STOP, except the confirmation.
-      if (a.kind === "dm" && a.toPhone && a.purpose !== "opt_out" && this.ppl.get(a.toPhone)?.opted_out) return;
+      // The module keeps a DM to anyone who texted STOP as a cancelled row
+      // without its text, except the confirmation.
+      const skipped = a.kind === "dm" && !!a.toPhone && a.purpose !== "opt_out" && this.ppl.get(a.toPhone)?.opted_out === true;
       this.out.set(a.actionId, {
         action_id: a.actionId,
         kind: a.kind as Outbox["kind"],
@@ -272,8 +273,9 @@ export class MemoryDb implements Store {
         expense_id: a.expenseId,
         purpose: a.purpose as Outbox["purpose"],
         send_after: d(a.sendAfter),
-        status: "queued",
+        status: skipped ? "cancelled" : "queued",
         created_at: this.now(),
+        ...(skipped ? { text: undefined } : {}),
       });
     },
     cancelOutbox: async (a: Args<"cancelOutbox">) => {
@@ -402,8 +404,13 @@ export class MemoryDb implements Store {
       const gone = `forgotten:${this.now().getTime()}`;
       const swap = (x: string) => x.split(phone).join(gone);
       const p = this.ppl.get(phone);
-      const handles = [p?.venmo, p?.cashtag].filter((h): h is string => Boolean(h));
-      const mentions = (text?: string) => text !== undefined && (text.includes(phone) || handles.some((h) => text.includes(h)));
+      const escape = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const handle = [
+        p?.venmo ? `(?:venmo\\.com/|@)${escape(p.venmo)}(?![A-Za-z0-9_-])` : "",
+        p?.cashtag ? `(?:cash\\.app/)?\\$${escape(p.cashtag)}(?![A-Za-z0-9_])` : "",
+      ].filter(Boolean).join("|");
+      const handleRe = handle ? new RegExp(handle, "i") : undefined;
+      const mentions = (text?: string) => text !== undefined && (text.includes(phone) || (handleRe?.test(text) ?? false));
       for (const [id, m] of [...this.msgs]) {
         const theirs = m.sender_phone === phone;
         if (!theirs && !id.includes(phone)) continue;
@@ -414,15 +421,14 @@ export class MemoryDb implements Store {
         });
       }
       for (const [id, o] of [...this.out]) {
-        const toThem = o.to_phone === phone;
-        const quotes = mentions(o.text);
-        if (!toThem && !quotes && !id.includes(phone)) continue;
+        const about = o.to_phone === phone || id.includes(phone) || mentions(o.text);
+        if (!about) continue;
         const pending = o.status === "queued" || o.status === "sending";
         this.out.delete(id);
         this.out.set(swap(id), {
-          ...o, action_id: swap(id), to_phone: toThem ? gone : o.to_phone,
-          text: toThem || quotes ? undefined : o.text,
-          status: (toThem || quotes) && pending ? "cancelled" : o.status,
+          ...o, action_id: swap(id), to_phone: o.to_phone === phone ? gone : o.to_phone,
+          text: undefined,
+          status: pending ? "cancelled" : o.status,
         });
       }
       for (const [id, m] of [...this.mems])

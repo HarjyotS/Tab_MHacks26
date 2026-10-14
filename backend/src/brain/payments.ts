@@ -33,14 +33,17 @@ type Owe = { group_id: string; debtor: string; payee: string; items: { e: Expens
 const lockedShares = (ctx: BrainCtx, e: Expense) =>
   ctx.store.shares(e.expense_id).filter((s) => s.role === "participant" && s.status === "locked" && s.amount_cents > 0);
 
-export function owes(ctx: BrainCtx, expenses: Expense[]): Owe[] {
+// Someone who had their data deleted can't be paid or reminded (§19), so
+// their debts are left out unless a caller only needs to count them.
+const forgotten = (phone: string) => phone.startsWith("forgotten:");
+
+export function owes(ctx: BrainCtx, expenses: Expense[], opts: { includeForgotten?: boolean } = {}): Owe[] {
   const out = new Map<string, Owe>();
   for (const e of expenses) {
     if (e.status !== "finalized" || !e.payer_phone) continue;
-    // Someone who had their data deleted can't be paid or reminded (§19).
-    if (e.payer_phone.startsWith("forgotten:")) continue;
+    if (!opts.includeForgotten && forgotten(e.payer_phone)) continue;
     for (const s of lockedShares(ctx, e)) {
-      if (s.phone.startsWith("forgotten:")) continue;
+      if (!opts.includeForgotten && forgotten(s.phone)) continue;
       const key = `${s.phone}>${e.payer_phone}`;
       const o = out.get(key) ?? { group_id: e.group_id, debtor: s.phone, payee: e.payer_phone, items: [], cents: 0 };
       o.items.push({ e, s });
@@ -65,6 +68,14 @@ function linksFor(ctx: BrainCtx, payee: string, cents: number, label: string): T
     venmo: p?.venmo ? venmoLink(p.venmo, cents, label) : undefined,
     cashapp: p?.cashtag ? cashAppLink(p.cashtag, cents) : undefined,
   };
+}
+
+// A transfer id per message, expense, and person who paid, without their
+// number (ids show up in the web ledger's data): their place among the
+// expense's participants. The module dedupes on (message, expense, person).
+function transferId(ctx: BrainCtx, m: Message, e: Expense, debtor: string): string {
+  const phones = ctx.store.shares(e.expense_id).filter((s) => s.role === "participant").map((s) => s.phone).sort();
+  return `tr_${m.message_id}_${e.expense_id}_${phones.indexOf(debtor)}`;
 }
 
 const hasHandle = (ctx: BrainCtx, phone: string) => Boolean(ctx.store.person(phone)?.venmo || ctx.store.person(phone)?.cashtag);
@@ -119,54 +130,56 @@ function lastDm(ctx: BrainCtx, phone: string): Outbox | undefined {
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
 }
 
-// "@joe-smith", "$joesmith", or "venmo is joe-smith" with the handle ending
-// the sentence. After Tab asked, any of those; otherwise only with "my
-// venmo/cash app" (never someone else's handle in "venmo'd @priya 20", and
-// never "my venmo is acting up, ill pay later": review).
+// Only an explicit "@joe-smith" (Venmo) or "$joesmith" (Cash App), which is
+// what Tab's question asks for. Plain words never are: "my venmo is frozen"
+// would send everyone a link to a stranger (review). After Tab asked (or
+// confirmed one), the token alone; otherwise only with "my venmo / cash app",
+// never someone else's handle in "venmo'd @priya 20".
 const AT_HANDLE = /(?:^|[\s:(])@([A-Za-z0-9_-]{5,30})(?![A-Za-z0-9_-])/;
 const CASHTAG = /(?:^|[\s:(])\$([A-Za-z0-9_]{1,20})(?![A-Za-z0-9_.])/;
-const SAID = /\b(venmo|cash\s?app|cashtag)(?:\s+(?:username|handle|name|tag|id))?\s*(?:is|:|=|-)\s*[@$]?([A-Za-z0-9_-]+)(?=[\s.!]*$|\s*,|\s+and\b)/i;
 const MINE = /\bmy\s+(?:venmo|cash\s?app|cashtag)\b/i;
-const FILLER = new Set(["username", "handle", "name", "please", "works", "both", "being", "acting", "down", "broken", "not", "still", "the", "my", "here", "there"]);
-const VENMO_OK = /^[A-Za-z0-9_-]{5,30}$/;
-const CASHTAG_OK = /^(?=.*[A-Za-z])[A-Za-z0-9_]{1,20}$/;
+const ABOUT_HANDLES = /\b(?:venmo|cash\s?app|cashtag|handle|username)\b/i;
 
 export function parseHandle(text: string, prompted: boolean): { venmo?: string; cashtag?: string } | undefined {
   const t = text.trim();
   if (!prompted && !MINE.test(t)) return undefined;
-  let venmo: string | undefined;
-  let cashtag: string | undefined;
-  const said = t.match(SAID);
-  if (said && !FILLER.has(said[2]!.toLowerCase())) {
-    if (/venmo/i.test(said[1]!)) venmo = said[2];
-    else cashtag = said[2];
-  }
-  venmo ??= t.match(AT_HANDLE)?.[1];
-  cashtag ??= t.match(CASHTAG)?.[1];
+  const venmo = t.match(AT_HANDLE)?.[1];
+  const cashtag = t.match(CASHTAG)?.[1];
   const out = {
-    ...(venmo && VENMO_OK.test(venmo) && !FILLER.has(venmo.toLowerCase()) ? { venmo } : {}),
-    ...(cashtag && CASHTAG_OK.test(cashtag) && !FILLER.has(cashtag.toLowerCase()) ? { cashtag } : {}),
+    ...(venmo ? { venmo } : {}),
+    ...(cashtag && /[A-Za-z]/.test(cashtag) ? { cashtag } : {}),
   };
   return out.venmo || out.cashtag ? out : undefined;
 }
 
-// A payee's handle: saved, then the links that were waiting on it go out.
+// A payee's handle: saved and said back, then everyone still owing them
+// gets a link that uses it, unless their latest link already does (links
+// that went out without one, or with a handle since corrected).
 async function saveHandle(ctx: BrainCtx, m: Message, handle: { venmo?: string; cashtag?: string }) {
-  await ctx.db.set_payment_handle({ phone: m.sender_phone, ...handle });
-  await say(ctx, { chat: { dm_phone: m.sender_phone }, purpose: "other", id: `handle_saved:${m.message_id}`, text: T.handleSaved(handle) });
-  // Only the links that went out without one (not a changed handle's).
-  const waiting = ctx.store
-    .outbox()
-    .filter((o) => o.purpose === "payment_link" && o.action_id.startsWith("payment_link:") && !o.action_id.endsWith("|handle") && !o.text?.includes("https://") && parseLinkRow(o)?.payee === m.sender_phone);
-  for (const row of waiting) {
-    const { debtor, payee, request_id } = parseLinkRow(row)!;
+  const payee = m.sender_phone;
+  await ctx.db.set_payment_handle({ phone: payee, ...handle });
+  // Same purpose as the question, so "wrong? just text the right one" works.
+  await say(ctx, { chat: { dm_phone: payee }, purpose: "handle_prompt", id: `handle_saved:${m.message_id}`, text: T.handleSaved(handle) });
+  const now = ctx.store.person(payee);
+  const quotes = (text?: string) =>
+    Boolean(text && ((now?.venmo && text.includes(`venmo.com/${now.venmo}`)) || (now?.cashtag && text.includes(`cash.app/$${now.cashtag}`))));
+  const latest = new Map<string, Outbox>();
+  for (const o of ctx.store.outbox().filter((x) => (x.purpose === "payment_link" || x.purpose === "approval_followup") && x.status !== "cancelled")) {
+    const row = parseLinkRow(o);
+    if (!row || row.payee !== payee) continue;
+    const key = linkId(row.debtor, row.payee, row.request_id);
+    if (!latest.has(key) || latest.get(key)!.created_at <= o.created_at) latest.set(key, o);
+  }
+  for (const [key, row] of latest) {
+    if (quotes(row.text)) continue;
+    const { debtor, request_id } = parseLinkRow(row)!;
     const o = stillOwed(ctx, debtor, payee, request_id);
     if (!o) continue;
     const label = labelFor(ctx, o.items);
     await say(ctx, {
       chat: { dm_phone: debtor },
       purpose: "payment_link",
-      id: `${row.action_id}|handle`,
+      id: `${key}|handle:${m.message_id}`,
       text: T.handleArrived({ payee: person(ctx, o.group_id, payee), amount_cents: o.cents, label, links: linksFor(ctx, payee, o.cents, label) }),
     });
   }
@@ -178,7 +191,7 @@ function stillOwed(ctx: BrainCtx, debtor: string, payee: string, request_id: str
   const inRequest = ctx.store.expenses().filter((e) => e.settle_message_id === request_id);
   const pick = (expenses: Expense[]) => owes(ctx, expenses).find((o) => o.debtor === debtor && o.payee === payee);
   const group_id = inRequest[0]?.group_id;
-  return pick(inRequest) ?? (group_id ? pick(ctx.store.expenses().filter((e) => e.group_id === group_id)) : undefined);
+  return pick(inRequest) ?? pick(group_id ? ctx.store.expenses().filter((e) => e.group_id === group_id) : ctx.store.expenses());
 }
 
 // ── Saying it's paid, and confirming it arrived ──────────────────────────
@@ -197,7 +210,7 @@ function providerFor(ctx: BrainCtx, payee: string, text?: string): PaymentProvid
 async function report(ctx: BrainCtx, m: Message, o: Owe) {
   const provider = providerFor(ctx, o.payee, m.text);
   for (const { e } of o.items)
-    await ctx.db.record_payment({ transfer_id: `tr_${m.message_id}_${e.expense_id}_${o.debtor}`, expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider });
+    await ctx.db.record_payment({ transfer_id: transferId(ctx, m, e, o.debtor), expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider });
   const label = labelFor(ctx, o.items);
   const payee = person(ctx, o.group_id, o.payee);
   if (m.kind === "reaction") await say(ctx, { chat: { dm_phone: o.debtor }, purpose: "other", id: `reported:${m.message_id}`, text: T.paymentReported(payee) });
@@ -269,9 +282,15 @@ export async function handlePaymentDm(ctx: BrainCtx, m: Message): Promise<boolea
   if (m.group_id || m.kind !== "text" || !linksMode(ctx)) return false;
   const text = (m.text ?? "").trim();
   const last = lastDm(ctx, m.sender_phone);
-  const handle = parseHandle(text, last?.purpose === "handle_prompt");
+  const prompted = last?.purpose === "handle_prompt";
+  const handle = parseHandle(text, prompted);
   if (handle) {
     await saveHandle(ctx, m, handle);
+    return true;
+  }
+  // "venmo is joesmith" after Tab asked: one nudge toward the @ form.
+  if (prompted && ABOUT_HANDLES.test(text) && !last!.action_id.startsWith("handle_format:")) {
+    await say(ctx, { chat: { dm_phone: m.sender_phone }, purpose: "handle_prompt", id: `handle_format:${m.message_id}`, reply_to: m.message_id, text: T.handleFormat() });
     return true;
   }
   const asked = last && reportOf(last);
@@ -308,28 +327,43 @@ export async function reportFromText(ctx: BrainCtx, m: Message): Promise<void> {
     const name = person(ctx, o.group_id, phone).name;
     return Boolean(name && new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text));
   };
-  // From the payee: "priya paid me", confirmed as it's said.
-  const owedToMe = [...all, ...reportedTo(ctx, m.sender_phone, groups)].filter((o) => o.payee === m.sender_phone);
-  // Same check as the payer's report: "priya paid me back 25 for the concert
-  // tickets" isn't her $10 pizza share (review).
-  const fromWhom = owedToMe.filter((o) => named(o, o.debtor) && !aboutSomethingElse(text, o));
+  // From the payee: "priya paid me", confirmed as it's said. Everything a
+  // person owes them counts together (locked or already reported), and once
+  // the message names someone who owes them it's the payee speaking: a
+  // mismatch never falls through to the payee's own debts (review).
+  const owedToMe = new Map<string, Owe>();
+  for (const o of [...all, ...reportedTo(ctx, m.sender_phone, groups)].filter((x) => x.payee === m.sender_phone)) {
+    const sum = owedToMe.get(o.debtor) ?? { ...o, items: [], cents: 0 };
+    sum.items.push(...o.items);
+    sum.cents += o.cents;
+    owedToMe.set(o.debtor, sum);
+  }
+  const fromWhom = [...owedToMe.values()].filter((o) => named(o, o.debtor));
   if (fromWhom.length > 0) {
-    for (const o of fromWhom)
+    // "priya paid me back 25 for the concert tickets" isn't her $10 pizza share.
+    const ours = fromWhom.filter((o) => !aboutSomethingElse(text, o));
+    for (const o of ours)
       for (const { e } of o.items)
-        await ctx.db.record_payment({ transfer_id: `tr_${m.message_id}_${e.expense_id}_${o.debtor}`, expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider: providerFor(ctx, o.payee, text) });
-    await tapback(ctx, m, "like");
+        await ctx.db.record_payment({ transfer_id: transferId(ctx, m, e, o.debtor), expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider: providerFor(ctx, o.payee, text) });
+    if (ours.length > 0) await tapback(ctx, m, "like");
+    else ctx.log("payment_not_ours", { message_id: m.message_id, group_id: m.group_id });
     return;
   }
-  const mine = all.filter((o) => o.debtor === m.sender_phone);
+  // From the person who owed. Debts to someone who deleted their data count
+  // toward "which one?" but are never acted on.
+  const mine = groups
+    .flatMap((g) => owes(ctx, ctx.store.expenses().filter((e) => e.group_id === g), { includeForgotten: true }))
+    .filter((o) => o.debtor === m.sender_phone);
   const toWhom = mine.filter((o) => named(o, o.payee));
   const target = toWhom.length === 1 ? toWhom[0] : mine.length === 1 ? mine[0] : undefined;
   // Only when it's for what they owe: another amount, or something else
   // ("venmo'd you 20 for the cleats" while they owe $17.40 for groceries),
   // is a payment Tab doesn't track (noise eval).
-  if (target && !aboutSomethingElse(text, target)) return report(ctx, m, target);
+  if (target && !forgotten(target.payee) && !aboutSomethingElse(text, target)) return report(ctx, m, target);
   if (target) return ctx.log("payment_not_ours", { message_id: m.message_id, group_id: target.group_id });
-  if (toWhom.length > 1 || mine.length > 1) {
-    const who = (toWhom.length > 1 ? toWhom : mine).map((o) => person(ctx, o.group_id, o.payee));
+  const options = (toWhom.length > 1 ? toWhom : mine).filter((o) => !forgotten(o.payee));
+  if (options.length > 1) {
+    const who = options.map((o) => person(ctx, o.group_id, o.payee));
     await say(ctx, { chat: m.group_id ? { group_id: m.group_id } : { dm_phone: m.sender_phone }, purpose: "clarifying_question", id: `which_payee:${m.message_id}`, reply_to: m.message_id, text: T.whichPayee(who) });
   }
 }

@@ -68,9 +68,10 @@ describe("STOP and START (§19)", () => {
     expect(w.db.expenses()).toHaveLength(1);
     expect(w.db.outbox().filter((o) => o.target_message_id === hers.message_id)).toEqual([]);
 
-    // The module refuses DMs to her, whatever asks for one.
+    // The module never queues a DM to her, whatever asks for one: it's kept
+    // as cancelled, without its text, so nothing asks again.
     await w.ctx.db.enqueue_outbox({ action_id: "probe", kind: "dm", to_phone: PEOPLE.Priya, text: "hi", purpose: "other", send_after: w.ctx.now() });
-    expect(w.db.out.has("probe")).toBe(false);
+    expect(w.db.out.get("probe")).toMatchObject({ status: "cancelled", text: undefined });
 
     await w.dm("Priya", "start");
     expect(w.db.person(PEOPLE.Priya)?.opted_out).toBe(false);
@@ -171,21 +172,21 @@ describe("payment links (§7.6): Tab never moves money", () => {
     const w = world(script);
     w.ctx.payments = "links";
     const { request } = await settled(w);
-    const prompts = dmsTo(w, "Joe").filter((o) => o.purpose === "handle_prompt");
+    const prompts = dmsTo(w, "Joe").filter((o) => o.action_id.startsWith("handle_prompt:"));
     expect(prompts).toHaveLength(1);
     expect(prompts[0]!.text).toMatch(/what's your venmo or cash app\? like @your-name or \$yourname$/);
     expect(linkFor(w, "Kian", "Joe", request).text).toMatch(/^you owe Joe \$10\.00 for pizza\nasked Joe for their venmo/);
 
     await w.dm("Joe", "$joecash");
     expect(w.db.person(PEOPLE.Joe)).toMatchObject({ cashtag: "joecash" });
-    const late = w.db.out.get(`payment_link:${PEOPLE.Kian}:${PEOPLE.Joe}|${request}|handle`)!;
+    const late = w.db.outbox().find((o) => o.action_id.startsWith(`payment_link:${PEOPLE.Kian}:${PEOPLE.Joe}|${request}|handle:`))!;
     expect(late.text).toBe("here's Joe's link for the $10.00 (pizza)\ncash app: https://cash.app/$joecash/10.00\ntap 👍 here once it's sent");
 
     // A second settle-up doesn't ask again.
     await w.say("Priya", "got groceries, $60");
     await w.wait(31_000);
     await w.say("Kian", "let's settle up");
-    expect(dmsTo(w, "Joe").filter((o) => o.purpose === "handle_prompt")).toHaveLength(1);
+    expect(dmsTo(w, "Joe").filter((o) => o.action_id.startsWith("handle_prompt:"))).toHaveLength(1);
   });
 
   it('"sent" by text reports it; the payee\'s "nope" puts it back on the tab', async () => {
@@ -259,14 +260,14 @@ describe("handles and links", () => {
   it("reads a handle only after Tab asked, or when it's plainly theirs", () => {
     expect(parseHandle("@joe-smith", true)).toEqual({ venmo: "joe-smith" });
     expect(parseHandle("$joecash", true)).toEqual({ cashtag: "joecash" });
-    expect(parseHandle("venmo is Joe_Smith-1 and cash app $joe1", true)).toEqual({ venmo: "Joe_Smith-1", cashtag: "joe1" });
-    // Ordinary words are never handles (review).
-    expect(parseHandle("my venmo username is joe-smith", false)).toEqual({ venmo: "joe-smith" });
+    expect(parseHandle("venmo is @Joe_Smith-1 and cash app $joe1", true)).toEqual({ venmo: "Joe_Smith-1", cashtag: "joe1" });
     expect(parseHandle("my venmo handle is @joe-smith", false)).toEqual({ venmo: "joe-smith" });
+    // Only @name or $name: ordinary words are never handles (review).
+    expect(parseHandle("my venmo is joe-smith", false)).toBeUndefined();
+    expect(parseHandle("sorry my venmo is frozen, ill pay later", false)).toBeUndefined();
+    expect(parseHandle("venmo is easiest", true)).toBeUndefined();
+    expect(parseHandle("cash app is fine", true)).toBeUndefined();
     expect(parseHandle("venmo please", true)).toBeUndefined();
-    expect(parseHandle("venmo or cash app both work", true)).toBeUndefined();
-    expect(parseHandle("my venmo is acting up, ill pay later", false)).toBeUndefined();
-    expect(parseHandle("my venmo is joe-smith", false)).toEqual({ venmo: "joe-smith" });
     expect(parseHandle("venmo'd @priya-k 20", false)).toBeUndefined();
     expect(parseHandle("nevermind", true)).toBeUndefined();
     expect(parseHandle("$20 lol", true)).toBeUndefined();

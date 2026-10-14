@@ -660,6 +660,8 @@ export function handleSaved(h: { venmo?: string; cashtag?: string }): string {
   return `got it, i'll send people your ${what}\nwrong? just text the right one`;
 }
 
+export const handleFormat = () => 'send it like @your-name for venmo or $yourname for cash app';
+
 export const whichCheck = () => "a couple payments are waiting on you, tap 👍 or 👎 on the one you mean";
 
 export function handleArrived(a: { payee: Person; amount_cents: number; label: string; links: PayLinks }): string {

@@ -635,15 +635,17 @@ export const enqueue_outbox = spacetime.reducer(
     requireRole(ctx, 'backend', 'seeder');
     if (ctx.db.outbox.action_id.find(input.action_id)) return;
     // Someone who texted STOP gets no more DMs (SPEC 19), except the one
-    // that confirms it. Skipped quietly, so no flow fails over it.
-    if (input.kind === 'dm' && input.to_phone && input.purpose !== 'opt_out' && optedOut(ctx, input.to_phone)) return;
+    // that confirms it. The row is kept as cancelled, without its text, so
+    // the backend sees it was handled and never asks again.
+    const skipped = input.kind === 'dm' && !!input.to_phone && input.purpose !== 'opt_out' && optedOut(ctx, input.to_phone);
     ctx.db.outbox.insert({
       action_id: input.action_id, kind: input.kind, group_id: input.group_id,
       to_phone: input.to_phone, target_message_id: input.target_message_id,
-      text: input.text, reaction: input.reaction, expense_id: input.expense_id,
+      text: skipped ? undefined : input.text, reaction: input.reaction, expense_id: input.expense_id,
       expense_key: input.expense_id ?? '', purpose: input.purpose, send_after: input.send_after,
       send_after_micros: input.send_after.microsSinceUnixEpoch,
-      status: 'queued', sent_photon_id: undefined, created_at: ctx.timestamp, sent_at: undefined, error: undefined,
+      status: skipped ? 'cancelled' : 'queued', sent_photon_id: undefined, created_at: ctx.timestamp, sent_at: undefined,
+      error: skipped ? 'opted_out' : undefined,
     });
   }
 );
@@ -847,9 +849,17 @@ export const forget_person = spacetime.reducer(
     requireRole(ctx, 'backend');
     const gone = `forgotten:${ctx.timestamp.microsSinceUnixEpoch}`;
     const swap = (s: string) => s.split(phone).join(gone);
-    const handles = [ctx.db.people.phone.find(phone)?.venmo, ctx.db.people.phone.find(phone)?.cashtag]
-      .filter((h): h is string => Boolean(h));
-    const mentions = (text: string | undefined) => text !== undefined && (text.includes(phone) || handles.some(h => text.includes(h)));
+    const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const venmo = ctx.db.people.phone.find(phone)?.venmo;
+    const cashtag = ctx.db.people.phone.find(phone)?.cashtag;
+    // Their handle only where it is one (a link, @name, $name), never a bare
+    // substring: a one-letter $cashtag would wipe unrelated messages (review).
+    const handle = [
+      venmo ? `(?:venmo\\.com/|@)${escape(venmo)}(?![A-Za-z0-9_-])` : '',
+      cashtag ? `(?:cash\\.app/)?\\$${escape(cashtag)}(?![A-Za-z0-9_])` : '',
+    ].filter(Boolean).join('|');
+    const handleRe = handle ? new RegExp(handle, 'i') : undefined;
+    const mentions = (text: string | undefined) => text !== undefined && (text.includes(phone) || (handleRe?.test(text) ?? false));
 
     // Their messages: words and photos go. Ids that carry the number (the
     // bridge's system events) get the placeholder too.
@@ -868,15 +878,19 @@ export const forget_person = spacetime.reducer(
     // Tab's messages: to them, about them (ids like payment_link:<phone>:...),
     // or quoting their payment handle (links sent to others). Anything still
     // waiting to go out is cancelled.
+    // Tab's messages to them, about them (ids like payment_link:<x>:<phone>,
+    // which also covers links quoting an older handle), or quoting their
+    // number or handle: their text goes, and any still waiting are cancelled
+    // (review: a reminder queued at 2am still named them at 9am).
     for (const o of [...ctx.db.outbox]) {
-      const toThem = o.to_phone === phone;
-      const quotes = mentions(o.text);
-      if (!toThem && !quotes && !o.action_id.includes(phone)) continue;
+      const about = o.to_phone === phone || o.action_id.includes(phone) || mentions(o.text);
+      const error = o.error?.includes(phone) ? undefined : o.error;
+      if (!about && error === o.error) continue;
       const pending = o.status === 'queued' || o.status === 'sending';
       const next = {
-        ...o, action_id: swap(o.action_id), to_phone: toThem ? gone : o.to_phone,
-        text: toThem || quotes ? undefined : o.text,
-        status: (toThem || quotes) && pending ? 'cancelled' : o.status,
+        ...o, action_id: swap(o.action_id), to_phone: o.to_phone === phone ? gone : o.to_phone,
+        text: about ? undefined : o.text, error,
+        status: about && pending ? 'cancelled' : o.status,
       };
       if (next.action_id !== o.action_id) {
         ctx.db.outbox.delete(o);

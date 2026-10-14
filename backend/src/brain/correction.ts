@@ -14,10 +14,14 @@ import { openThreads } from "./threads.js";
 // another purchase ("another uber home", "got gas too").
 const CORRECTION_SHAPE = /\b(?:was|is|were)\s+(?:actually\s+|really\s+|only\s+)?\$?\d|\bnot\s+\$?\d/i;
 const ANOTHER = /\b(another|again|too|also|second|more)\b/i;
-const STOPWORDS = new Set(["the", "for", "and", "with", "from", "that", "this", "some", "team", "everyone", "group", "house"]);
+const STOPWORDS = new Set([
+  "the", "for", "and", "with", "from", "that", "this", "some", "team", "everyone", "group", "house",
+  "was", "its", "our", "all", "one", "two", "new", "got", "had", "not", "but", "you", "her", "his", "who", "day", "way", "out",
+]);
 
+// Three letters count: gas, cab, bar, tip, pho (review: "the gas was 40 not 35" missed the gas).
 const descriptionWords = (description: string) =>
-  (description.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+  (description.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 3 && !STOPWORDS.has(w));
 
 // Overriding the gate takes more than the shape: with no "another", a new
 // purchase still reads "uber was $18, i got it" or "dinner was $80". Only a
@@ -105,15 +109,14 @@ export async function handleCorrection(
   // "tacos $120.00", and "the supplies were 76 not 87" changed a $112 order
   // that had borrowed the name). Only an inline reply to the expense
   // outranks the amount.
-  // A target the message names keeps priority over an unnamed one at the
-  // amount: "the uber was 18 not 15" with the uber at $16 asks which, rather
-  // than changing $15 snacks (review).
+  // It moves to the expense at that amount only when the message names it:
+  // "the tacos were 62 not 55" finds the $55 tacos, while "the uber was 18
+  // not 15" (uber $16, snacks $15) or "it was 38 not 42" asks which (review).
   const was = oldAmountCents(m.text ?? "");
   const replied = m.reply_to_id !== undefined && bound !== undefined;
   if (was !== undefined && !replied && target?.total_cents !== was) {
     const atAmount = expenseAt(ctx, m.group_id, was, m.text ?? "");
-    const named = target !== undefined && namesExpense(m.text ?? "", target.description);
-    target = atAmount && (!named || namesExpense(m.text ?? "", atAmount.description)) ? atAmount : undefined;
+    target = atAmount && namesExpense(m.text ?? "", atAmount.description) ? atAmount : undefined;
   }
   if (!target) {
     await tapback(ctx, m, "question");

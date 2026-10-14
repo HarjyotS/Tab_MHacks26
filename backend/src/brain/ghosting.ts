@@ -46,17 +46,17 @@ export async function staleExpenses(ctx: BrainCtx) {
     const problems = missing(e);
     if (problems.length === 0) return;
     const id = `reask:${e.expense_id}`;
-    // Dropped only after the re-ask, which says it will be.
-    if (alreadyQueued(ctx, id) && now.getTime() - e.created_at.getTime() >= d.NEEDS_INFO_DROP_AFTER) {
+    const source = ctx.store.messages().find((m) => m.message_id === e.source_message_id);
+    // Dropped only after the re-ask, which says it will be, or when there's
+    // nothing left to re-ask from (the sender deleted their data).
+    if ((alreadyQueued(ctx, id) || !source?.text) && now.getTime() - e.created_at.getTime() >= d.NEEDS_INFO_DROP_AFTER) {
       await ctx.db.cancel_outbox({ expense_id: e.expense_id });
       await ctx.db.upsert_expense({ ...e, status: "void" });
       ctx.log("needs_info_dropped", { expense_id: e.expense_id, group_id: e.group_id });
       return;
     }
     const timezone = ctx.store.group(e.group_id)?.timezone ?? "America/Detroit";
-    if (alreadyQueued(ctx, id) || now < reaskAt(ctx, e, timezone)) return;
-    const source = ctx.store.messages().find((m) => m.message_id === e.source_message_id);
-    if (!source?.text) return;
+    if (alreadyQueued(ctx, id) || now < reaskAt(ctx, e, timezone) || !source?.text) return;
     const people = activeMembers(ctx, e.group_id).map((m) => ({ phone: m.phone, name: m.name }));
     const question = T.clarifyingQuestion(problems[0]!, { description: e.description === "Expense" ? undefined : e.description, people });
     await say(ctx, {

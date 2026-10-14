@@ -73,8 +73,9 @@ try {
   });
   await dm(`${RUN}-blocked`, 'other');
   await dm(`${RUN}-confirm`, 'opt_out');
-  await waitFor('confirmation queued', () => Boolean(db.db.backendOutbox.actionId.find(`${RUN}-confirm`)));
-  check('a DM to someone who texted STOP is skipped', !db.db.backendOutbox.actionId.find(`${RUN}-blocked`));
+  await waitFor('both recorded', () => Boolean(db.db.backendOutbox.actionId.find(`${RUN}-confirm`) && db.db.backendOutbox.actionId.find(`${RUN}-blocked`)));
+  const blocked = db.db.backendOutbox.actionId.find(`${RUN}-blocked`);
+  check('a DM to someone who texted STOP is kept as cancelled, without its text', blocked?.status === 'cancelled' && blocked.text === undefined);
   check('the STOP confirmation still goes out', Boolean(db.db.backendOutbox.actionId.find(`${RUN}-confirm`)));
   await db.reducers.setOptOut({ phone: PRIYA, optedOut: false });
 

@@ -36,6 +36,7 @@ const script = {
   expense: {
     "new|got pizza, $40": raw(4000, "Pizza"),
     "new|got groceries, $60": raw(6000, "Groceries"),
+    "new|got groceries, $80": raw(8000, "Groceries"),
     "new|got uber, $16": raw(1600, "Uber"),
     "new|got snacks, $15": raw(1500, "Snacks"),
     "new|paid rent, $2400": raw(240000, "Rent"),
@@ -162,5 +163,132 @@ describe("review of the site-promises branch", () => {
     for (let i = 0; i < 5; i++) await w.wait(200_000);
     expect(enqueue.mock.calls.filter(([a]) => a.to_phone === PEOPLE.Joe)).toEqual([]);
     expect(GROUP).toBe("house");
+  });
+});
+
+describe("second review of the site-promises branch", () => {
+  it("'wrong? just text the right one' works, and debtors get the corrected link", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    await w.say("Joe", "got pizza, $40");
+    await w.wait(31_000);
+    await w.say("Kian", "let's settle up");
+    await w.dm("Joe", "@joe-smitty");
+    expect(link(w, "Priya", "Joe").text).toContain("venmo.com/joe-smitty");
+    expect(dmsTo(w, "Joe").at(-1)!.text).toBe("got it, i'll send people your venmo @joe-smitty\nwrong? just text the right one");
+    await w.dm("Joe", "@joe-smith");
+    expect(w.db.person(PEOPLE.Joe)!.venmo).toBe("joe-smith");
+    expect(link(w, "Priya", "Joe").text).toContain("venmo.com/joe-smith?");
+  });
+
+  it("after Tab asks, 'venmo is joesmith' gets one nudge toward @, and nothing is saved", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    await w.say("Joe", "got pizza, $40");
+    await w.wait(31_000);
+    await w.say("Kian", "let's settle up");
+    await w.dm("Joe", "venmo is easiest");
+    expect(w.db.person(PEOPLE.Joe)?.venmo).toBeUndefined();
+    expect(dmsTo(w, "Joe").at(-1)!.text).toBe("send it like @your-name for venmo or $yourname for cash app");
+  });
+
+  it('a payee\'s "kian paid me 20" with the wrong amount never reports the payee\'s own debt', async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const pizza = await w.say("Joe", "got pizza, $40");
+    const groceries = await w.say("Kian", "got groceries, $80");
+    await w.wait(31_000);
+    await w.say("Priya", "let's settle up");
+    gateSays(w, { "kian paid me 20": ["payment_reported", 0.95] });
+    await w.say("Joe", "kian paid me 20");
+    expect(share(w, `exp_${pizza.message_id}`, "Kian").status).toBe("locked");
+    expect(share(w, `exp_${groceries.message_id}`, "Joe").status).toBe("locked");
+    expect(w.db.transfers()).toEqual([]);
+  });
+
+  it("a debt to someone who deleted their data still makes 'just venmo'd kian' ambiguous", async () => {
+    const w = world(script);
+    await twoPayees(w);
+    await w.dm("Kian", "delete my data");
+    await w.dm("Kian", "DELETE");
+    gateSays(w, { "just venmo'd kian": ["payment_reported", 0.95] });
+    await w.say("Priya", "just venmo'd kian");
+    expect(w.db.transfers()).toEqual([]);
+  });
+
+  it("'the gas was 40 not 35' with snacks at $35 asks instead of changing the snacks", async () => {
+    const w = world({ expense: { "new|got gas, $38": raw(3800, "Gas"), "new|got snacks, $35": raw(3500, "Snacks") }, correction: {} });
+    const fix = "the gas was 40 not 35";
+    gateSays(w, { "got gas, $38": ["expense", 1], "got snacks, $35": ["expense", 1], [fix]: ["correction", 0.95] });
+    const gas = await w.say("Joe", "got gas, $38");
+    const snacks = await w.say("Kian", "got snacks, $35");
+    w.ctx.extract.correction = async () => ({ result: { target_expense_id: `exp_${gas.message_id}`, new_amount_cents: 4000, new_description: undefined, unclear: false }, problems: [] });
+    await w.say("Joe", fix);
+    expect(w.db.expense(`exp_${snacks.message_id}`)!.total_cents).toBe(3500);
+    expect(w.db.expense(`exp_${gas.message_id}`)!.total_cents).toBe(3800);
+  });
+
+  it("transfer ids never carry a phone number (the web ledger shows them)", async () => {
+    const w = world(script);
+    await twoPayees(w);
+    await w.react("Priya", link(w, "Priya", "Joe").action_id);
+    gateSays(w, { "jake paid me": ["payment_reported", 0.95] });
+    await w.say("Joe", "jake paid me");
+    expect(w.db.transfers().length).toBeGreaterThan(0);
+    for (const t of w.db.transfers()) expect(t.transfer_id).not.toMatch(/\+\d{6,}/);
+  });
+
+  it("a short cashtag doesn't wipe unrelated messages when someone deletes their data", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    // "it" is inside "split", which every proposal says.
+    await w.ctx.db.set_payment_handle({ phone: PEOPLE.Kian, cashtag: "it" });
+    await w.say("Joe", "got pizza, $40");
+    const proposal = w.db.outbox().find((o) => o.purpose === "split_proposal")!;
+    expect(proposal.text).toContain("split");
+    await w.dm("Kian", "delete my data");
+    await w.dm("Kian", "DELETE");
+    expect(w.db.out.get(proposal.action_id)!.text).toBe(proposal.text);
+  });
+
+  it("reminders queued before someone deletes their data are cancelled", async () => {
+    const w = world(script, new Date("2026-10-04T05:30:00Z")); // 1:30am in Detroit
+    w.ctx.timing = timing({});
+    w.ctx.payments = "links";
+    const groceries = await w.say("Kian", "got groceries, $60");
+    expect(groceries.status).toBe("done");
+    for (let i = 0; i < 7; i++) await w.wait(30 * 60_000); // past the objection window
+    await w.say("Joe", "let's settle up");
+    await w.wait(2 * 3_600_000 + 60_000); // the first reminder: due now, held for 9am
+    const queued = w.db.outbox().filter((o) => o.purpose === "approval_followup" && o.status === "queued");
+    expect(queued.length).toBeGreaterThan(0);
+    await w.dm("Kian", "delete my data");
+    await w.dm("Kian", "DELETE");
+    for (const o of queued) expect(w.db.outbox().find((x) => x.created_at.getTime() === o.created_at.getTime() && x.purpose === "approval_followup")!.status).toBe("cancelled");
+  });
+
+  it("a receipt for someone who texted STOP is recorded once, never retried", async () => {
+    const w = world(script);
+    await twoPayees(w);
+    await w.react("Priya", link(w, "Priya", "Joe").action_id);
+    await w.dm("Priya", "STOP");
+    await w.react("Joe", dmsTo(w, "Joe").filter((o) => o.purpose === "payment_check").at(-1)!.action_id);
+    const enqueue = vi.spyOn(w.ctx.db, "enqueue_outbox");
+    for (let i = 0; i < 5; i++) await w.wait(1000);
+    expect(enqueue.mock.calls.filter(([a]) => a.to_phone === PEOPLE.Priya).length).toBeLessThanOrEqual(1);
+  });
+
+  it("asking 'how much was that?' about a links-mode receipt finds that payment", async () => {
+    const w = world(script);
+    await twoPayees(w);
+    await w.react("Priya", link(w, "Priya", "Joe").action_id);
+    await w.react("Joe", dmsTo(w, "Joe").filter((o) => o.purpose === "payment_check").at(-1)!.action_id);
+    await w.wait(1000);
+    const receipt = dmsTo(w, "Priya").find((o) => o.purpose === "payment_receipt")!;
+    expect(receipt.action_id).toMatch(/^payment_receipt:[^|]+\|/);
+    const { referentExpense } = await import("../src/brain/history.js");
+    const question = w.db.ingest({ sender_phone: PEOPLE.Priya, text: "how much was that?", reply_to_id: receipt.sent_photon_id });
+    const e = referentExpense(w.ctx, question);
+    expect(e?.description).toBe("Pizza");
   });
 });
