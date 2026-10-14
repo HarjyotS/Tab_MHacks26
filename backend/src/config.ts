@@ -44,6 +44,11 @@ const BASE_DURATIONS = {
   // How long Tab waits for an answer to one of its questions. People type
   // at the same speed in a demo, so DEMO_MODE leaves this one unscaled.
   PENDING_QUESTION_TTL: 2 * HOUR,
+  // An expense still missing who paid or how much (ghosting): one more ask
+  // the next morning (at least this long after it was logged), then it's
+  // dropped once it's this old.
+  NEEDS_INFO_REASK_AFTER: 8 * HOUR,
+  NEEDS_INFO_DROP_AFTER: 72 * HOUR,
 };
 
 const UNSCALED: ReadonlySet<keyof typeof BASE_DURATIONS> = new Set(["PENDING_QUESTION_TTL"]);

@@ -223,7 +223,7 @@ describe("claims (finding 7)", () => {
 });
 
 describe("settling gaps in §7.6 (finding 8)", () => {
-  it("nudges people who haven't tapped 👍, in the group, until they do", async () => {
+  it("nudges people who haven't tapped 👍, privately by DM, until they do", async () => {
     const w = world(script);
     await w.ctx.db.set_settle_mode({ group_id: GROUP, settle_mode: "per_expense" });
     const id = await finalized(w);
@@ -233,13 +233,12 @@ describe("settling gaps in §7.6 (finding 8)", () => {
     expect(w.said("approval_followup").join("\n")).not.toContain("Kian");
     const priya = w.db
       .outbox()
-      .find(
-        (o) => o.purpose === "approval_followup" && /^(hey )?Priya\b/.test(o.text ?? ""),
-      )!;
-    expect(priya).toMatchObject({ kind: "group_message", group_id: GROUP });
+      .find((o) => o.purpose === "approval_followup" && o.to_phone === PEOPLE.Priya)!;
+    expect(priya).toMatchObject({ kind: "dm", group_id: undefined });
     expect(priya.text).toMatch(
-      /you owe Joe \$10\.00\nno rush, just tap 👍 on the settle msg when you can$/,
+      /you owe Joe \$10\.00\nno rush, just tap 👍 on the settle msg in the group when you can$/,
     );
+    expect(w.db.outbox().filter((o) => o.purpose === "approval_followup" && o.kind !== "dm")).toEqual([]);
     await w.wait(121_000);
     await w.wait(400_000);
     await w.wait(400_000);

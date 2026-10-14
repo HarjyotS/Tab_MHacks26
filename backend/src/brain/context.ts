@@ -56,7 +56,8 @@ export type Pending =
       // finalize_and_settle: "Still waiting on claims… settle now?"; the
       // expenses are the thread's expense_ids.
       // act: an unsure money intent (§6.4 clarify band), acted on on yes.
-      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act";
+      // correction: "change the dj to $200?", applied to expense_id on yes.
+      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act" | "correction";
       // then "expense": the gate was fairly sure (just under the act bar),
       // so the person who said it and says yes is taken as the payer.
       sender_paid?: boolean;
@@ -132,6 +133,10 @@ export type Extractors = {
   answer: (input: ExtractInput, threads: OpenThread[]) => Promise<AnswerResolution>;
   // What a photo shows, before the gate (§7.4). Absent: photos go undescribed.
   describe?: (image_url: string, caption?: string) => Promise<PhotoNote>;
+  // §19: the text in a photo, read on the Tab Mac (the bridge's .txt next
+  // to each image), so a photo that can't be about money never reaches
+  // Grok. main.ts always sets it; only older tests run without it.
+  screen?: (image_url: string) => Promise<string>;
 };
 
 export type AskAgent = {
@@ -158,6 +163,9 @@ export type BrainCtx = {
   // A short reason per balance for a long "@Tab breakdown"; null falls back to the full list.
   summarize?: (input: SummaryInput) => Promise<string[] | null>;
   timing: Timing;
+  // §7.6: "links" (the default) sends Venmo and Cash App links and the payee
+  // confirms; "simulated" is the hackathon flow (a 👍 runs a simulated transfer).
+  payments?: "links" | "simulated";
   ledger?: LedgerConfig; // §12.3 links; absent means Tab posts none
   memory: Memory;
   log: (event: string, fields: Record<string, unknown>) => void;
@@ -172,6 +180,11 @@ const GONE = (process.env.TAB_GONE ?? "").split(",").map((x) => x.trim()).filter
 
 export function activeMembers(ctx: BrainCtx, group_id: string) {
   return ctx.store.members(group_id).filter((m) => !m.left_at && !GONE.some((end) => m.phone.endsWith(end)));
+}
+
+// Who a new split may include: active members who haven't texted STOP (§19).
+export function splitMembers(ctx: BrainCtx, group_id: string) {
+  return activeMembers(ctx, group_id).filter((m) => !ctx.store.person(m.phone)?.opted_out);
 }
 
 // Names Tab keeps the way they were saved: the group's members, or in a DM,

@@ -416,7 +416,7 @@ describe("claims and finalizing (SPEC 7.5)", () => {
     ).toEqual([`${w.db.expenses()[0]!.expense_id}:2`]);
   });
 
-  it("nudges in the group by name, gives a last call with a dollar amount, then finalizes", async () => {
+  it("nudges privately by DM, gives a last call with a dollar amount, then finalizes", async () => {
     const w = world({ receipt: { frita: FRITA }, claim: claims });
     await w.photo("Joe", "frita");
     await w.say("Kian", "1");
@@ -426,15 +426,21 @@ describe("claims and finalizing (SPEC 7.5)", () => {
 
     await w.wait(21_000); // demo: 2h → 20s
     expect(nudges()).toHaveLength(1);
-    expect(nudges()[0]).toMatchObject({ kind: "group_message", group_id: "house" });
-    expect(nudges()[0]!.text).toMatch(/^Jake,? what('d you get| was yours) at frita batidos\? numbers.*"even"/);
+    // FAQ: "never in front of the group". Only Jake sees his nudges.
+    expect(nudges()[0]).toMatchObject({ kind: "dm", to_phone: PEOPLE.Jake });
+    expect(nudges()[0]!.text).toMatch(/^(hey, )?what('d you get| was yours) at frita batidos\? (the )?numbers from the list in the group.*"even"/);
 
     await w.wait(121_000); // +12h → +120s
-    expect(nudges()[1]!.text).toMatch(/^Jake,? (still|no rush, just) need yours for frita batidos.*numbers or "even"$/);
+    expect(nudges()[1]!.text).toMatch(/^(still|no rush, just) need yours for frita batidos.*numbers from the list or "even"$/);
 
     await w.wait(300_000); // 44h → 440s
-    expect(nudges()[2]!.text).toMatch(/^last call Jake: in \d+ seconds i'll put you down for \$\d+\.\d{2} for frita batidos/);
-    expect(w.db.outbox().filter((o) => o.kind === "dm")).toEqual([]); // no DMs at all
+    expect(nudges()[2]!.text).toMatch(/^last call on frita batidos: in \d+ seconds i'll put you down for \$\d+\.\d{2}/);
+    expect(nudges().every((o) => o.kind === "dm" && o.to_phone === PEOPLE.Jake)).toBe(true);
+    expect(w.db.outbox().filter((o) => o.kind === "group_message" && o.text?.includes("Jake"))).toEqual([]);
+
+    // He answers the nudge in the DM: that's his claim.
+    await w.dm("Jake", "even");
+    expect(w.db.shares(w.db.expenses()[0]!.expense_id).find((s) => s.phone === PEOPLE.Jake)).toMatchObject({ status: "locked", responded: true });
 
     await w.wait(41_000); // 48h → 480s: deadline
     expect(w.db.expenses()[0]!.status).toBe("finalized");

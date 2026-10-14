@@ -41,7 +41,12 @@ const SPLIT_MODE: Record<Expense["split_mode"], string> = {
   custom: "custom (fixed amounts for some people)",
   itemized: "itemized (people claimed receipt items)",
 };
-const TRANSFER_STATUS: Record<Transfer["status"], string> = { pending: "in progress", done: "paid", failed: "failed" };
+const TRANSFER_STATUS: Record<Transfer["status"], string> = {
+  pending: "in progress",
+  reported: "sent, waiting on the person being paid to confirm it arrived",
+  done: "paid",
+  failed: "failed",
+};
 
 // Expenses that count as spending: anything logged except a cancelled one
 // or one still missing details.

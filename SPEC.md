@@ -54,9 +54,9 @@ These settle most design arguments. A feature that breaks one needs a very good 
 | P2 | Never ask before you need the answer | Names are asked once at onboarding. Everything else (who was there, who had what) is asked only when a specific expense requires it. |
 | P3 | Never guess silently about money     | When unsure, Tab asks. One wrong balance destroys trust faster than any amount of friction.                                          |
 | P4 | Nobody waits on anybody              | One slow person never blocks anyone else. Every share has its own status, and nobody is asked to act twice.                          |
-| P5 | Nudges are friendly, in the group | Tab never shames anyone. Claim nudges go in the group chat by name ("Jake, what was yours at Frita Batidos?"); private receipts still go by DM. |
+| P5 | Nudges are friendly and private      | Tab never shames anyone, and never calls anyone out in front of the group (the site's FAQ promises it). Claim nudges, payment reminders, and payment links go by DM; the group only sees the proposal, the settle request, and "everyone's square". |
 | P6 | Numbers come from code               | Every dollar amount Tab sends is computed deterministically from the database. An LLM may phrase an answer (7.8 Questions), but every number in it must be one the lookup tools computed, and code checks that before it is sent. |
-| P7 | Money moves only with consent        | A transfer happens only after the person whose money moves taps 👍 on the settle request. Typed replies like "yes" never move money.  |
+| P7 | Tab never moves money                | People pay each other in their own apps through the links Tab sends (7.6). A share counts as paid only when the person being paid confirms it arrived. With `PAYMENTS=simulated` (the hackathon demo), a transfer happens only after the person whose money moves taps 👍 on the settle request, and typed replies never move money. |
 
 ---
 
@@ -295,12 +295,20 @@ table transfers {
   from_phone: string
   to_phone: string
   amount_cents: number
-  provider: "spacetime_simulated"
-  status: "pending" | "done" | "failed"
-  approved_by_message_id: string  // the tapback that approved it; one 👍 can approve several shares (unique per expense)
+  provider: "spacetime_simulated" | "venmo" | "cashapp" | "other"   // the last three: paid through a link (7.6)
+  status: "pending" | "reported" | "done" | "failed"   // reported: sent, waiting on the payee to confirm
+  approved_by_message_id: string  // the 👍 or text that approved or reported it; unique per expense
   created_at: Timestamp
   completed_at?: Timestamp
   error?: string
+}
+
+table people {                   // one row per person, across groups (19)
+  phone: string
+  opted_out: boolean            // texted STOP; no DMs, no new splits, until START
+  venmo?: string                // username their payment links point to
+  cashtag?: string              // Cash App $cashtag, without the $
+  updated_at: Timestamp
 }
 
 table group_settings {
@@ -333,7 +341,7 @@ type OutboxPurpose =
   | "item_list" | "claim_followup" | "group_mention" | "settle_request"
   | "approval_followup" | "payment_receipt" | "all_square" | "clarifying_question"
   | "balance_reply" | "breakdown_reply" | "dispute_followup" | "help_reply"
-  | "tapback" | "other"
+  | "tapback" | "payment_link" | "payment_check" | "handle_prompt" | "opt_out" | "other"
 ```
 
 The payer has a share too, with `role: "payer"`, representing what they themselves consumed. The payer's share never generates a transfer. An expense becomes `settled` when every share with `role: "participant"` and a status other than `opted_out` is `paid`.
@@ -379,6 +387,11 @@ Reducer names and the fields they set are **[CONTRACT]**. Argument order, helper
 | `set_settle_mode`                    | Backend                                 | Stores a group's settle mode (`ledger` or `per_expense`). Read it through the `backend_group_settings` view, which shows `ledger` for groups that never set one.        |
 | `resolve_dispute`                    | Backend                                 | Sets a `disputed` share on a finalized expense to a new amount and back to `locked`; the payer's share absorbs the difference so the total is unchanged (7.6).            |
 | `complete_simulated_transfer`        | SpacetimeDB scheduler                   | Marks the transfer done, pays its share, and settles the expense when every participant has paid.                                                                          |
+| `record_payment`                     | Backend                                 | A payment made through a link (7.6), for one share. From the person who owed: share `approved`, transfer `reported`. From the payee ("priya paid me"): share `paid`, transfer `done`. Idempotent per (message, expense). |
+| `confirm_payment` / `reject_payment` | Backend                                 | The payee says a reported payment arrived (`done`, share `paid`, expense `settled` when everyone has) or didn't (`failed`, share back to `locked`). Only the payee's own message counts. |
+| `set_opt_out`                        | Backend                                 | STOP (true) or START (false) for a phone (19). `enqueue_outbox` then skips DMs to that phone, except purpose `opt_out`. |
+| `set_payment_handle`                 | Backend                                 | Stores a Venmo username (5 to 30 letters, numbers, `-`, `_`) or $cashtag (up to 20, with a letter). One doesn't clear the other. |
+| `forget_person`                      | Backend                                 | "delete my data", once confirmed (19): their message text and photos, name, and handles are deleted; their number becomes a `forgotten:` placeholder everywhere, so amounts still add up; they're marked as having left; only the opt-out stays. |
 | `set_nessie_ids`                     | Nessie seed script                      | Stores resumable setup progress and the member's mock customer/account ids.                                                                                                |
 
 **[DEFAULT]** Implement the split math inside `recompute_expense` in the SpacetimeDB module. That makes it the single source of truth for every amount, keeps it next to the data, and is a strong talking point for the Spacetime judges.
@@ -567,6 +580,8 @@ An updated proposal is one line: `ok redid it: groceries $63.00 split 3 ways, so
 
 Example reminder: `anything else?` About an hour later, the settle request (7.6) goes out.
 
+**When nobody answers (ghosting).** Tab's questions stop counting answers after PENDING_QUESTION_TTL. An expense still missing who paid or how much then gets one more ask, in the group, at 10:00 the next morning (at least NEEDS_INFO_REASK_AFTER after it was logged): `still need this one for the tab: who paid for the pizza? / if nobody knows i'll drop it in a couple days`. An answer then works like an answer to the first question. If it's still missing them NEEDS_INFO_DROP_AFTER after it was logged, it becomes `void` quietly; nothing is dropped without that re-ask. An expense waiting on anything else (a large amount to confirm, a name Tab didn't know) is never dropped. A settle-up lists what it leaves out: `not in this yet: pizza (who paid?), frita batidos (waiting on claims)`.
+
 ### 7.4 Receipt
 
 | Step | What happens                                                                                                                                                                                                  |
@@ -581,7 +596,7 @@ Example reminder: `anything else?` About an hour later, the settle request (7.6)
 
 The payer defaults to whoever posted the photo, unless the caption or a following message says otherwise.
 
-**Image description, before the gate.** Every photo in an enabled chat is first described by Grok vision (`describeImage`, `backend/src/extraction/describe.ts`) into strict JSON: `kind` (receipt, bill, payment_screenshot, menu, price_tag, product, photo, meme, screenshot, other), a one- or two-sentence `description`, a `transcription` of all legible text in reading order (at most 2,000 characters), and `money_related`. Code validates and caps it (an unknown kind is `other`; a receipt, bill, or payment screenshot is always money-related), and the photo and its text are data, never instructions. Each description gets at most 6 seconds (the queue is serial across chats); past that, or if the image is gone, the photo is skipped and not tried again. The image is downloaded once and the receipt read reuses it. Descriptions live only in backend memory, keyed by message; after a restart only the photos recent context would show, plus a photo being replied to, are described again from `image_url`. Jev sees the description and text (6.5), so it can tell a receipt from a meme (`ignore`) or a Venmo screenshot (`payment_reported`). A bare photo still skips Jev and goes to the receipt flow unless the description clearly says it isn't a receipt: only a meme or an ordinary photo, not money-related, with no dollar amount or "total" in its text, goes to Jev (and skips the receipt read above), and a payment screenshot goes to Jev as well. A receipt the description gets wrong is still read, never dropped. The structured receipt read (step 2) runs only for a photo the gate called a receipt, and each photo is described once. A photo the gate is unsure about (0.50 to 0.85) gets one question, "want me to split this?", and is read only on a yes.
+**Screening, then description, before the gate.** Every photo's text is first read on the Tab Mac (19): a photo with nothing about money in its text or caption is noted from that text (`kind: photo`, not money-related) and never sent to Grok. Every other photo is then described by Grok vision (`describeImage`, `backend/src/extraction/describe.ts`) into strict JSON: `kind` (receipt, bill, payment_screenshot, menu, price_tag, product, photo, meme, screenshot, other), a one- or two-sentence `description`, a `transcription` of all legible text in reading order (at most 2,000 characters), and `money_related`. Code validates and caps it (an unknown kind is `other`; a receipt, bill, or payment screenshot is always money-related), and the photo and its text are data, never instructions. Each description gets at most 6 seconds (the queue is serial across chats); past that, or if the image is gone, the photo is skipped and not tried again. The image is downloaded once and the receipt read reuses it. Descriptions live only in backend memory, keyed by message; after a restart only the photos recent context would show, plus a photo being replied to, are described again from `image_url`. Jev sees the description and text (6.5), so it can tell a receipt from a meme (`ignore`) or a Venmo screenshot (`payment_reported`). A bare photo still skips Jev and goes to the receipt flow unless the description clearly says it isn't a receipt: only a meme or an ordinary photo, not money-related, with no dollar amount or "total" in its text, goes to Jev (and skips the receipt read above), and a payment screenshot goes to Jev as well. A receipt the description gets wrong is still read, never dropped. The structured receipt read (step 2) runs only for a photo the gate called a receipt, and each photo is described once. A photo the gate is unsure about (0.50 to 0.85) gets one question, "want me to split this?", and is read only on a yes.
 
 ### 7.5 Adjustments: custom splits, opt-outs, and itemizing
 
@@ -667,9 +682,22 @@ Every expense included gets this message's id as its `settle_message_id`, so a t
 | A transfer completes                          | The share becomes `paid` and the ledger updates. Once all of that person's approved transfers are done, Tab sends them **one DM** confirming exactly what was paid, and that it was simulated: "done, you paid Joe $38.25 and Priya $12.00 for vegas trip (simulated, no real money moved) / you're all square" |
 | Every participant share of an expense is paid | The expense becomes `settled`. When everything in the settle request is paid, Tab may post one short "and that's everyone square" **[YOUR CALL]**                                                                                                                                             |
 | A participant dislikes it or replies "no"     | Their shares in the request become `disputed`. Tab asks what's off, in the group if they replied there, otherwise by DM.                                                                                                                                                              |
-| A participant hasn't approved                 | A friendly nudge in the group by name (P5), on the same schedule as claim nudges, using the `approval_followup` purpose. Each nudge ends with "no rush, just tap 👍 on the settle msg when you can". After the last one, the balance simply stays outstanding. Tab never pays on anyone's behalf (P7). |
+| A participant hasn't approved                 | A friendly nudge by DM (P5), on the same schedule as claim nudges, using the `approval_followup` purpose. Each nudge ends with "no rush, just tap 👍 on the settle msg in the group when you can". After the last one, the balance simply stays outstanding. Tab never pays on anyone's behalf (P7). |
 
 Only the person whose money moves can approve their own share. Reactions from anyone else on the settle request are ignored for that share. The payee's own 👍 pays nothing; the first one gets a single DM saying who Tab is still waiting on (6.2).
+
+**Payment links [DEFAULT].** With `PAYMENTS=links` (the default), the settle request ends `i'll text each of you a link to pay, or reply if something's off`, and a 👍 on it pays nothing. Then, privately:
+
+| Step | What happens |
+| ---- | ------------ |
+| Links | Each person who owes gets one DM per person they owe: `you owe Joe $38.25 for vegas / venmo: https://venmo.com/joe-smith?txn=pay&amount=38.25&note=vegas / cash app: https://cash.app/$joesmith/38.25 / tap 👍 here once it's sent`. Venmo's documented pay link carries the amount and a note; Cash App's takes only the amount. |
+| No handle yet | The payee gets one DM, ever: `hey it's tab, people are about to pay you back for vegas / what's your venmo or cash app? like @your-name or $yourname`. Their reply (`@joe-smith`, `$joesmith`, or `venmo is joe-smith` with the handle ending the sentence) is saved, said back to them (`got it, i'll send people your venmo @joe-smith / wrong? just text the right one`), and the links that went out without one follow. Until then the debtor's DM says to pay however they usually do. `my venmo is ...` by DM changes it any time. |
+| Sent | A 👍 on the link (or a reminder), or "sent" / "paid it" by DM, or the gate's `payment_reported` ("just venmo'd joe for the pizza") records it as `reported`. A payment for another amount or another thing isn't. |
+| Arrived | The payee gets `Kian says they sent you $10.00 for pizza / tap 👍 if it came through, 👎 if it didn't`. A 👍 or a plain "got it" confirms (share `paid`, then `Joe got your $10.00 for pizza / you're all square` to the debtor). A 👎 or a plain "nope" puts it back. Typed answers count only when they're short and one-sided, and only when one payment is waiting on that payee; otherwise Tab asks them to tap the DM they mean (`Joe doesn't see the $10.00 yet / mind double checking? say "sent" once it's sorted`). One reminder if the payee hasn't answered after FOLLOWUP_DM2_AFTER. "priya paid me" (or "priya and jake paid me") from the payee confirms on their word alone, unless it names another amount or another thing. |
+| Reminders | People who still owe get the claim-nudge schedule (three at most), by DM, each with their link. After the last one the balance stays on the tab. |
+| Disputes | A 👎 on a link disputes those shares, as below. |
+
+Tab never holds or moves money in this mode and never asks for a bank login.
 
 **Disputes in the MVP [DEFAULT].** A dispute can change only the disputing person's amount. Tab reopens claims for that person alone, recomputes, and sends them a new approval request. Any difference is absorbed by the payer's own share, so nobody who already approved or paid is affected. **[YOUR CALL]** if you find a fairer approach that still respects P4.
 
@@ -684,6 +712,8 @@ A correction arrives as a reply to the original expense message, or to Tab's pro
 | `needs_info`, `proposed`, `itemizing` | Update, recompute, post one updated proposal, and extend the deadline by OBJECTION_EXTENSION.                                                     |
 | `finalized`, no share paid yet            | Update, recompute, reset any approvals, and post a new settle request.                                                                            |
 | `finalized`, some share already paid      | Tab explains it can't change a partly paid expense and suggests logging the difference as a new expense. Adjustment transfers are a stretch goal. |
+
+Which expense a correction changes: an inline reply's, else the one it names, else Grok's pick. When it states the old amount ("62 not 55") and that isn't the target's amount, the one open expense at that amount is used, unless the message names the target and not that one ("the uber was 18 not 15" with the uber at $16): then, or when there isn't exactly one, Tab asks "which one? reply to the expense you mean". "wait i thought it was 200" (an amount for "it", nothing named) within 15 minutes of an expense being logged asks `change dj to $200.00?` and applies only on a yes. A correction to a `needs_info` expense changes its amount and keeps the open question, so the answer's re-read keeps the new amount. An expense never borrows another open expense's name it wasn't called, and is never named after the amount ("came out").
 
 ### 7.8 Queries
 
@@ -871,7 +901,7 @@ Spectrum's local provider alone isn't enough: it drops incoming tapbacks and ret
 | Ingesting      | Texts, images, tapbacks (with `reply_to_id` set to the target message's guid), threaded replies (`reply_to_id` set to the thread root), and system events. Only the six classic tapbacks are ingested. Removed tapbacks, emoji tapbacks, stickers, and edits are ignored.                                                                                                         |
 | System events  | `kind: "system"`, with `text` set to `member_joined` or `member_left` and `sender_phone` set to the member it's about. The client sends one `member_joined` per participant when a group is switched on, then diffs the participant list every 10 seconds.                                                                                                                        |
 | Idempotency    | `ingest_message` upserts on `message_id`. After a restart, the client may re-ingest a few recent rows.                                                                                                                                                                                                                                                                            |
-| Images         | iPhone HEIC photos are converted to JPEG (2048 px max) and served by the client at an unguessable `image_url` for 48 hours. If the backend isn't on the same machine, set `IMAGE_BASE_URL` to an address it can reach. A photo with a caption is one `image` message with `text` set.                                                                                             |
+| Images         | iPhone HEIC photos are converted to JPEG (2048 px max) and served by the client at an unguessable `image_url` for 48 hours. If the backend isn't on the same machine, set `IMAGE_BASE_URL` to an address it can reach. A photo with a caption is one `image` message with `text` set. The same URL with `.txt` instead of `.jpg` returns the photo's text, read on the Mac with Apple's Vision framework (19), kept in memory only. |
 | Outbox loop    | The client reads rows from the `client_outbox` view (status `queued` or `sending`; visible to the client role and the owner only). Rows whose `send_after` has passed are marked `sending`, sent, then marked `sent` with `sent_photon_id`, or `failed` with an error after three attempts.                                                                                       |
 | Identity       | The client keeps its own SpacetimeDB identity (token in `client/.state/`). The module owner grants it the `client` role with `npm run grant:role -- <identity> client`.                                                                                                                                                                                                           |
 | Contact card   | Sent as a `Tab.vcf` file built from `TAB_PHONE`.                                                                                                                                                                                                                                                                                                                                  |
@@ -890,7 +920,7 @@ Spectrum's local provider alone isn't enough: it drops incoming tapbacks and ret
 chat.db holds every conversation on the account, not just Tab's. The client only ingests:
 
 - **Groups switched on.** Tab's phone texts `/tab on` into the group to switch it on, and `/tab off` to switch it off. `TAB_GROUP_IDS` can pre-enable groups by chat guid.
-- **DMs from members of an enabled group**, and only if Tab DMed that person within `DM_REPLY_WINDOW_HOURS` (default 72), or the message starts with "tab" or "@tab". "@tab what do I owe" works by DM at any time. A plain "what do I owe" works only as a reply to one of Tab's DMs.
+- **DMs from members of an enabled group**, and only if Tab DMed that person within `DM_REPLY_WINDOW_HOURS` (default 72), or the message starts with "tab" or "@tab". "@tab what do I owe" works by DM at any time. A plain "what do I owe" works only as a reply to one of Tab's DMs. STOP, START, and "delete my data" always get through (19).
 
 The client refuses outbox rows (messages, DMs, and tapbacks) aimed at any other group or at non-members, and marks them `failed`. It never writes message text to disk.
 
@@ -941,7 +971,10 @@ Keep all of these in one config file.
 | FOLLOWUP_DM1_AFTER        | 2 hours                |                                                                                       |
 | FOLLOWUP_DM2_AT           | 10:00 the next morning |                                                                                       |
 | FOLLOWUP_DM3_AFTER        | 44 hours               |                                                                                       |
-| MAX_DMS_PER_EXPENSE       | 3                      | Claim nudges per person, per expense (the FOLLOWUP_* names are kept; nudges now go in the group) |
+| MAX_DMS_PER_EXPENSE       | 3                      | Claim nudges and payment reminders per person, per expense, by DM                     |
+| NEEDS_INFO_REASK_AFTER    | 8 hours                | The one re-ask of a ghosted question waits for 10:00 local after this (7.3)           |
+| NEEDS_INFO_DROP_AFTER     | 72 hours               | A `needs_info` expense this old is dropped (7.3)                                      |
+| PAYMENTS                  | links                  | `simulated` keeps the hackathon flow: a 👍 on the settle request runs a simulated transfer (7.6) |
 | ACT_THRESHOLD             | 0.85                   |                                                                                       |
 | CLARIFY_THRESHOLD         | 0.50                   |                                                                                       |
 | CONTEXT_MESSAGES          | 10                     |                                                                                       |
@@ -1006,7 +1039,8 @@ Tab's tapbacks are acknowledgements only. The Mac bridge sends them by driving M
 | Message budget                    | Limit                                                                                                                     |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | Group messages per expense        | The proposal, one reminder, the settle request, and an optional "all square." Updated proposals only when amounts change. |
-| Claim nudges per person per expense | MAX_DMS_PER_EXPENSE, in the group (P5) |
+| Claim nudges per person per expense | MAX_DMS_PER_EXPENSE, by DM (P5) |
+| Payment reminders per person per settle request | MAX_DMS_PER_EXPENSE, by DM, each with their link (7.6) |
 | Unprompted group messages per day | 6**[DEFAULT]**; beyond that, batch                                                                                  |
 
 Tab never shames anyone in the group, never moves money without approval from the person paying, never sends an amount that didn't come from the database, and never replies to a message classified as `ignore`.
@@ -1028,6 +1062,8 @@ Tab never shames anyone in the group, never moves money without approval from th
 | Foreign currency                            | Out of scope. Ask for the amount in dollars.                                                                                                           |
 | Edited or unsent iMessages                  | Ignored for now: chat.db updates those rows in place, and the client only reads new rows. **[YOUR CALL]** whether to treat edits as corrections later. |
 | Trolling or prompt injection                | Covered by the classifier gate and the grounding rules in 9.1. A debt is never logged without a stated purchase and a grounded amount.                 |
+| A split where only the payer would owe      | Never logged ("venmo me 45 whenever" read as the payer having it all). |
+| Someone texts STOP or deletes their data    | 19. Their existing balances stay; they get no DMs and are in no new splits. A payee who opted out gets no "did it come through?"; their debtors' links say to pay however they usually do. |
 
 ---
 
@@ -1128,7 +1164,9 @@ Roughly ranked by value for effort.
 | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | No real money     | Nessie fixtures and all SpacetimeDB settlements are explicitly simulated.                                                                                                                                                |
 | Minimal retention | Messages classified as`ignore` have their text cleared after classification. Only money-related messages are kept.                                                                                                       |
-| Photos            | Every photo in an enabled chat is described by Grok vision before the gate (7.4), with its caption (authorized by the user). The description stays in backend memory only, never in SpacetimeDB.                          |
+| Photos            | Every photo's text is read on the Tab Mac first (Apple's on-device text recognition; the bridge serves it as `.txt` next to the image). Only a photo whose text or caption could be about money (a dollar amount, a price, "total", "receipt", "venmo"...) goes to Grok vision (7.4); the rest are noted from that text alone and never reach Grok. A failed read lets a photo through only on its caption. Descriptions stay in backend memory only, never in SpacetimeDB. |
+| STOP and START    | STOP (or "stop texting me", "unsubscribe") by DM, or as "@tab stop" or a reply to Tab in the group, opts a person out everywhere: one confirmation, then no DMs (the module skips them), no new splits, and Tab ignores what they say. What's already on the tab stays. START opts back in. The bridge lets these through from any member at any time. A bare "stop" in the group is chatter. |
+| Deleting data     | "delete my data" (by DM, or "@tab delete my data" in the group, answered by DM) asks to confirm; "DELETE" within 2 hours runs `forget_person`, which also takes the number out of ids and drops the text of Tab's messages that quoted it or their payment handle (cancelling any still queued). Nobody gets reminders about debts to or from them afterwards. Amounts others owe stay on the tab under "someone who left". The number is kept only as an opt-out, so Tab never texts it again. |
 | What the gate sees | Jev, which already sees every message, also gets a raw transcript of the chat's last 12 messages, kept or not, from the last 15 minutes. It lives in backend memory only, is never persisted, and is never sent to Grok. |
 | What Grok sees    | Grok's extraction prompts still hold only money-related content: kept messages, Tab's own words, open expenses and their receipt items, reply targets that were kept, and descriptions of money-related photos. Never the raw transcript, cleared chatter, or what a non-money photo shows. |
 | Phone numbers     | Never commit real numbers; fixtures use 555 numbers. The web ledger shows names, not numbers.                                                                                                                            |

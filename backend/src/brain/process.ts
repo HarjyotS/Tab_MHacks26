@@ -4,11 +4,14 @@ import { thresholds } from "../config.js";
 import { decide, type Decision } from "../gate/decide.js";
 import type { AnswerResolution, OpenThread } from "../extraction/types.js";
 import type { Expense, Message } from "../store/types.js";
-import { type BrainCtx, chatOf, eyes, type Pending, perExpense, say, tapback } from "./context.js";
+import { activeMembers, type BrainCtx, chatKey, chatOf, eyes, type Pending, perExpense, say, tapback } from "./context.js";
 
 const SLOW = new Set<Intent>(["expense", "receipt", "split_adjustment", "correction", "money_question"]);
 import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
+import { staleExpenses } from "./ghosting.js";
+import { handlePaymentDm, linksMode, reportFromText } from "./payments.js";
+import { handlePersonCommand } from "./people.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   acceptSplit,
@@ -24,7 +27,7 @@ import {
   textApproval,
   whichDisputed,
 } from "./settle.js";
-import { clearlyCorrects, handleCorrection, namedCorrectionTarget } from "./correction.js";
+import { clearlyCorrects, handleCorrection, justLoggedTarget, namedCorrectionTarget } from "./correction.js";
 import { handleLedger } from "./ledger.js";
 import { BREAKDOWN_COMMAND, handleBreakdownCommand, handleShortWhy, hintBreakdown, whyOweTarget } from "./breakdown.js";
 import {
@@ -53,6 +56,25 @@ const WHY = /^(why|how|how come|how so|wdym|what'?s that( from| for)?)\b/i;
 const shortWhy = (text?: string) => (text ?? "").trim().split(/\s+/).length <= 4;
 // The gate is this sure a message is chatter: it answers none of Tab's questions.
 const SURE_CHATTER = 0.8;
+const FAIRLY_SURE_CHATTER = 0.75;
+
+// The message just before this one, since Tab asked, is someone else's
+// question: a yes or no now answers them.
+function answersSomeoneElse(ctx: BrainCtx, m: Message, t: Thread): boolean {
+  if (!m.group_id) return false;
+  const before = ctx.store
+    .messages()
+    .filter((x) => x.group_id === m.group_id && x.kind === "text" && x.received_at > t.asked_at && x.received_at < m.received_at)
+    .sort((a, b) => b.received_at.getTime() - a.received_at.getTime())[0];
+  const tabSince = ctx.store.outbox().some((o) => o.group_id === m.group_id && o.kind !== "reaction" && o.created_at > (before?.received_at ?? m.received_at) && o.created_at < m.received_at);
+  // Chatter's text is cleared after classification; the gate's in-memory
+  // transcript still knows whether it was a question.
+  const asked =
+    before &&
+    before.sender_phone !== m.sender_phone &&
+    (/\?\s*$/.test(before.text ?? "") || ctx.memory.transcript.wasQuestion(chatKey(chatOf(m)), before.message_id));
+  return Boolean(asked && !tabSince);
+}
 
 // Intents that ask Tab something rather than tell it.
 const ASKING = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
@@ -135,6 +157,9 @@ export function fallbackReason(
   if (decision === "ignore" && !input.message.reply_to_tab && !SPLIT_TALK.has(result.intent)) return undefined;
   if (decision === "ignore" && !threadsOpen && !input.message.reply_to_tab) return undefined;
   if (result.intent === "payment_reported" && !input.message.reply_to_tab) return undefined;
+  // An unsure "answer" that answered nothing ("fr", "yeah", "its on the
+  // fridge" to a friend): the money brain only made up a question (noise eval).
+  if (result.intent === "answer" && decision !== "act" && !input.message.reply_to_tab) return undefined;
   // A half-sure expense or correction, or an unsure question not put to Tab:
   // clarify() already chose to ask or stay quiet.
   if ((result.intent === "expense" || result.intent === "correction" || QUESTIONS.has(result.intent)) && decision === "clarify") return undefined;
@@ -161,6 +186,18 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
     let intent: Intent | undefined;
     let confidence: number | undefined;
 
+    // §19: STOP, START, and "delete my data" come before the gate, and
+    // someone who texted STOP is left alone. Their text isn't kept.
+    if (await handlePersonCommand(ctx, m)) {
+      await ctx.db.set_message_result({ message_id: m.message_id, intent: "ignore", status: "done" });
+      return;
+    }
+    // §7.6: "sent", "got it", or a Venmo handle, answering one of Tab's
+    // payment DMs. Plain answers to Tab's own DM, like a tapback would be.
+    if (await handlePaymentDm(ctx, m)) {
+      await ctx.db.set_message_result({ message_id: m.message_id, intent: "payment_reported", status: "done" });
+      return;
+    }
     if (m.kind === "reaction") {
       await routeReaction(ctx, m); // §6.2: never classified
     } else {
@@ -175,7 +212,7 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       await describePhotos(ctx, m);
       const input = { ...gateInput(ctx, m), tab_question_open: openThreads(ctx, chatOf(m)).length > 0 };
       remember(ctx, m); // the gate's 15-minute raw transcript, memory only
-      const result = await ctx.classify(input);
+      let result = await ctx.classify(input);
       intent = result.intent;
       confidence = result.confidence;
       let decision = decide(result, input);
@@ -183,6 +220,20 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       // with an amount ("got the bill, came to 67 total" at 0.41): ask rather
       // than drop it. In the noise eval these were real expenses 5 times in 5.
       if (decision === "ignore" && result.intent === "expense" && result.confidence >= NEAR_CLARIFY && statesSpend(m.text)) decision = "clarify";
+      // Read as an unsure correction with nothing to correct, or as chatter
+      // the gate isn't sure of, yet it's the sender's own purchase or a bill's
+      // total ("i got a big pack at target earlier, 18 bucks" at ignore 0.46,
+      // "got the bill, came to 67 total" at correction 0.43): it gets the
+      // same one question. Both were real expenses every time in the eval.
+      const unsurePurchase =
+        decision === "ignore" && !result.prefiltered && m.kind === "text" &&
+        ((result.intent === "ignore" && result.confidence < UNSURE_CHATTER && OWN_PURCHASE.test(m.text ?? "")) ||
+          (result.intent === "correction" && result.confidence >= NEAR_CLARIFY && STATES_TOTAL.test(m.text ?? "") && !repliedExpense(ctx, m) && !namedCorrectionTarget(ctx, m)));
+      if (unsurePurchase) {
+        result = { ...result, intent: "expense" };
+        intent = "expense";
+        decision = "clarify";
+      }
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent) && intent !== "answer";
       ctx.log("classified", {
         message_id: m.message_id, group_id: m.group_id, intent, confidence, decision,
@@ -307,6 +358,9 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
   }
 }
 
+// A breakdown question in the group that's about what someone owes or an amount.
+const BREAKDOWN_ASK = /\b(?:breakdown|owe|owes|owed|owing|from|for|split)\b|\d/i;
+
 const LEDGER_ASK = /\bledger\b/i;
 const TO_TAB = /^@?tab\b/i;
 const READ_INTENTS = new Set<Intent>(["help", "balance_query", "breakdown_request", "money_question"]);
@@ -353,6 +407,10 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     case "balance_query":
       return handleBalance(ctx, m);
     case "breakdown_request":
+      // A question between friends about the bill ("was the calamari part of
+      // the apps or the entrees") isn't asking for Tab's breakdown (noise
+      // eval: it got "Hannah's square with everyone").
+      if (m.group_id && !askingTab(ctx, m) && !BREAKDOWN_ASK.test(m.text ?? "")) return ctx.log("breakdown_quiet", { message_id: m.message_id });
       // Free-form ("what's the $90.70 from?"): the command answers, unless
       // it's "what was it for" or the sender has nothing open (history.ts).
       return handleBreakdownQuestion(ctx, m);
@@ -371,6 +429,9 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     }
     case "correction": {
       const target = bound && bound.status !== "void" ? bound : namedCorrectionTarget(ctx, m);
+      // "wait i thought it was 200" right after an expense: ask, don't guess.
+      const just = target ? undefined : justLoggedTarget(ctx, m);
+      if (just) return confirmCorrectionOf(ctx, m, just, `clarify:${m.message_id}`);
       // Nothing it names is on the tab, and it states a purchase: a new expense.
       // ("also the uber there was 23" with no uber on the tab is a new expense,
       // not a change to dinner; right after the sender's own expense, they paid.)
@@ -380,7 +441,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     }
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
-    // payment_reported is ignored in the MVP; ignore needs nothing.
+    case "payment_reported":
+      // §7.6 payment links: "venmo'd jake for the uber", or "priya paid me".
+      // The simulated flow ignores it (only a 👍 there pays).
+      if (linksMode(ctx)) return reportFromText(ctx, m);
+      return;
+    // ignore needs nothing.
     default:
       ctx.log("intent_not_handled", { message_id: m.message_id, intent });
   }
@@ -413,7 +479,8 @@ async function clarify(ctx: BrainCtx, m: Message, intent: Intent, id = `clarify:
   // Unsure, but it reads as a correction to an open expense it names: ask
   // "change uber to $30?" and apply only on yes (Joe's review on #44), never
   // "want me to split that?" about a duplicate.
-  const correcting = intent === "expense" || intent === "correction" ? namedCorrectionTarget(ctx, m) : undefined;
+  const correcting =
+    intent === "expense" || intent === "correction" ? namedCorrectionTarget(ctx, m) ?? justLoggedTarget(ctx, m) : undefined;
   if (correcting) return confirmCorrectionOf(ctx, m, correcting, id);
   // "just paid for 47 uber" with no uber on the tab (live run, right after a
   // demo reset): there's nothing to change, so it's a new expense. Stated
@@ -467,9 +534,11 @@ async function confirmCorrectionOf(ctx: BrainCtx, m: Message, e: Expense, id: st
   const text = T.confirmCorrectionTo(e.description, result.new_amount_cents);
   await tapback(ctx, m, "question", e.expense_id);
   await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text, expense_id: e.expense_id });
+  // On yes, the change goes to the expense Tab named, not whatever the
+  // message would match by then.
   addThread(ctx, chatOf(m), {
     id, text, who: "asker", asker: m.sender_phone, expense_id: e.expense_id,
-    data: { kind: "confirm", then: "act", intent: "correction", source: m, asked_at: ctx.now() },
+    data: { kind: "confirm", then: "correction", expense_id: e.expense_id, source: m, asked_at: ctx.now() },
   });
 }
 
@@ -527,6 +596,11 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   //    amount, "no tip", or "no" to a receipt total answers it.
   const hits = pool.flatMap((t) => {
     if (t.data.kind === "settle_mode" && t !== replied && mine.length > 1) return [];
+    // A bare "yeah" right after someone else asked a question answers them
+    // (noise eval: "oh shit fr?" then "yeah sorry i forgot to mention" said
+    // yes to Tab's "just you on lunch then?" and the split changed). Inline
+    // replies to Tab still count.
+    if (t.data.kind === "confirm" && t !== replied && answersSomeoneElse(ctx, m, t)) return [];
     const apply = quickAnswer(ctx, m, t);
     return apply ? [{ t, apply }] : [];
   });
@@ -538,9 +612,18 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   }
   // 2. A question about an expense, answered by the person Tab asked (or
   //    inline by someone the gate passed): read it again with the answer.
-  const reask = pool.find(
-    (t) => (t.data.kind === "expense" || t.data.kind === "adjustment") && (isAsker(t, m) || (t === replied && passed)),
-  );
+  // Not something the gate is fairly sure is chatter, unless it replies to
+  // the question inline (noise eval: "got it thanks" from the person Tab
+  // asked who paid was read as "I paid", and the tacos were logged).
+  const chatty = result.intent === "ignore" && result.confidence >= FAIRLY_SURE_CHATTER;
+  // A correction the gate is sure of goes to the correction handler, which
+  // knows how to change an expense Tab is still asking about.
+  const correcting = decision === "act" && result.intent === "correction" && replied === undefined;
+  const reask = correcting
+    ? undefined
+    : pool.find(
+        (t) => (t.data.kind === "expense" || t.data.kind === "adjustment") && ((isAsker(t, m) && (!chatty || t === replied)) || (t === replied && passed)),
+      );
   if (reask && (await answerExpense(ctx, m, reask, isAsker(reask, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m)))))
     return { answered: true };
 
@@ -736,6 +819,10 @@ async function applyAnswer(
       // "split 4 ways" change nothing, whatever yes_no Grok read (Harjyot's
       // playground: "yeah" got "ok what was uneven?"). Only a change goes on.
       if (agreesWithSplit(ctx, m.text ?? "", e)) return splitLooksRight(ctx, m, t, e);
+      // A question to the group ("for all of us right?") or a remark with
+      // nothing to change ("nah they had a weekday deal") isn't an objection
+      // (noise eval: both got "ok what was uneven?").
+      if (!couldChangeSplit(ctx, m, e)) return false;
       // The proposal stays open to everyone else's changes.
       await handleAdjustment(ctx, m, m.text ?? "", e, { confirmOnly });
       return true;
@@ -799,6 +886,17 @@ function threadExpense(ctx: BrainCtx, t: Thread, ...statuses: Expense["status"][
 // "nope, looks right" to "Anything uneven?": that person is fine with it,
 // as with their 👍 on the proposal (§6.2), and it locks in once everyone
 // is. Unlike the payer's 👍, the payer's typed "yeah" doesn't lock it in.
+// What a change to a split is made of: an amount or a share, who was there
+// or not, or a member's name. A question gets it only as an inline reply to Tab.
+const SPLIT_WORDS = /[\d$%]|\b(?:half|third|quarter|even|uneven|only|just|except|without|didn'?t|wasn'?t|skip(?:ped)?|sat out|left out|split)\b/i;
+
+function couldChangeSplit(ctx: BrainCtx, m: Message, e: Expense): boolean {
+  const text = (m.text ?? "").trim();
+  if (/\?\s*$/.test(text) && !askingTab(ctx, m)) return false;
+  if (SPLIT_WORDS.test(text) || PRESENCE.test(text)) return true;
+  return activeMembers(ctx, e.group_id).some((x) => x.name && new RegExp(`(?<![\\p{L}])${x.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}])`, "iu").test(text));
+}
+
 async function splitLooksRight(ctx: BrainCtx, m: Message, t: Thread, e: Expense): Promise<boolean> {
   const share = ctx.store.shares(e.expense_id).find((s) => s.phone === m.sender_phone);
   if (!share || share.status === "opted_out") return false;
@@ -963,6 +1061,9 @@ async function answerConfirm(
         source: p.source,
         extracted: { ...p.extraction, problems: [] },
       });
+  } else if (p.then === "correction" && p.expense_id) {
+    const e = ctx.store.expense(p.expense_id);
+    if (e) await handleCorrection(ctx, p.source, e);
   } else if (p.then === "act" && p.intent) {
     await act(ctx, p.source, p.intent);
   } else if (p.then === "finalize_and_settle") {
@@ -1038,6 +1139,7 @@ export async function tick(ctx: BrainCtx): Promise<void> {
   await claimFollowups(ctx);
   await approvalFollowups(ctx);
   await announceSettlements(ctx);
+  await staleExpenses(ctx);
 }
 
 // An unexpired question from Tab about this expense (threads.ts).
@@ -1244,6 +1346,13 @@ const statesSpend = (text?: string) =>
 // "pizza was $48", "came to 67", "cost us 30", "$84 total": what something cost.
 // A bare "dinner 40" (a few words and an amount) counts too.
 const STATES_COST = /^(?=.*\d)(?:(?=.*\b(was|were|came to|came out to|cost|costs|total)\b)|\W*[a-z][a-z' ]{0,24}\s\$?\d+(?:\.\d{2})?\W*$)/i;
+// A bill's total, said outright ("came to 67 total"; not "or was it 50").
+const STATES_TOTAL = /^(?=.*\d)(?=.*\b(?:came to|came out to|total|cost|costs)\b)/i;
+// The sender's own purchase with an amount, as its own clause: "i got a big
+// pack at target, 18 bucks", "they had a deal, got 12 tacos for $28".
+const OWN_PURCHASE = /(?:^|[,.;!]\s*|\b(?:and|so|btw|also|ok|oh)\s+)(?:i\s+(?:just\s+|also\s+)?)?(?:got|paid|bought|grabbed|covered|picked up|spent|ordered)\b[^?]*\d/i;
+// Below this the gate isn't sure it's chatter.
+const UNSURE_CHATTER = 0.7;
 
 // Live chats: Tab's newest message here is a question from the last three
 // minutes (the money brain's own questions aren't tracked as threads), so a

@@ -4,7 +4,7 @@ import type { Debt } from "../copy/templates.js";
 import { listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
 import { ledgerUrl } from "./ledger.js";
-import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, styleFor, tapback } from "./context.js";
+import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, splitMembers, styleFor, tapback } from "./context.js";
 import { addThread } from "./threads.js";
 
 // §7.2 step 2: intro, name prompt, and contact card for a new group.
@@ -82,8 +82,9 @@ export async function handleNameReply(ctx: BrainCtx, m: Message) {
     name,
   });
   await tapback(ctx, m, "like");
-  // §7.2 step 5: active once every known member is named.
-  const members = activeMembers(ctx, m.group_id);
+  // §7.2 step 5: active once every known member is named (anyone who
+  // texted STOP isn't waited on).
+  const members = splitMembers(ctx, m.group_id);
   const allNamed = members.every((x) => x.name || x.phone === m.sender_phone);
   if (
     allNamed &&

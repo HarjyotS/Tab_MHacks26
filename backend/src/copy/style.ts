@@ -52,7 +52,8 @@ function lower(text: string, names: string[]): string {
   for (const n of names) if (n && !saved.has(n.toLowerCase())) saved.set(n.toLowerCase(), n);
   if (saved.size === 0) return out;
   const words = [...saved.keys()].sort((a, b) => b.length - a.length).map(escape);
-  const re = new RegExp(`(?<![\\p{L}\\p{N}])(${words.join("|")})(?![\\p{L}\\p{N}])`, "gu");
+  // Not inside a handle: "@joe-smitty" stays as typed.
+  const re = new RegExp(`(?<![\\p{L}\\p{N}@$_-])(${words.join("|")})(?![\\p{L}\\p{N}_-])`, "gu");
   return out.replace(re, (w) => saved.get(w) ?? w);
 }
 

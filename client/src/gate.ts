@@ -8,8 +8,14 @@ import type { State } from "./state.ts";
  * - Group chats: only ones switched on with "/tab on" (or TAB_GROUP_IDS).
  * - DMs: only from members of an enabled group, and only when the bridge DMed
  *   them within the reply window or the message starts with "tab"/"@tab".
- *   READ_DMS=off turns DM reading off entirely (sending DMs still works).
+ *   STOP, START, and "delete my data" always get through (SPEC 19), so a
+ *   member can opt out whenever. READ_DMS=off turns DM reading off entirely
+ *   (sending DMs still works).
  */
+
+// Opting out has no reply window (SPEC 19). The backend decides what each means.
+const PRIVACY_COMMAND =
+  /^\s*(?:stop|stop ?all|unsubscribe|start|unstop|delete|(?:please\s+)?(?:delete|erase|remove|wipe)\s+(?:all\s+(?:of\s+)?)?my\s+\w+|forget me)[\s.!]*$/i;
 export class Gate {
   constructor(
     private readonly state: State,
@@ -71,7 +77,7 @@ export class Gate {
     if (!this.isMember(handle)) return false;
     const last = this.state.data.lastBridgeDmAt[handle];
     if (last != null && now - last <= this.dmReplyWindowMs) return true;
-    return /^\s*@?tab\b/i.test(text);
+    return /^\s*@?tab\b/i.test(text) || PRIVACY_COMMAND.test(text);
   }
 }
 

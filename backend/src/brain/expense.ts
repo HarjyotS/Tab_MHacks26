@@ -9,6 +9,7 @@ import * as T from "../copy/templates.js";
 import type { Expense, LineItem, Message, Share } from "../store/types.js";
 import {
   activeMembers,
+  splitMembers,
   chatOf,
   outsideQuietHours,
   say,
@@ -16,6 +17,7 @@ import {
   type BrainCtx,
   type Pending,
 } from "./context.js";
+import { namesExpense } from "./correction.js";
 import { extractInput } from "./inputs.js";
 import { startItemizing } from "./receipt.js";
 import { acceptSplit } from "./settle.js";
@@ -106,6 +108,16 @@ export async function handleExpense(
     "new",
   );
   if (!extracted.result.is_expense) return; // Not a purchase after all: stay silent (P1).
+  // Another open expense's name, when nothing said here is about it (noise
+  // eval: "came out to 112" for wings and pizza was logged as "Party
+  // supplies", then a correction to the supplies changed it). Better no name.
+  const borrowed = extracted.result.description?.toLowerCase();
+  if (
+    borrowed &&
+    ctx.store.expenses().some((e) => e.group_id === group_id && e.status !== "void" && e.description.toLowerCase() === borrowed) &&
+    !namesExpense(text, extracted.result.description!)
+  )
+    extracted.result = { ...extracted.result, description: undefined };
   // "ice cream was 50" → "want me to split that?" → "yeah": whoever said it
   // and wants it split is the one who paid. One question, not two
   // (playground run); "no, alex paid" is still a correction away.
@@ -199,14 +211,26 @@ export async function proposeNew(
   const { result } = a.extracted;
   const payer = payerPhone(result, a.source)!;
   const expense_id = expenseIdFor(a.source.message_id);
-  const members = activeMembers(ctx, a.group_id);
+  // Nobody who texted STOP is in a new split (§19), except a payer someone
+  // else named, who still needs their share.
+  const allowed = new Set(splitMembers(ctx, a.group_id).map((x) => x.phone));
+  const members = activeMembers(ctx, a.group_id).filter((x) => x.phone === payer || allowed.has(x.phone));
   const included = new Set(
     result.participants.kind === "list"
       ? result.participants.phones
       : members.map((x) => x.phone),
   );
   for (const p of result.exclusions) included.delete(p);
+  for (const p of [...included]) if (p !== payer && !members.some((x) => x.phone === p)) included.delete(p);
   const fixed = new Map(result.fixed.map((f) => [f.phone, f.amount_cents]));
+  // Nobody but the payer would owe anything ("venmo me 45 whenever" read as
+  // the payer having all $45): that's no split. Better nothing than a
+  // ledger row where people owe $0.00 (noise eval).
+  const payerPinned = fixed.get(payer);
+  if (![...included].some((p) => p !== payer) || (payerPinned !== undefined && payerPinned >= result.amount_cents!)) {
+    ctx.log("payer_only_split", { message_id: a.source.message_id, group_id: a.group_id });
+    return;
+  }
   const group = ctx.store.group(a.group_id);
   const deadline = outsideQuietHours(
     ctx,

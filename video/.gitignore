@@ -1,0 +1,14 @@
+# The promo video's source is in git; heavy or personal media isn't.
+# The repo is public: teammates' photos and footage stay local.
+references/
+*.mov
+*.MOV
+tab-promo/node_modules/
+tab-promo/out/
+tab-promo/build/
+tab-promo/public/gen2/
+tab-promo/public/footage/
+tab-promo/public/audio/
+tab-promo/public/img/freeze-bet.jpg
+tab-promo/gen2/ref-crops/
+tab-promo/gen2/cast-contact.jpg

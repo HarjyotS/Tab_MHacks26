@@ -5,6 +5,7 @@ import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, say, tapback } from "./context.js";
 import { liveShares, moneyMoving, postProposal, reopen } from "./expense.js";
 import { extractInput } from "./inputs.js";
+import { openThreads } from "./threads.js";
 
 // "actually the uber was $30 not $24", not sent as a reply: a correction to
 // the open expense it names, not a second Uber (playground run, #44). Joe's
@@ -13,10 +14,14 @@ import { extractInput } from "./inputs.js";
 // another purchase ("another uber home", "got gas too").
 const CORRECTION_SHAPE = /\b(?:was|is|were)\s+(?:actually\s+|really\s+|only\s+)?\$?\d|\bnot\s+\$?\d/i;
 const ANOTHER = /\b(another|again|too|also|second|more)\b/i;
-const STOPWORDS = new Set(["the", "for", "and", "with", "from", "that", "this", "some", "team", "everyone", "group", "house"]);
+const STOPWORDS = new Set([
+  "the", "for", "and", "with", "from", "that", "this", "some", "team", "everyone", "group", "house",
+  "was", "its", "our", "all", "one", "two", "new", "got", "had", "not", "but", "you", "her", "his", "who", "day", "way", "out",
+]);
 
+// Three letters count: gas, cab, bar, tip, pho (review: "the gas was 40 not 35" missed the gas).
 const descriptionWords = (description: string) =>
-  (description.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 4 && !STOPWORDS.has(w));
+  (description.toLowerCase().match(/[a-z]+/g) ?? []).filter((w) => w.length >= 3 && !STOPWORDS.has(w));
 
 // Overriding the gate takes more than the shape: with no "another", a new
 // purchase still reads "uber was $18, i got it" or "dinner was $80". Only a
@@ -50,6 +55,33 @@ export function oldAmountCents(text: string): number | undefined {
   return m ? Math.round(Number(m[1]) * 100) : undefined;
 }
 
+// The one open expense in the group at the amount a correction says was
+// wrong ("the tacos were 62 not 55"), preferring one it names.
+function expenseAt(ctx: BrainCtx, group_id: string | undefined, cents: number, text: string): Expense | undefined {
+  const at = ctx.store
+    .expenses()
+    .filter((e) => e.group_id === group_id && (e.status === "proposed" || e.status === "finalized" || e.status === "needs_info") && e.total_cents === cents);
+  const named = at.filter((e) => namesExpense(text, e.description));
+  return named.length === 1 ? named[0] : at.length === 1 ? at[0] : undefined;
+}
+
+// "wait i thought it was 200", "that was 45 actually": an amount for "it",
+// with nothing named. Right after an expense was logged, that's the one it
+// means, so Tab asks "change the dj to $200?" (noise eval: the money brain
+// answered "got it, dj's now $250" and changed nothing).
+const IT_WAS = /^(?:(?:wait|oh|hmm+|no|nah|actually)[\s,]+)*(?:i\s+thought\s+)?(?:it|that)\s*(?:was|is|'s)\s+(?:actually\s+|really\s+|only\s+)?\$?\d/i;
+const JUST_LOGGED_MS = 15 * 60_000;
+
+export function justLoggedTarget(ctx: BrainCtx, m: Message): Expense | undefined {
+  if (!m.group_id || m.kind !== "text" || !IT_WAS.test((m.text ?? "").trim())) return undefined;
+  const latest = ctx.store
+    .expenses()
+    .filter((e) => e.group_id === m.group_id && e.status !== "void")
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+  if (!latest || latest.status !== "proposed" || ctx.now().getTime() - latest.created_at.getTime() > JUST_LOGGED_MS) return undefined;
+  return latest;
+}
+
 export async function handleCorrection(
   ctx: BrainCtx,
   m: Message,
@@ -66,16 +98,27 @@ export async function handleCorrection(
     });
 
   const { result } = await ctx.extract.correction(extractInput(ctx, m));
-  const target =
+  let target =
     bound ??
     (result.target_expense_id
       ? ctx.store.expense(result.target_expense_id)
       : undefined);
-  // "the tacos were actually 62 not 55" with no $55 expense on the tab: ask
-  // which one instead of rewriting the newest (noise eval: it turned a $120
-  // surfboard rental into "tacos $120.00").
+  // "the tacos were actually 62 not 55": the old amount says which one. The
+  // $55 expense when exactly one is open; with none, ask which instead of
+  // rewriting the newest (noise eval: it turned a $120 surfboard rental into
+  // "tacos $120.00", and "the supplies were 76 not 87" changed a $112 order
+  // that had borrowed the name). Only an inline reply to the expense
+  // outranks the amount.
+  // It moves to the expense at that amount only when the message names it:
+  // "the tacos were 62 not 55" finds the $55 tacos, while "the uber was 18
+  // not 15" (uber $16, snacks $15) or "it was 38 not 42" asks which (review).
   const was = oldAmountCents(m.text ?? "");
-  if (!target || (!bound && was !== undefined && was !== target.total_cents)) {
+  const replied = m.reply_to_id !== undefined && bound !== undefined;
+  if (was !== undefined && !replied && target?.total_cents !== was) {
+    const atAmount = expenseAt(ctx, m.group_id, was, m.text ?? "");
+    target = atAmount && namesExpense(m.text ?? "", atAmount.description) ? atAmount : undefined;
+  }
+  if (!target) {
     await tapback(ctx, m, "question");
     return ask(T.whichToCorrect());
   }
@@ -95,7 +138,22 @@ export async function handleCorrection(
     ctx.store.lineItems(target.expense_id).length > 0
   )
     return ask(T.receiptTotalFixed(target.description), target.expense_id);
-  // Waiting on Tab's own question: that flow fills it in.
+  // Still waiting on Tab's question (who paid): the new amount goes on the
+  // row now, and into the open question's text, so the answer's re-read
+  // keeps it (noise eval: "the tacos were 62 not 55" was dropped while Tab
+  // waited on who paid).
+  if (target.status === "needs_info") {
+    if (result.new_amount_cents === undefined && !result.new_description) return;
+    await tapback(ctx, m, "like", target.expense_id);
+    await ctx.db.upsert_expense({
+      ...target,
+      total_cents: result.new_amount_cents ?? target.total_cents,
+      description: result.new_description ?? target.description,
+    });
+    for (const t of openThreads(ctx, chatOf(m)))
+      if (t.expense_id === target.expense_id && t.data.kind === "expense") t.data.text = `${t.data.text}\n${m.text ?? ""}`;
+    return;
+  }
   if (target.status !== "proposed" && target.status !== "finalized") return;
 
   const total = result.new_amount_cents ?? target.total_cents;

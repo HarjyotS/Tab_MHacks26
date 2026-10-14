@@ -108,10 +108,24 @@ export type Transfer = {
   from_phone: string;
   to_phone: string;
   amount_cents: number;
-  status: "pending" | "done" | "failed";
+  // spacetime_simulated (the hackathon demo), or how people paid each other
+  // through their payment links (§7.6): venmo, cashapp, or other.
+  // Absent in older test rows: simulated.
+  provider?: string;
+  // pending: a simulated transfer still running. reported: the person who
+  // owed says it's sent, and the payee hasn't confirmed yet.
+  status: "pending" | "reported" | "done" | "failed";
   approved_by_message_id: string;
   created_at: Date;
   completed_at?: Date;
+};
+
+// SPEC §19 per person, across groups: a STOP, and payment handles.
+export type Person = {
+  phone: string;
+  opted_out: boolean;
+  venmo?: string;
+  cashtag?: string; // without the $
 };
 
 export type LineItem = {
@@ -146,6 +160,8 @@ export interface Store {
   expenses(): Expense[];
   shares(expense_id: string): Share[];
   transfers(): Transfer[];
+  // backend_people: undefined for someone who never texted STOP or gave a handle.
+  person(phone: string): Person | undefined;
   lineItems(expense_id: string): LineItem[];
   claims(expense_id: string): Claim[];
 }

@@ -7,6 +7,8 @@ import { MAX_DMS_PER_EXPENSE } from "../config.js";
 import type { SettleMode } from "../db/types.js";
 import { activeMembers, type BrainCtx, chatOf, outsideQuietHours, say, styleFor, tapback } from "./context.js";
 import { liveShares } from "./expense.js";
+import { linkHint, linksMode, parseLinkRow, paymentReminders, routePaymentReaction, sendPaymentLinks } from "./payments.js";
+import { optedOut } from "./people.js";
 import { addInvite, addThread } from "./threads.js";
 
 export type { SettleMode };
@@ -87,6 +89,7 @@ async function postSettleRequest(
   group_id: string,
   expenses: Expense[],
   request_id: string,
+  still_open: T.StillOpen[] = [],
 ): Promise<boolean> {
   const byPayee = new Map<string, Share[]>();
   for (const e of expenses) {
@@ -114,10 +117,13 @@ async function postSettleRequest(
       })),
     };
   });
+  const links = linksMode(ctx);
   const text = T.settleRequest({
     seed: request_id,
     owed,
     description: included.length === 1 ? included[0]!.description : undefined,
+    links,
+    still_open,
   });
   const expense_id = included.length === 1 ? included[0]!.expense_id : undefined;
   await say(ctx, {
@@ -129,7 +135,22 @@ async function postSettleRequest(
   });
   // "...or reply if something's off."
   addInvite(ctx, { group_id }, { id: request_id, text, kind: "settle_open", expense_id, expense_ids: included.map((e) => e.expense_id) });
+  // §7.6: each person's link, privately.
+  if (links) await sendPaymentLinks(ctx, request_id, included.map((e) => ctx.store.expense(e.expense_id) ?? e));
   return true;
+}
+
+// What a settle-up leaves out because it isn't locked in yet, so nothing
+// waiting on an answer gets quietly forgotten (ghosting, §7.3).
+function stillOpen(ctx: BrainCtx, group_id: string): T.StillOpen[] {
+  return ctx.store
+    .expenses()
+    .filter((e) => e.group_id === group_id && (e.status === "needs_info" || e.status === "itemizing"))
+    .sort((a, b) => a.created_at.getTime() - b.created_at.getTime())
+    .map((e) => ({
+      description: e.description,
+      why: e.status === "itemizing" ? "claims" : !e.payer_phone ? "payer" : e.total_cents === 0 ? "amount" : "details",
+    }));
 }
 
 // "let's settle up" (SPEC #15): one request for everything outstanding.
@@ -156,6 +177,7 @@ export async function settleUp(ctx: BrainCtx, m: Message) {
     m.group_id,
     outstanding,
     `settle_request:${m.group_id}:${m.message_id}`,
+    stillOpen(ctx, m.group_id),
   );
   if (posted) return;
   // Nothing locked in yet, but a receipt may still be waiting on claims:
@@ -233,8 +255,10 @@ export function openRequestFor(ctx: BrainCtx, m: Message): string | undefined {
   return e?.settle_message_id;
 }
 
-// A typed "yes" never pays (P7). Point to the 👍, once per request.
+// A typed "yes" never pays (P7). Point to the 👍, once per request. With
+// payment links, point to the link instead.
 export async function textApproval(ctx: BrainCtx, m: Message) {
+  if (linksMode(ctx)) return linkHint(ctx, m);
   const request_id = openRequestFor(ctx, m);
   if (!request_id) return;
   await say(ctx, {
@@ -390,10 +414,21 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
     .find((o) => o.sent_photon_id === m.reply_to_id);
   if (!target) return;
 
+  // §7.6 payment links: a 👍 on a link says it's sent; the payee's 👍 or 👎
+  // on "did it come through?" answers it. A 👎 on a link disputes it.
+  if (target.kind === "dm" && linksMode(ctx)) {
+    if (await routePaymentReaction(ctx, m, target)) return;
+    if ((target.purpose === "payment_link" || target.purpose === "approval_followup") && m.reaction === "dislike" && target.to_phone === m.sender_phone)
+      await dispute(ctx, m, linkExpenses(ctx, target));
+    return;
+  }
+
   if (target.purpose === "settle_request") {
     if (m.reaction === "like" && (await payeeTapped(ctx, m, target.action_id))) return;
     const request_id = liveRequest(ctx, m, target.action_id);
     if (!request_id) return;
+    // With links, a 👍 on the group's request pays nothing: the link does.
+    if (m.reaction === "like" && linksMode(ctx)) return;
     if (m.reaction === "like") await approveRequest(ctx, m, request_id);
     else if (m.reaction === "dislike")
       await dispute(
@@ -425,6 +460,16 @@ export async function routeReaction(ctx: BrainCtx, m: Message) {
   }
 }
 
+// The finalized expenses a payment link covers that the person still owes on.
+function linkExpenses(ctx: BrainCtx, link: { action_id: string; to_phone?: string }): Expense[] {
+  const row = parseLinkRow(link);
+  if (!row) return [];
+  return ctx.store
+    .expenses()
+    .filter((e) => e.settle_message_id === row.request_id && e.payer_phone === row.payee)
+    .filter((e) => owing(ctx, e).some((s) => s.phone === row.debtor));
+}
+
 // The payee's own 👍 on a settle request pays nothing (P7), but Tab says
 // so once, by DM, with who it's still waiting on (Joe's review on #47:
 // Priya tapped five times). True when the tap was the payee's: they're
@@ -452,19 +497,26 @@ async function payeeTapped(ctx: BrainCtx, m: Message, request_id: string): Promi
 export async function announceSettlements(ctx: BrainCtx) {
   const sent = new Set(ctx.store.outbox().map((o) => o.action_id));
   const transfers = ctx.store.transfers();
+  // One receipt per approval and person who paid: a payee's "priya and kian
+  // paid me" covers two people (review).
   const byApproval = new Map<string, typeof transfers>();
-  for (const t of transfers)
-    byApproval.set(t.approved_by_message_id, [
-      ...(byApproval.get(t.approved_by_message_id) ?? []),
-      t,
-    ]);
+  for (const t of transfers) {
+    const key = `${t.approved_by_message_id}\n${t.from_phone}`;
+    byApproval.set(key, [...(byApproval.get(key) ?? []), t]);
+  }
 
   // Seeded history (seed:demo) has no real 👍 behind it, and no request Tab
-  // posted: announce only what happened in the chat.
-  const reactions = new Set(ctx.store.messages().filter((m) => m.kind === "reaction").map((m) => m.message_id));
-  for (const [approval, ts] of byApproval) {
-    const id = `payment_receipt:${approval}`;
-    if (!reactions.has(approval) || sent.has(id) || ts.some((t) => t.status !== "done")) continue;
+  // posted: announce only what happened in the chat. A payment made through
+  // a link was reported by a 👍 or a text, and confirmed by the payee.
+  const messages = new Map(ctx.store.messages().map((m) => [m.message_id, m]));
+  for (const [key, ts] of byApproval) {
+    const approval = key.split("\n")[0]!;
+    const simulated = ts.every((t) => (t.provider ?? "spacetime_simulated") === "spacetime_simulated");
+    // A simulated 👍 is always the payer's own, so one receipt per approval;
+    // "|" keeps the person apart from the approval (history.ts reads it).
+    const id = simulated ? `payment_receipt:${approval}` : `payment_receipt:${approval}|${ts[0]!.from_phone}`;
+    const said = messages.get(approval);
+    if (!said || (simulated && said.kind !== "reaction") || sent.has(id) || ts.some((t) => t.status !== "done")) continue;
     const e = ctx.store.expense(ts[0]!.expense_id);
     if (!e) continue;
     const paid = new Map<string, number>();
@@ -485,19 +537,14 @@ export async function announceSettlements(ctx: BrainCtx) {
       descriptions.length > 0 && descriptions.length <= 3
         ? listJoin(descriptions)
         : ctx.store.group(e.group_id)?.display_name;
+    const paidTo = [...paid].map(([to, amount_cents]) => ({ payee: person(ctx, e.group_id, to), amount_cents }));
     await say(ctx, {
       chat: { dm_phone: from },
       purpose: "payment_receipt",
       id,
-      text: T.paymentConfirmation({
-        paid: [...paid].map(([to, amount_cents]) => ({
-          payee: person(ctx, e.group_id, to),
-          amount_cents,
-        })),
-        label,
-        allSquare: !stillOwes,
-        nessie: process.env.NESSIE_RECEIPTS === "on",
-      }),
+      text: simulated
+        ? T.paymentConfirmation({ paid: paidTo, label, allSquare: !stillOwes, nessie: process.env.NESSIE_RECEIPTS === "on" })
+        : T.paymentConfirmed({ paid: paidTo, label, allSquare: !stillOwes }),
     });
   }
 
@@ -552,10 +599,12 @@ export async function announceSettlements(ctx: BrainCtx) {
   }
 }
 
-// §7.6: people who haven't tapped 👍 get a friendly nudge in the group by
-// name, on the claim-nudge schedule, counted from when the request went out.
-// After the last one the balance just stays outstanding (P7).
+// §7.6: people who haven't paid get a friendly nudge by DM (P5: never in
+// front of the group), on the claim-nudge schedule, counted from when the
+// request went out. After the last one the balance just stays outstanding
+// (P7). With payment links each nudge carries the link (payments.ts).
 export async function approvalFollowups(ctx: BrainCtx) {
+  if (linksMode(ctx)) return paymentReminders(ctx);
   const now = ctx.now();
   const d = ctx.timing.durations;
   const schedule = [d.FOLLOWUP_DM1_AFTER, d.FOLLOWUP_DM1_AFTER + d.FOLLOWUP_DM2_AFTER, d.FOLLOWUP_DM3_AFTER];
@@ -563,9 +612,13 @@ export async function approvalFollowups(ctx: BrainCtx) {
     const group_id = request.group_id!;
     const expenses = requestExpenses(ctx, request.action_id).filter((e) => e.status === "finalized");
     const byPerson = new Map<string, { e: Expense; s: Share }[]>();
-    for (const e of expenses)
+    // Nobody is reminded about a debt to someone who deleted their data.
+    for (const e of expenses.filter((x) => !x.payer_phone?.startsWith("forgotten:")))
       for (const s of owing(ctx, e)) byPerson.set(s.phone, [...(byPerson.get(s.phone) ?? []), { e, s }]);
     for (const [phone, owed] of byPerson) {
+      // The module skips DMs to someone who texted STOP, so the step would
+      // never advance and this would retry every tick (review).
+      if (optedOut(ctx, phone) || phone.startsWith("forgotten:")) continue;
       // Counted from the outbox: shares can't change once finalized.
       const prefix = `approval_followup:${request.action_id}:${phone}:`;
       const step = ctx.store.outbox().filter((o) => o.action_id.startsWith(prefix)).length;
@@ -574,7 +627,7 @@ export async function approvalFollowups(ctx: BrainCtx) {
       const toPayee = new Map<string, number>();
       for (const { e, s } of owed) toPayee.set(e.payer_phone!, (toPayee.get(e.payer_phone!) ?? 0) + s.amount_cents);
       await say(ctx, {
-        chat: { group_id },
+        chat: { dm_phone: phone },
         purpose: "approval_followup",
         id: `${prefix}${step + 1}`,
         text: T.approvalFollowup({

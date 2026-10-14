@@ -176,6 +176,14 @@ test("DMs: only members, and only replies to Tab or messages addressed to Tab", 
   fx.message({ chat: fx.dm(A), handle: A, text: "3" });
   await bridge.poll();
   expect(dmText()).toEqual(["@tab what do I owe", "2"]);
+
+  // Opting out has no window (SPEC 19); a stranger still can't get in.
+  fx.message({ chat: fx.dm(A), handle: A, text: "STOP" });
+  fx.message({ chat: fx.dm(A), handle: A, text: "delete my data" });
+  fx.message({ chat: fx.dm(STRANGER), handle: STRANGER, text: "stop" });
+  fx.message({ chat: fx.dm(A), handle: A, text: "stop by later?" });
+  await bridge.poll();
+  expect(dmText()).toEqual(["@tab what do I owe", "2", "STOP", "delete my data"]);
 });
 
 test("never posts, DMs, or tapbacks outside enabled groups and their members", async () => {

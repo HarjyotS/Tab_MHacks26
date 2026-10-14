@@ -126,7 +126,8 @@ function about(ctx: BrainCtx, m: Message, o: Outbox, groups: string[]): Referent
   const me = m.sender_phone;
   const dm = !m.group_id;
   if (o.purpose === "payment_receipt") {
-    const approval = o.action_id.replace(/^payment_receipt:/, "");
+    // payment_receipt:<approval>, or payment_receipt:<approval>|<person> with links.
+    const approval = o.action_id.replace(/^payment_receipt:/, "").split("|")[0]!;
     const transfers = ctx.store
       .transfers()
       .filter((t) => t.approved_by_message_id === approval && groups.includes(t.group_id) && (!dm || t.from_phone === me || t.to_phone === me));
