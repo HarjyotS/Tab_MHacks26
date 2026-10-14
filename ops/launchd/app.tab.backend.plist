@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The backend (backend/): reads the repo-root .env. It exits when its
+     SpacetimeDB connection drops, and launchd starts it again. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>app.tab.backend</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__REPO__/node_modules/.bin/tsx</string>
+    <string>src/main.ts</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__/backend</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__PATH__</string>
+    <key>DOTENV_CONFIG_PATH</key><string>__REPO__/.env</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>StandardOutPath</key><string>__LOGS__/backend.log</string>
+  <key>StandardErrorPath</key><string>__LOGS__/backend.log</string>
+</dict>
+</plist>

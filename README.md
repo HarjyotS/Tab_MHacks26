@@ -14,6 +14,10 @@ npm install
 Copy-Item .env.example .env
 ```
 
+## Running it for real
+
+To run Tab on an always-on Mac (its own number, auto-deploys on every push to `main`), follow [ops/README.md](ops/README.md).
+
 ## Local setup
 
 Start SpacetimeDB, publish the module, and generate its typed bindings:

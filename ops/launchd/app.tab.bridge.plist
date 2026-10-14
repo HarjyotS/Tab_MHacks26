@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- The iMessage bridge (client/). Runs bun directly, so the macOS
+     permissions (Full Disk Access, Accessibility, Automation) go to bun. -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>app.tab.bridge</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__BUN__</string>
+    <string>src/index.ts</string>
+  </array>
+  <key>WorkingDirectory</key><string>__REPO__/client</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key><string>__PATH__</string>
+  </dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+  <key>ThrottleInterval</key><integer>10</integer>
+  <key>LimitLoadToSessionType</key><string>Aqua</string>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>__LOGS__/bridge.log</string>
+  <key>StandardErrorPath</key><string>__LOGS__/bridge.log</string>
+</dict>
+</plist>
