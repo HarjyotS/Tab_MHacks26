@@ -11,3 +11,7 @@ spacetime/build/
 *.tsbuildinfo
 .state/
 .DS_Store
+
+# Claude Code: local permissions and agent worktrees
+.claude/settings.local.json
+.claude/worktrees/
