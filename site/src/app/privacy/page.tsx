@@ -20,7 +20,7 @@ const SECTIONS: LegalSection[] = [
         <li>Tab only keeps messages that are about money.</li>
         <li>Tab never holds, moves, or has access to your money or your bank account.</li>
         <li>Your data is never sold and never used for ads.</li>
-        <li>You can have your data deleted at any time.</li>
+        <li>Text STOP to Tab any time and it stops texting you. Text &quot;delete my data&quot; and it deletes what it has about you.</li>
       </ul>
     ),
   },
@@ -58,6 +58,10 @@ const SECTIONS: LegalSection[] = [
           their phone numbers, so it knows who owes whom.
         </p>
         <p>
+          Photos are checked the same way, on Tab&apos;s own computer: it reads any text in the photo there. Only a photo with prices, a total, or a
+          payment in it, or a caption about money, goes on to Tab&apos;s AI. Selfies, memes, and everything else don&apos;t.
+        </p>
+        <p>
           If you choose to give Tab a Venmo username or Cash App $cashtag, it keeps that so it can send you a payment link. Tab will never ask for a
           bank login, a card number, or a Social Security number.
         </p>
@@ -84,8 +88,10 @@ const SECTIONS: LegalSection[] = [
     title: 'Keeping and deleting data',
     body: (
       <p>
-        Waitlist entries are kept until launch or until you opt out. Group money records are kept while your group uses Tab. To have your data
-        deleted, reply STOP to a text from Tab or use the contact link at the bottom of this page.
+        Waitlist entries are kept until launch or until you opt out. Group money records are kept while your group uses Tab. To stop all texts
+        from Tab, text it STOP (START undoes it). To have your data deleted, text Tab &quot;delete my data&quot; and confirm, or use the contact
+        link at the bottom of this page. Your name, payment handle, and messages are deleted. Amounts your friends still owe each other stay on
+        their tab without your name or number, and your number is kept only so Tab never texts it again.
       </p>
     ),
   },
