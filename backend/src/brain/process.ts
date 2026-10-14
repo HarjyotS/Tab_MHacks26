@@ -616,9 +616,14 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   // the question inline (noise eval: "got it thanks" from the person Tab
   // asked who paid was read as "I paid", and the tacos were logged).
   const chatty = result.intent === "ignore" && result.confidence >= FAIRLY_SURE_CHATTER;
-  const reask = pool.find(
-    (t) => (t.data.kind === "expense" || t.data.kind === "adjustment") && ((isAsker(t, m) && (!chatty || t === replied)) || (t === replied && passed)),
-  );
+  // A correction the gate is sure of goes to the correction handler, which
+  // knows how to change an expense Tab is still asking about.
+  const correcting = decision === "act" && result.intent === "correction" && replied === undefined;
+  const reask = correcting
+    ? undefined
+    : pool.find(
+        (t) => (t.data.kind === "expense" || t.data.kind === "adjustment") && ((isAsker(t, m) && (!chatty || t === replied)) || (t === replied && passed)),
+      );
   if (reask && (await answerExpense(ctx, m, reask, isAsker(reask, m) ? m.text : inThirdPerson(m.text, nameOf(ctx, m)))))
     return { answered: true };
 

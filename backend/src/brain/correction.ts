@@ -5,6 +5,7 @@ import type { Expense, Message } from "../store/types.js";
 import { type BrainCtx, chatOf, say, tapback } from "./context.js";
 import { liveShares, moneyMoving, postProposal, reopen } from "./expense.js";
 import { extractInput } from "./inputs.js";
+import { openThreads } from "./threads.js";
 
 // "actually the uber was $30 not $24", not sent as a reply: a correction to
 // the open expense it names, not a second Uber (playground run, #44). Joe's
@@ -55,7 +56,7 @@ export function oldAmountCents(text: string): number | undefined {
 function expenseAt(ctx: BrainCtx, group_id: string | undefined, cents: number, text: string): Expense | undefined {
   const at = ctx.store
     .expenses()
-    .filter((e) => e.group_id === group_id && (e.status === "proposed" || e.status === "finalized") && e.total_cents === cents);
+    .filter((e) => e.group_id === group_id && (e.status === "proposed" || e.status === "finalized" || e.status === "needs_info") && e.total_cents === cents);
   const named = at.filter((e) => namesExpense(text, e.description));
   return named.length === 1 ? named[0] : at.length === 1 ? at[0] : undefined;
 }
@@ -128,7 +129,22 @@ export async function handleCorrection(
     ctx.store.lineItems(target.expense_id).length > 0
   )
     return ask(T.receiptTotalFixed(target.description), target.expense_id);
-  // Waiting on Tab's own question: that flow fills it in.
+  // Still waiting on Tab's question (who paid): the new amount goes on the
+  // row now, and into the open question's text, so the answer's re-read
+  // keeps it (noise eval: "the tacos were 62 not 55" was dropped while Tab
+  // waited on who paid).
+  if (target.status === "needs_info") {
+    if (result.new_amount_cents === undefined && !result.new_description) return;
+    await tapback(ctx, m, "like", target.expense_id);
+    await ctx.db.upsert_expense({
+      ...target,
+      total_cents: result.new_amount_cents ?? target.total_cents,
+      description: result.new_description ?? target.description,
+    });
+    for (const t of openThreads(ctx, chatOf(m)))
+      if (t.expense_id === target.expense_id && t.data.kind === "expense") t.data.text = `${t.data.text}\n${m.text ?? ""}`;
+    return;
+  }
   if (target.status !== "proposed" && target.status !== "finalized") return;
 
   const total = result.new_amount_cents ?? target.total_cents;

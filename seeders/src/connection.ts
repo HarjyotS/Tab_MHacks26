@@ -73,6 +73,7 @@ export function subscribeBackend(connection: DbConnection): Promise<Subscription
         tables.backendClaims,
         tables.backendShares,
         tables.backendTransfers,
+        tables.backendPeople,
       ]);
   });
 }

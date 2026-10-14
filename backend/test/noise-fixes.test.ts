@@ -303,3 +303,33 @@ describe("chatter that isn't for Tab (noise eval, round 2)", () => {
     expect(repliesTo(w, m.message_id)).toEqual([]);
   });
 });
+
+describe("correcting an expense Tab is still asking about", () => {
+  it("takes the new amount now, and keeps it when the question is answered", async () => {
+    const TACOS = "dinner at that taco truck was $55 total";
+    const FIX = "wait the tacos were actually 62 not 55";
+    const w = world({
+      expense: {
+        [`new|${TACOS}`]: raw(5500, "Taco truck dinner", { payer: "unknown" }),
+        [`new|${TACOS}\n${FIX}\nyes`]: raw(6200, "Taco truck dinner"),
+      },
+      correction: {},
+    });
+    gateSays(w, { [TACOS]: ["expense", 0.9], [FIX]: ["correction", 0.99] });
+    const tacos = await w.say("Priya", TACOS);
+    const id = `exp_${tacos.message_id}`;
+    expect(w.said("clarifying_question").at(-1)).toBe("who paid for the taco truck dinner?");
+    w.ctx.extract.correction = async () => ({ result: { target_expense_id: undefined, new_amount_cents: 6200, new_description: undefined, unclear: false }, problems: [] });
+    await w.say("Priya", FIX);
+    expect(w.db.expense(id)).toMatchObject({ status: "needs_info", total_cents: 6200 });
+    // Her answer re-reads the whole thing, correction included.
+    gateSays(w, { yes: ["answer", 0.9] });
+    w.ctx.extract.expense = async (input, mode) => {
+      const key = `${mode}|${input.message.text}`;
+      if (key !== `new|${TACOS}\n${FIX}\nyes`) throw new Error(`unexpected ${JSON.stringify(key)}`);
+      return { result: { is_expense: true, amount_cents: 6200, description: "Taco truck dinner", payer: { kind: "sender" }, participants: { kind: "everyone" }, exclusions: [], fixed: [], missing: [] }, problems: [] };
+    };
+    await w.say("Priya", "yes");
+    expect(w.db.expense(id)).toMatchObject({ status: "proposed", total_cents: 6200, payer_phone: "+15555550104" });
+  });
+});

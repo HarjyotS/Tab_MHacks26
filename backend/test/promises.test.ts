@@ -272,3 +272,21 @@ describe("handles and links", () => {
     expect(cashAppLink("joecash", 120000)).toBe("https://cash.app/$joecash/1200.00");
   });
 });
+
+describe("payment talk Tab doesn't track", () => {
+  it("a payment for something else, or another amount, isn't reported", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const { id } = await settled(w);
+    const cleats = "i venmo'd you 20 for the cleats joe";
+    const other = "just venmo'd joe 25";
+    const ours = "just venmo'd joe for the pizza";
+    gateSays(w, { [cleats]: ["payment_reported", 1], [other]: ["payment_reported", 1], [ours]: ["payment_reported", 1] });
+    await w.say("Kian", cleats);
+    await w.say("Priya", other);
+    expect(w.db.transfers()).toEqual([]);
+    expect(dmsTo(w, "Joe").filter((o) => o.purpose === "payment_check")).toEqual([]);
+    await w.say("Jake", ours);
+    expect(share(w, id, "Jake").status).toBe("approved");
+  });
+});

@@ -298,11 +298,31 @@ export async function reportFromText(ctx: BrainCtx, m: Message): Promise<void> {
   const mine = all.filter((o) => o.debtor === m.sender_phone);
   const toWhom = mine.filter((o) => named(o, o.payee));
   const target = toWhom.length === 1 ? toWhom[0] : mine.length === 1 ? mine[0] : undefined;
-  if (target) return report(ctx, m, target);
+  // Only when it's for what they owe: another amount, or something else
+  // ("venmo'd you 20 for the cleats" while they owe $17.40 for groceries),
+  // is a payment Tab doesn't track (noise eval).
+  if (target && !aboutSomethingElse(text, target)) return report(ctx, m, target);
+  if (target) return ctx.log("payment_not_ours", { message_id: m.message_id, group_id: target.group_id });
   if (toWhom.length > 1 || mine.length > 1) {
     const who = (toWhom.length > 1 ? toWhom : mine).map((o) => person(ctx, o.group_id, o.payee));
     await say(ctx, { chat: m.group_id ? { group_id: m.group_id } : { dm_phone: m.sender_phone }, purpose: "clarifying_question", id: `which_payee:${m.message_id}`, reply_to: m.message_id, text: T.whichPayee(who) });
   }
+}
+
+// A stated amount that isn't what they owe, or "for the X" naming none of
+// the expenses it would cover. "for my half", "for everything" are fine.
+const STATED = /\$\s?(\d+(?:\.\d{1,2})?)|\b(\d+(?:\.\d{1,2})?)\s*(?:bucks|dollars)?\b/i;
+const FOR_WHAT = /\bfor\s+(?:the\s+|my\s+|our\s+)?([a-z][a-z' ]{1,30})/i;
+const GENERIC = /^(?:half|share|part|portion|everything|all|it|that|this|tab|stuff|last night|this week|today|yesterday)\b/i;
+
+function aboutSomethingElse(text: string, o: Owe): boolean {
+  const amount = text.match(STATED);
+  const cents = amount ? Math.round(Number(amount[1] ?? amount[2]) * 100) : undefined;
+  if (cents !== undefined && cents !== o.cents) return true;
+  const what = text.match(FOR_WHAT)?.[1]?.trim();
+  if (!what || GENERIC.test(what)) return false;
+  const words = (what.toLowerCase().match(/[a-z]{3,}/g) ?? []).filter((w) => !["the", "and", "for", "you", "your"].includes(w));
+  return words.length > 0 && !o.items.some(({ e }) => words.some((w) => e.description.toLowerCase().includes(w.replace(/s$/, ""))));
 }
 
 // Shares already reported to this payee and waiting on their word, as Owes,
