@@ -9,6 +9,9 @@ import { type BrainCtx, chatOf, eyes, type Pending, perExpense, say, tapback } f
 const SLOW = new Set<Intent>(["expense", "receipt", "split_adjustment", "correction", "money_question"]);
 import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
+import { staleExpenses } from "./ghosting.js";
+import { handlePaymentDm, linksMode, reportFromText } from "./payments.js";
+import { handlePersonCommand } from "./people.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
   acceptSplit,
@@ -161,6 +164,18 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
     let intent: Intent | undefined;
     let confidence: number | undefined;
 
+    // §19: STOP, START, and "delete my data" come before the gate, and
+    // someone who texted STOP is left alone. Their text isn't kept.
+    if (await handlePersonCommand(ctx, m)) {
+      await ctx.db.set_message_result({ message_id: m.message_id, intent: "ignore", status: "done" });
+      return;
+    }
+    // §7.6: "sent", "got it", or a Venmo handle, answering one of Tab's
+    // payment DMs. Plain answers to Tab's own DM, like a tapback would be.
+    if (await handlePaymentDm(ctx, m)) {
+      await ctx.db.set_message_result({ message_id: m.message_id, intent: "payment_reported", status: "done" });
+      return;
+    }
     if (m.kind === "reaction") {
       await routeReaction(ctx, m); // §6.2: never classified
     } else {
@@ -380,7 +395,12 @@ async function act(ctx: BrainCtx, m: Message, intent: Intent) {
     }
     case "answer":
       return; // Not an answer to anything still open (answerThreads): stay quiet (P1).
-    // payment_reported is ignored in the MVP; ignore needs nothing.
+    case "payment_reported":
+      // §7.6 payment links: "venmo'd jake for the uber", or "priya paid me".
+      // The simulated flow ignores it (only a 👍 there pays).
+      if (linksMode(ctx)) return reportFromText(ctx, m);
+      return;
+    // ignore needs nothing.
     default:
       ctx.log("intent_not_handled", { message_id: m.message_id, intent });
   }
@@ -1038,6 +1058,7 @@ export async function tick(ctx: BrainCtx): Promise<void> {
   await claimFollowups(ctx);
   await approvalFollowups(ctx);
   await announceSettlements(ctx);
+  await staleExpenses(ctx);
 }
 
 // An unexpired question from Tab about this expense (threads.ts).

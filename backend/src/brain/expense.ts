@@ -9,6 +9,7 @@ import * as T from "../copy/templates.js";
 import type { Expense, LineItem, Message, Share } from "../store/types.js";
 import {
   activeMembers,
+  splitMembers,
   chatOf,
   outsideQuietHours,
   say,
@@ -199,13 +200,16 @@ export async function proposeNew(
   const { result } = a.extracted;
   const payer = payerPhone(result, a.source)!;
   const expense_id = expenseIdFor(a.source.message_id);
-  const members = activeMembers(ctx, a.group_id);
+  // Nobody who texted STOP is in a new split (§19), except a payer someone
+  // else named, who still needs their share.
+  const members = activeMembers(ctx, a.group_id).filter((x) => x.phone === payer || splitMembers(ctx, a.group_id).includes(x));
   const included = new Set(
     result.participants.kind === "list"
       ? result.participants.phones
       : members.map((x) => x.phone),
   );
   for (const p of result.exclusions) included.delete(p);
+  for (const p of [...included]) if (p !== payer && !members.some((x) => x.phone === p)) included.delete(p);
   const fixed = new Map(result.fixed.map((f) => [f.phone, f.amount_cents]));
   const group = ctx.store.group(a.group_id);
   const deadline = outsideQuietHours(

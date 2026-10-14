@@ -154,6 +154,8 @@ export function world(
       },
     },
     timing: timing({ DEMO_MODE: "true" }),
+    // The older settle tests cover the simulated flow; payment-link tests set "links".
+    payments: "simulated",
     memory: new Memory(),
     log: () => {},
   };
@@ -217,15 +219,19 @@ export function world(
       if (!target?.sent_photon_id)
         throw new Error(`no sent message ${action_id}`);
       w.advance(1000);
+      // A tapback on one of Tab's DMs happens in that DM.
+      const dm = target.kind === "dm";
       const m = db.ingest({
         sender_phone: PEOPLE[who],
-        group_id: GROUP,
+        group_id: dm ? undefined : GROUP,
+        is_dm: dm,
         kind: "reaction",
         reaction,
         reply_to_id: target.sent_photon_id,
       });
+      const icon = reaction === "dislike" ? "👎" : "👍";
       transcript.push(
-        `        ${who} reacted 👍 to Tab's ${target.purpose.replace(/_/g, " ")}`,
+        `        ${who} reacted ${icon} to Tab's ${target.purpose.replace(/_/g, " ")}${dm ? " (DM)" : ""}`,
       );
       await processMessage(ctx, m);
       flush();

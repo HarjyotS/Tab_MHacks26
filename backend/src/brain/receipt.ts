@@ -7,6 +7,7 @@ import * as T from "../copy/templates.js";
 import type { Expense, Message } from "../store/types.js";
 import {
   activeMembers,
+  splitMembers,
   chatOf,
   inWords,
   outsideQuietHours,
@@ -132,7 +133,8 @@ export async function proposeReceipt(
   const { receipt } = read;
   const total = receipt.total_cents!;
   const expense_id = expenseIdFor(source.message_id);
-  const members = activeMembers(ctx, group_id);
+  // Nobody who texted STOP is in a new split (§19).
+  const members = splitMembers(ctx, group_id);
   const extras = opts.itemsTrusted
     ? extrasOf(receipt)
     : {
@@ -363,8 +365,8 @@ async function applyClaim(
   await ctx.db.set_share({ ...share, status: "locked", responded: true });
 }
 
-// §7.5 follow-ups for people who haven't claimed, generated when due. Joe's
-// call: they go in the group chat by name, not by DM (changes SPEC P5).
+// §7.5 follow-ups for people who haven't claimed, generated when due. They
+// go by DM (P5: never in front of the group); a reply there is a claim.
 export async function claimFollowups(ctx: BrainCtx) {
   const now = ctx.now();
   const d = ctx.timing.durations;
@@ -387,14 +389,14 @@ export async function claimFollowups(ctx: BrainCtx) {
           : T.claimLastCall({ person, merchant: e.description, amount_cents: s.amount_cents, when: inWords(end.getTime() - now.getTime()) });
       const id = `claim_followup:${e.expense_id}:${s.phone}:${s.followup_count + 1}`;
       await say(ctx, {
-        chat: { group_id: e.group_id },
+        chat: { dm_phone: s.phone },
         purpose: "claim_followup",
         id,
         text,
         expense_id: e.expense_id,
         send_after: outsideQuietHours(ctx, now, tz),
       });
-      addInvite(ctx, { group_id: e.group_id }, { id, text, kind: "claims_open", expense_id: e.expense_id });
+      addInvite(ctx, { dm_phone: s.phone }, { id, text, kind: "claims_open", expense_id: e.expense_id });
       await ctx.db.set_share({ ...s, followup_count: s.followup_count + 1, last_followup_at: now });
     }
   });

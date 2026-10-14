@@ -99,23 +99,22 @@ export function itemList(a: {
   return `${a.merchant}, ${money(a.total_cents)} total\n${itemLines(a.items)}\nreply w what you had (numbers work), or "even" for a share of whatever's left`;
 }
 
-// Claim nudges go in the group chat, by name (Joe's call; SPEC P5 and §7.5
-// say DMs). The last one quotes the amount they'll be assigned.
+// Claim nudges go by DM (P5: never in front of the group). The last one
+// quotes the amount they'll be assigned.
 export function claimNudge(a: { seed: string; person: Person; merchant: string; step: 1 | 2 }): string {
-  const name = displayName(a.person);
   return a.step === 1
     ? pick(a.seed, [
-        `${name}, what'd you get at ${a.merchant}? numbers from the list, or "even"`,
-        `${name} what was yours at ${a.merchant}? numbers or "even" works`,
+        `hey, what'd you get at ${a.merchant}? the numbers from the list in the group, or "even"`,
+        `what was yours at ${a.merchant}? numbers from the list in the group or "even" works`,
       ])
     : pick(a.seed, [
-        `${name} still need yours for ${a.merchant} whenever, numbers or "even"`,
-        `${name}, no rush, just need yours for ${a.merchant}. numbers or "even"`,
+        `still need yours for ${a.merchant} whenever, numbers from the list or "even"`,
+        `no rush, just need yours for ${a.merchant}. numbers from the list or "even"`,
       ]);
 }
 
 export function claimLastCall(a: { person: Person; merchant: string; amount_cents: number; when: string }): string {
-  return `last call ${displayName(a.person)}: ${a.when} i'll put you down for ${money(a.amount_cents)} for ${a.merchant} (an even share of what's unclaimed) unless you say what you had`;
+  return `last call on ${a.merchant}: ${a.when} i'll put you down for ${money(a.amount_cents)} (an even share of what's unclaimed) unless you say what you had`;
 }
 
 // A claim Tab couldn't match to the list.
@@ -132,17 +131,30 @@ export const whichList = (descriptions: string[]) =>
 // mode covers everything outstanding, grouped by who is owed.
 export type Owed = { payee: Person; shares: Share[] };
 
-export function settleRequest(a: { seed: string; owed: Owed[]; description?: string }): string {
-  const tap = pick(a.seed, [
-    "tap 👍 on this to pay your part, or reply if something's off",
-    "are we chill? tap 👍 to pay your part, or reply if something's off",
-  ]);
+// What a settle request leaves out because it isn't locked in yet (§7.6,
+// ghosting): "pizza (who paid?)".
+export type StillOpen = { description: string; why: "payer" | "amount" | "claims" | "details" };
+
+const OPEN_WHY: Record<StillOpen["why"], string> = { payer: "who paid?", amount: "how much?", claims: "waiting on claims", details: "needs details" };
+
+// links: payment links (§7.6), sent to each person by DM. Without them
+// (PAYMENTS=simulated), a 👍 on this message pays.
+export function settleRequest(a: { seed: string; owed: Owed[]; description?: string; links?: boolean; still_open?: StillOpen[] }): string {
+  const tap = a.links
+    ? pick(a.seed, ["i'll text each of you a link to pay, or reply if something's off", "texting each of you a link to pay. reply if something's off"])
+    : pick(a.seed, [
+        "tap 👍 on this to pay your part, or reply if something's off",
+        "are we chill? tap 👍 to pay your part, or reply if something's off",
+      ]);
   const list = (shares: Share[]) => shares.map((s) => `${displayName(s.person)} ${money(s.amount_cents)}`).join(", ");
+  const open = a.still_open?.length
+    ? `\nnot in this yet: ${a.still_open.map((o) => `${o.description} (${OPEN_WHY[o.why]})`).join(", ")}`
+    : "";
   if (a.owed.length === 1) {
     const o = a.owed[0]!;
-    return `cool, here's what's owed to ${displayName(o.payee)}${a.description ? ` for ${a.description}` : ""}:\n${list(o.shares)}\n${tap}`;
+    return `cool, here's what's owed to ${displayName(o.payee)}${a.description ? ` for ${a.description}` : ""}:\n${list(o.shares)}\n${tap}${open}`;
   }
-  return `cool, here's what's owed:\n${a.owed.map((o) => `owed to ${displayName(o.payee)}: ${list(o.shares)}`).join("\n")}\n${tap}`;
+  return `cool, here's what's owed:\n${a.owed.map((o) => `owed to ${displayName(o.payee)}: ${list(o.shares)}`).join("\n")}\n${tap}${open}`;
 }
 
 // A typed "yes" never moves money (P7, SPEC #15).
@@ -200,21 +212,28 @@ export function paymentConfirmation(a: { paid: { payee: Person; amount_cents: nu
   return `done, you paid ${what}${a.label ? ` for ${a.label}` : ""}${how}${a.allSquare ? "\nyou're all square" : ""}`;
 }
 
-// §7.6: a friendly nudge in the group by name (P5). Money moves only on a
-// 👍, so every nudge ends by pointing to it (P7).
+// §7.6 payment links: the payee confirmed it arrived (or said so first).
+export function paymentConfirmed(a: { paid: { payee: Person; amount_cents: number }[]; label?: string; allSquare: boolean }): string {
+  const what = a.paid.length === 1
+    ? `${displayName(a.paid[0]!.payee)} got your ${money(a.paid[0]!.amount_cents)}`
+    : `${listJoin(a.paid.map((p) => displayName(p.payee)))} got your ${listJoin(a.paid.map((p) => money(p.amount_cents)))}`;
+  return `${what}${a.label ? ` for ${a.label}` : ""}${a.allSquare ? "\nyou're all square" : ""}`;
+}
+
+// §7.6 (PAYMENTS=simulated): a friendly nudge by DM (P5: never in front of
+// the group). Money moves only on a 👍, so every nudge points to it (P7).
 export function approvalFollowup(a: {
   seed: string;
   person: Person;
   owed: { payee: Person; amount_cents: number }[];
   step: 1 | 2 | 3;
 }): string {
-  const name = displayName(a.person);
   const owe = listJoin(a.owed.map((o) => `${displayName(o.payee)} ${money(o.amount_cents)}`));
-  const tap = "no rush, just tap 👍 on the settle msg when you can";
-  if (a.step === 3) return `last nudge from me ${name}, promise: you owe ${owe}\n${tap}`;
+  const tap = "no rush, just tap 👍 on the settle msg in the group when you can";
+  if (a.step === 3) return `last nudge from me, promise: you owe ${owe}\n${tap}`;
   return a.step === 1
-    ? pick(a.seed, [`hey ${name}, you owe ${owe}\n${tap}`, `${name} heads up, you owe ${owe}\n${tap}`])
-    : `${name} just bumping this, you owe ${owe}\n${tap}`;
+    ? pick(a.seed, [`hey, you owe ${owe}\n${tap}`, `heads up, you owe ${owe}\n${tap}`])
+    : `just bumping this, you owe ${owe}\n${tap}`;
 }
 
 // 🎉 shows only if the group uses emoji (style.ts). Without a description
@@ -595,3 +614,89 @@ export const helpReply = (seed: string) =>
     `i keep the group's tab. just say what you paid ("got groceries 63") or drop the receipt and i'll split it\nask "what do i owe" whenever, or "settle up" when you're done\nwant me gone? just remove me from the group`,
     `i'm tab, i do the splitting so nobody has to do math\nsay what you paid ("got groceries 63") or send a receipt pic. ask "what do i owe" anytime, or say "settle up" to square everyone up\nyou can remove me from the group whenever`,
   ]);
+
+// ── STOP, START, and deleting data (§19) ─────────────────────────────────
+
+export const optedOut = () =>
+  `got it, you're out\ni won't text you or add you to new splits. what's already on the tab stays\ntext START if you change your mind\nwant your data deleted too? text "delete my data"`;
+
+// Three lines: the group limit.
+export const optedOutInGroup = () =>
+  `got it, you're out\nno more texts from me and no new splits (what's already on the tab stays)\ntext me START anytime to come back`;
+
+export const optedIn = () => "welcome back, you're in again";
+
+export const confirmDeletion = () =>
+  `this deletes your name, payment info, and everything you've texted me\nwhat people already owe stays on the tab, just without your name or number\nreply DELETE to confirm`;
+
+export const deletionByDm = () => "texted you about that";
+
+export const dataDeleted = () => "done, your data's deleted\ni won't text you again unless you text START";
+
+// ── Payment links (§7.6): people pay each other in their own apps ────────
+
+export type PayLinks = { venmo?: string; cashapp?: string };
+
+const linkLines = (l: PayLinks) =>
+  [l.venmo ? `venmo: ${l.venmo}` : "", l.cashapp ? `cash app: ${l.cashapp}` : ""].filter(Boolean).join("\n");
+
+// One DM per person they owe, so a 👍 says which payment is sent.
+export function paymentLink(a: { payee: Person; amount_cents: number; label: string; links: PayLinks; waiting: boolean }): string {
+  const owe = `you owe ${displayName(a.payee)} ${money(a.amount_cents)} for ${a.label}`;
+  const links = linkLines(a.links);
+  if (links) return `${owe}\n${links}\ntap 👍 here once it's sent`;
+  if (a.waiting)
+    return `${owe}\nasked ${displayName(a.payee)} for their venmo, i'll send the link when i have it\nor pay however you two usually do and tap 👍 here once it's sent`;
+  return `${owe}\npay however you two usually do, then tap 👍 here once it's sent`;
+}
+
+// Asked once, when someone first needs to get paid.
+export const handlePrompt = (label: string) =>
+  `hey it's tab, people are about to pay you back for ${label}\nwhat's your venmo or cash app? like @your-name or $yourname`;
+
+export function handleSaved(h: { venmo?: string; cashtag?: string }): string {
+  const what = h.venmo && h.cashtag ? "venmo and cash app links" : h.venmo ? "venmo link" : "cash app link";
+  return `got it, i'll send people your ${what}`;
+}
+
+export function handleArrived(a: { payee: Person; amount_cents: number; label: string; links: PayLinks }): string {
+  return `here's ${displayName(a.payee)}'s link for the ${money(a.amount_cents)} (${a.label})\n${linkLines(a.links)}\ntap 👍 here once it's sent`;
+}
+
+export const paymentReported = (payee: Person) => `nice, checking with ${displayName(payee)} that it came through`;
+
+export function paymentCheck(a: { debtor: Person; amount_cents: number; label: string }): string {
+  return `${displayName(a.debtor)} says they sent you ${money(a.amount_cents)} for ${a.label}\ntap 👍 if it came through, 👎 if it didn't`;
+}
+
+export function paymentCheckReminder(a: { debtor: Person; amount_cents: number }): string {
+  return `did ${displayName(a.debtor)}'s ${money(a.amount_cents)} come through? tap 👍 if it did, 👎 if not`;
+}
+
+export const paymentMissing = (a: { payee: Person; amount_cents: number }) =>
+  `${displayName(a.payee)} doesn't see the ${money(a.amount_cents)} yet\nmind double checking? say "sent" once it's sorted`;
+
+// Private, on the claim-nudge schedule. Never guilt (P5).
+export function paymentReminder(a: { seed: string; payee: Person; amount_cents: number; label: string; links: PayLinks; step: 1 | 2 | 3 }): string {
+  const owe = `${displayName(a.payee)} ${money(a.amount_cents)} for ${a.label}`;
+  const first =
+    a.step === 1
+      ? pick(a.seed, [`hey, no rush, you owe ${owe}`, `heads up, you owe ${owe}, whenever`])
+      : a.step === 2
+        ? `just bumping this one: ${owe}`
+        : `last nudge from me, promise: ${owe}`;
+  const links = linkLines(a.links);
+  return `${first}${links ? `\n${links}` : ""}\ntap 👍 here once it's sent`;
+}
+
+export function whichPayee(payees: Person[]): string {
+  const names = payees.map(displayName);
+  const or = names.length <= 2 ? names.join(" or ") : `${names.slice(0, -1).join(", ")}, or ${names.at(-1)}`;
+  return `who'd you pay? ${or}`;
+}
+
+export const linkHint = () => "i texted you a link, just tap 👍 on it once it's sent";
+
+// ── Ghosting (§7.3): one more ask the next morning, then it's dropped ────
+
+export const reAsk = (question: string) => `still need this one for the tab: ${question}\nif nobody knows i'll drop it in a couple days`;

@@ -158,6 +158,9 @@ export type BrainCtx = {
   // A short reason per balance for a long "@Tab breakdown"; null falls back to the full list.
   summarize?: (input: SummaryInput) => Promise<string[] | null>;
   timing: Timing;
+  // §7.6: "links" (the default) sends Venmo and Cash App links and the payee
+  // confirms; "simulated" is the hackathon flow (a 👍 runs a simulated transfer).
+  payments?: "links" | "simulated";
   ledger?: LedgerConfig; // §12.3 links; absent means Tab posts none
   memory: Memory;
   log: (event: string, fields: Record<string, unknown>) => void;
@@ -172,6 +175,11 @@ const GONE = (process.env.TAB_GONE ?? "").split(",").map((x) => x.trim()).filter
 
 export function activeMembers(ctx: BrainCtx, group_id: string) {
   return ctx.store.members(group_id).filter((m) => !m.left_at && !GONE.some((end) => m.phone.endsWith(end)));
+}
+
+// Who a new split may include: active members who haven't texted STOP (§19).
+export function splitMembers(ctx: BrainCtx, group_id: string) {
+  return activeMembers(ctx, group_id).filter((m) => !ctx.store.person(m.phone)?.opted_out);
 }
 
 // Names Tab keeps the way they were saved: the group's members, or in a DM,

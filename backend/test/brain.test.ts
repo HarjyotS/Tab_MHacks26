@@ -106,6 +106,7 @@ beforeEach(() => {
       answer: () => Promise.reject(new Error("no free-form answers in these tests")),
     },
     timing: timing({ DEMO_MODE: "true" }),
+    payments: "simulated",
     memory: new Memory(),
     log: (event, fields) => log.push(`${event} ${JSON.stringify(fields)}`),
   };

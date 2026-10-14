@@ -84,6 +84,7 @@ const ctx: BrainCtx = {
   ask: { client: xai, model: grok.model },
   summarize: (s) => summarizeBreakdown(xai, grok.model, s, (why, reason) => log("summary_dropped", { why, reason })),
   timing: t,
+  payments: process.env.PAYMENTS === "simulated" ? "simulated" : "links",
   ledger: ledgerConfig(),
   memory: new Memory(),
   log,

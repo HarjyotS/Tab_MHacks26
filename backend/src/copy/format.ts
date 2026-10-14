@@ -12,7 +12,9 @@ export function money(cents: number): string {
 }
 
 // SPEC §7.2: until named, a member is shown by the last four digits.
+// Someone who had their data deleted (§19) has no name or number left.
 export function displayName(p: Person): string {
+  if (p.phone.startsWith("forgotten:")) return "someone who left";
   return p.name ?? `…${p.phone.slice(-4)}`;
 }
 
