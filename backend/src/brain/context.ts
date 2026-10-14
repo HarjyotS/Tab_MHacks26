@@ -56,7 +56,8 @@ export type Pending =
       // finalize_and_settle: "Still waiting on claims… settle now?"; the
       // expenses are the thread's expense_ids.
       // act: an unsure money intent (§6.4 clarify band), acted on on yes.
-      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act";
+      // correction: "change the dj to $200?", applied to expense_id on yes.
+      then: "expense" | "large_amount" | "adjustment" | "finalize_and_settle" | "act" | "correction";
       // then "expense": the gate was fairly sure (just under the act bar),
       // so the person who said it and says yes is taken as the payer.
       sender_paid?: boolean;

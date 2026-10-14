@@ -50,6 +50,33 @@ export function oldAmountCents(text: string): number | undefined {
   return m ? Math.round(Number(m[1]) * 100) : undefined;
 }
 
+// The one open expense in the group at the amount a correction says was
+// wrong ("the tacos were 62 not 55"), preferring one it names.
+function expenseAt(ctx: BrainCtx, group_id: string | undefined, cents: number, text: string): Expense | undefined {
+  const at = ctx.store
+    .expenses()
+    .filter((e) => e.group_id === group_id && (e.status === "proposed" || e.status === "finalized") && e.total_cents === cents);
+  const named = at.filter((e) => namesExpense(text, e.description));
+  return named.length === 1 ? named[0] : at.length === 1 ? at[0] : undefined;
+}
+
+// "wait i thought it was 200", "that was 45 actually": an amount for "it",
+// with nothing named. Right after an expense was logged, that's the one it
+// means, so Tab asks "change the dj to $200?" (noise eval: the money brain
+// answered "got it, dj's now $250" and changed nothing).
+const IT_WAS = /^(?:(?:wait|oh|hmm+|no|nah|actually)[\s,]+)*(?:i\s+thought\s+)?(?:it|that)\s*(?:was|is|'s)\s+(?:actually\s+|really\s+|only\s+)?\$?\d/i;
+const JUST_LOGGED_MS = 15 * 60_000;
+
+export function justLoggedTarget(ctx: BrainCtx, m: Message): Expense | undefined {
+  if (!m.group_id || m.kind !== "text" || !IT_WAS.test((m.text ?? "").trim())) return undefined;
+  const latest = ctx.store
+    .expenses()
+    .filter((e) => e.group_id === m.group_id && e.status !== "void")
+    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
+  if (!latest || latest.status !== "proposed" || ctx.now().getTime() - latest.created_at.getTime() > JUST_LOGGED_MS) return undefined;
+  return latest;
+}
+
 export async function handleCorrection(
   ctx: BrainCtx,
   m: Message,
@@ -66,16 +93,22 @@ export async function handleCorrection(
     });
 
   const { result } = await ctx.extract.correction(extractInput(ctx, m));
-  const target =
+  let target =
     bound ??
     (result.target_expense_id
       ? ctx.store.expense(result.target_expense_id)
       : undefined);
-  // "the tacos were actually 62 not 55" with no $55 expense on the tab: ask
-  // which one instead of rewriting the newest (noise eval: it turned a $120
-  // surfboard rental into "tacos $120.00").
+  // "the tacos were actually 62 not 55": the old amount says which one. The
+  // $55 expense when exactly one is open; with none, ask which instead of
+  // rewriting the newest (noise eval: it turned a $120 surfboard rental into
+  // "tacos $120.00", and "the supplies were 76 not 87" changed a $112 order
+  // that had borrowed the name). Only an inline reply to the expense
+  // outranks the amount.
   const was = oldAmountCents(m.text ?? "");
-  if (!target || (!bound && was !== undefined && was !== target.total_cents)) {
+  const replied = m.reply_to_id !== undefined && bound !== undefined;
+  if (was !== undefined && !replied && target?.total_cents !== was)
+    target = expenseAt(ctx, m.group_id, was, m.text ?? "");
+  if (!target) {
     await tapback(ctx, m, "question");
     return ask(T.whichToCorrect());
   }

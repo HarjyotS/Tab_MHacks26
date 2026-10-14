@@ -123,7 +123,7 @@ function systemPrompt(mode: ExpenseMode): string {
 - is_expense: true when the message describes something bought or a bill, including requests to be paid back for one even when no amount is given. False only when no purchase is described at all (for example "X owes me $20" with nothing bought).
 - amount_cents: the amount in cents exactly as stated (spoken numbers count: "forty bucks" is 4000; "4 x 25" is 10000). null if no amount is stated. Never add tax or tip.
 - amount_is_per_person: true only if the message says the amount is per person ("15 each"); code will multiply it.
-- description: two or three words for what was bought, like "Groceries" or "Uber to airport".
+- description: two or three words for what was bought, like "Groceries" or "Uber to airport". When this message only gives the amount ("came out to 112"), take it from the sender's own message just before it. Never reuse the name of a different expense already on the tab, and never name it after the amount ("came out", "total"). null if nothing says what was bought.
 - payer: "sender" if the sender says they paid, covered, or got it, or asks to be paid back; "named" with payer_name if the message names who paid; "unknown" if the message only states what something cost without saying who paid ("dinner was 60").
 - participants: "everyone" unless the message names who shared it; then "list" with participant_names.
 - "X owes 20 for the palm reading" or "X owes me 20 for it": the sender paid (payer "sender"), the amount is X's share, and participants is "list" with only X. The person who owes is never the payer.
@@ -140,6 +140,10 @@ ${task}
 
 Names: write every person's name exactly as the message says it. Use "me" for the sender. Never translate a name into a different member.`;
 }
+
+// Words about the amount, not the thing bought (noise eval: an expense
+// logged as "came out").
+const NOT_A_NAME = /^(?:it|that|this|stuff|things?|came out|came to|the total|total|amount|cost|bill)$/i;
 
 function toContract(
   r: Raw,
@@ -268,7 +272,7 @@ function toContract(
     result: {
       is_expense: r.is_expense,
       ...(amount !== undefined ? { amount_cents: amount } : {}),
-      ...(r.description ? { description: r.description } : {}),
+      ...(r.description && !NOT_A_NAME.test(r.description.trim()) ? { description: r.description } : {}),
       payer,
       participants,
       exclusions,

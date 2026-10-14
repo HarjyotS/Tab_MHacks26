@@ -1,7 +1,8 @@
 // The short-lived raw transcript the gate sees (§6.5, §19): the last few
 // messages per chat, including off-topic ones the module clears, so Jev can
 // tell what "update it" refers to. In memory only, never persisted, and
-// never sent to Grok: only gateInput (inputs.ts) reads it.
+// never sent to Grok: only gateInput (inputs.ts) reads its text. The brain
+// may ask whether a line was a question (a yes/no, no text).
 import type { PhotoNote } from "@tab/gate";
 
 export const TRANSCRIPT_LINES = 12;
@@ -32,6 +33,12 @@ export class Transcript {
   // Lines before `before`, oldest first, none older than the TTL.
   recent(chat: string, now: Date, before: Date = now): TranscriptEntry[] {
     return this.fresh(chat, now).filter((e) => e.at < before);
+  }
+
+  // Whether that line was a question ("oh shit fr?"), so a "yeah" right
+  // after it is read as answering that person, not Tab.
+  wasQuestion(chat: string, message_id: string): boolean {
+    return (this.chats.get(chat) ?? []).some((e) => e.message_id === message_id && /\?\s*$/.test(e.text ?? ""));
   }
 
   // Fills in a photo described after its line was added.
