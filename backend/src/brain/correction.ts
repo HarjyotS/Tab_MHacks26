@@ -105,10 +105,16 @@ export async function handleCorrection(
   // "tacos $120.00", and "the supplies were 76 not 87" changed a $112 order
   // that had borrowed the name). Only an inline reply to the expense
   // outranks the amount.
+  // A target the message names keeps priority over an unnamed one at the
+  // amount: "the uber was 18 not 15" with the uber at $16 asks which, rather
+  // than changing $15 snacks (review).
   const was = oldAmountCents(m.text ?? "");
   const replied = m.reply_to_id !== undefined && bound !== undefined;
-  if (was !== undefined && !replied && target?.total_cents !== was)
-    target = expenseAt(ctx, m.group_id, was, m.text ?? "");
+  if (was !== undefined && !replied && target?.total_cents !== was) {
+    const atAmount = expenseAt(ctx, m.group_id, was, m.text ?? "");
+    const named = target !== undefined && namesExpense(m.text ?? "", target.description);
+    target = atAmount && (!named || namesExpense(m.text ?? "", atAmount.description)) ? atAmount : undefined;
+  }
   if (!target) {
     await tapback(ctx, m, "question");
     return ask(T.whichToCorrect());

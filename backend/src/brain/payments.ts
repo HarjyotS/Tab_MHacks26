@@ -37,7 +37,10 @@ export function owes(ctx: BrainCtx, expenses: Expense[]): Owe[] {
   const out = new Map<string, Owe>();
   for (const e of expenses) {
     if (e.status !== "finalized" || !e.payer_phone) continue;
+    // Someone who had their data deleted can't be paid or reminded (§19).
+    if (e.payer_phone.startsWith("forgotten:")) continue;
     for (const s of lockedShares(ctx, e)) {
+      if (s.phone.startsWith("forgotten:")) continue;
       const key = `${s.phone}>${e.payer_phone}`;
       const o = out.get(key) ?? { group_id: e.group_id, debtor: s.phone, payee: e.payer_phone, items: [], cents: 0 };
       o.items.push({ e, s });
@@ -66,11 +69,16 @@ function linksFor(ctx: BrainCtx, payee: string, cents: number, label: string): T
 
 const hasHandle = (ctx: BrainCtx, phone: string) => Boolean(ctx.store.person(phone)?.venmo || ctx.store.person(phone)?.cashtag);
 
-// Ids carry who owes whom: phones have no colons, request ids may.
-const linkId = (debtor: string, payee: string, request_id: string) => `payment_link:${debtor}:${payee}:${request_id}`;
+// Ids carry who owes whom and on which request. Phones never contain ":" or
+// "|"; request ids contain ":" but never "|", so "|" ends the request id
+// and anything after it ("handle", a reminder's step) can't be mistaken for
+// part of it (review: "settle_request:<exp>:<ms>" lost its ":<ms>").
+export const linkId = (debtor: string, payee: string, request_id: string) => `payment_link:${debtor}:${payee}|${request_id}`;
+const reminderPrefix = (debtor: string, payee: string, request_id: string) => `approval_followup:${debtor}:${payee}|${request_id}|`;
+const missingId = (debtor: string, payee: string, request_id: string, message_id: string) => `payment_missing:${debtor}:${payee}|${request_id}|${message_id}`;
 
-function parseLinkRow(o: Outbox): { debtor: string; payee: string; request_id: string } | undefined {
-  const m = o.action_id.match(/^(?:payment_link|approval_followup):([^:]+):([^:]+):(.+?)(?::(?:\d+|handle))?$/);
+export function parseLinkRow(o: { action_id: string }): { debtor: string; payee: string; request_id: string } | undefined {
+  const m = o.action_id.match(/^(?:payment_link|approval_followup|payment_missing):([^:|]+):([^:|]+)\|([^|]+)(?:\|.*)?$/);
   return m ? { debtor: m[1]!, payee: m[2]!, request_id: m[3]! } : undefined;
 }
 
@@ -111,23 +119,33 @@ function lastDm(ctx: BrainCtx, phone: string): Outbox | undefined {
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
 }
 
-// "@joe-smith", "$joesmith", "venmo is joe-smith". After Tab asked, any of
-// those; otherwise only "my venmo is ..." (never someone else's handle in
-// "venmo'd @priya 20").
-const CASHTAG = /(?:^|[\s:])\$([A-Za-z0-9_]{1,20})\b/;
-const AT_HANDLE = /(?:^|[\s:])@([A-Za-z0-9_-]{5,30})\b/;
-const VENMO_WORD = /\bvenmo\b(?:\s+(?:is|=|-))?[\s:]*@?([A-Za-z0-9_-]{5,30})\b/i;
-const CASHAPP_WORD = /\bcash\s?app\b(?:\s+(?:is|=|-))?[\s:]*\$?([A-Za-z0-9_]{1,20})\b/i;
+// "@joe-smith", "$joesmith", or "venmo is joe-smith" with the handle ending
+// the sentence. After Tab asked, any of those; otherwise only with "my
+// venmo/cash app" (never someone else's handle in "venmo'd @priya 20", and
+// never "my venmo is acting up, ill pay later": review).
+const AT_HANDLE = /(?:^|[\s:(])@([A-Za-z0-9_-]{5,30})(?![A-Za-z0-9_-])/;
+const CASHTAG = /(?:^|[\s:(])\$([A-Za-z0-9_]{1,20})(?![A-Za-z0-9_.])/;
+const SAID = /\b(venmo|cash\s?app|cashtag)(?:\s+(?:username|handle|name|tag|id))?\s*(?:is|:|=|-)\s*[@$]?([A-Za-z0-9_-]+)(?=[\s.!]*$|\s*,|\s+and\b)/i;
 const MINE = /\bmy\s+(?:venmo|cash\s?app|cashtag)\b/i;
+const FILLER = new Set(["username", "handle", "name", "please", "works", "both", "being", "acting", "down", "broken", "not", "still", "the", "my", "here", "there"]);
+const VENMO_OK = /^[A-Za-z0-9_-]{5,30}$/;
+const CASHTAG_OK = /^(?=.*[A-Za-z])[A-Za-z0-9_]{1,20}$/;
 
 export function parseHandle(text: string, prompted: boolean): { venmo?: string; cashtag?: string } | undefined {
-  if (!prompted && !MINE.test(text)) return undefined;
-  const cashtag = (text.match(CASHTAG)?.[1] ?? text.match(CASHAPP_WORD)?.[1])?.replace(/^\$/, "");
-  const venmoRaw = text.match(VENMO_WORD)?.[1] ?? text.match(AT_HANDLE)?.[1];
-  const venmo = venmoRaw && !/^(?:is|me|at)$/i.test(venmoRaw) ? venmoRaw : undefined;
+  const t = text.trim();
+  if (!prompted && !MINE.test(t)) return undefined;
+  let venmo: string | undefined;
+  let cashtag: string | undefined;
+  const said = t.match(SAID);
+  if (said && !FILLER.has(said[2]!.toLowerCase())) {
+    if (/venmo/i.test(said[1]!)) venmo = said[2];
+    else cashtag = said[2];
+  }
+  venmo ??= t.match(AT_HANDLE)?.[1];
+  cashtag ??= t.match(CASHTAG)?.[1];
   const out = {
-    ...(venmo ? { venmo } : {}),
-    ...(cashtag && /[A-Za-z]/.test(cashtag) ? { cashtag } : {}),
+    ...(venmo && VENMO_OK.test(venmo) && !FILLER.has(venmo.toLowerCase()) ? { venmo } : {}),
+    ...(cashtag && CASHTAG_OK.test(cashtag) && !FILLER.has(cashtag.toLowerCase()) ? { cashtag } : {}),
   };
   return out.venmo || out.cashtag ? out : undefined;
 }
@@ -136,7 +154,10 @@ export function parseHandle(text: string, prompted: boolean): { venmo?: string; 
 async function saveHandle(ctx: BrainCtx, m: Message, handle: { venmo?: string; cashtag?: string }) {
   await ctx.db.set_payment_handle({ phone: m.sender_phone, ...handle });
   await say(ctx, { chat: { dm_phone: m.sender_phone }, purpose: "other", id: `handle_saved:${m.message_id}`, text: T.handleSaved(handle) });
-  const waiting = ctx.store.outbox().filter((o) => o.purpose === "payment_link" && !o.action_id.endsWith(":handle") && parseLinkRow(o)?.payee === m.sender_phone);
+  // Only the links that went out without one (not a changed handle's).
+  const waiting = ctx.store
+    .outbox()
+    .filter((o) => o.purpose === "payment_link" && o.action_id.startsWith("payment_link:") && !o.action_id.endsWith("|handle") && !o.text?.includes("https://") && parseLinkRow(o)?.payee === m.sender_phone);
   for (const row of waiting) {
     const { debtor, payee, request_id } = parseLinkRow(row)!;
     const o = stillOwed(ctx, debtor, payee, request_id);
@@ -145,7 +166,7 @@ async function saveHandle(ctx: BrainCtx, m: Message, handle: { venmo?: string; c
     await say(ctx, {
       chat: { dm_phone: debtor },
       purpose: "payment_link",
-      id: `${row.action_id}:handle`,
+      id: `${row.action_id}|handle`,
       text: T.handleArrived({ payee: person(ctx, o.group_id, payee), amount_cents: o.cents, label, links: linksFor(ctx, payee, o.cents, label) }),
     });
   }
@@ -176,7 +197,7 @@ function providerFor(ctx: BrainCtx, payee: string, text?: string): PaymentProvid
 async function report(ctx: BrainCtx, m: Message, o: Owe) {
   const provider = providerFor(ctx, o.payee, m.text);
   for (const { e } of o.items)
-    await ctx.db.record_payment({ transfer_id: `tr_${m.message_id}_${e.expense_id}`, expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider });
+    await ctx.db.record_payment({ transfer_id: `tr_${m.message_id}_${e.expense_id}_${o.debtor}`, expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider });
   const label = labelFor(ctx, o.items);
   const payee = person(ctx, o.group_id, o.payee);
   if (m.kind === "reaction") await say(ctx, { chat: { dm_phone: o.debtor }, purpose: "other", id: `reported:${m.message_id}`, text: T.paymentReported(payee) });
@@ -208,10 +229,11 @@ async function payeeAnswer(ctx: BrainCtx, m: Message, report_id: string, arrived
   if (m.kind !== "reaction") await tapback(ctx, m, "like");
   if (arrived) return; // announceSettlements tells the person who paid
   const group_id = ts[0]!.group_id;
+  const request_id = ctx.store.expense(ts[0]!.expense_id)?.settle_message_id ?? "none";
   await say(ctx, {
     chat: { dm_phone: ts[0]!.from_phone },
     purpose: "payment_check",
-    id: `payment_missing:${m.message_id}`,
+    id: missingId(ts[0]!.from_phone, m.sender_phone, request_id, m.message_id),
     text: T.paymentMissing({ payee: person(ctx, group_id, m.sender_phone), amount_cents: ts.reduce((n, t) => n + t.amount_cents, 0) }),
   });
 }
@@ -226,7 +248,7 @@ export async function routePaymentReaction(ctx: BrainCtx, m: Message, target: Ou
     if (m.reaction === "like" || m.reaction === "dislike") await payeeAnswer(ctx, m, report_id, m.reaction === "like");
     return true;
   }
-  if (target.purpose !== "payment_link" && target.purpose !== "approval_followup") return false;
+  if (target.purpose !== "payment_link" && target.purpose !== "approval_followup" && !target.action_id.startsWith("payment_missing:")) return false;
   const row = parseLinkRow(target);
   if (!row || m.reaction !== "like") return false; // a 👎 is a dispute (settle.ts)
   const o = stillOwed(ctx, row.debtor, row.payee, row.request_id);
@@ -238,8 +260,10 @@ export async function routePaymentReaction(ctx: BrainCtx, m: Message, target: Ou
 // "nope not yet", or a handle after Tab asked for one. Handled before the
 // gate, like a tapback would be. True when handled.
 const SENT = /^(?:ok(?:ay)?[\s,]*)?(?:just\s+)?(?:sent|paid|done|did it|venmo'?d|cash ?app'?d)(?:\s+(?:it|you|him|her|them|that))?(?:\s+(?:on|thru|through|via)\s+\S+)?[\s.!👍]*$/iu;
-const ARRIVED = /^(?:y(?:es|ep|up|eah?)|got it|it came|came through|it came through|received|all good|👍)\b[\s\S]{0,30}$/iu;
-const MISSING = /^(?:no(?:pe)?|nah|not yet|didn'?t get it|haven'?t gotten it|nothing yet|don'?t see it|👎)\b[\s\S]{0,30}$/iu;
+// Short, plain answers only: "yea not yet" or "no worries, got it!" mix both,
+// and are left for a tap on the DM itself (review).
+const ARRIVED = /^(?:y(?:es|ep|up|eah?|a)|got it|it came|came through|it came through|received|all good|(?:yes|yep|yeah) got it|got it thanks?|👍)[\s.!]*$/iu;
+const MISSING = /^(?:no(?:pe)?|nah|not yet|(?:no|nope|nah) not yet|didn'?t get it|haven'?t gotten it|nothing yet|don'?t see it|not seeing it|👎)[\s.!]*$/iu;
 
 export async function handlePaymentDm(ctx: BrainCtx, m: Message): Promise<boolean> {
   if (m.group_id || m.kind !== "text" || !linksMode(ctx)) return false;
@@ -252,26 +276,25 @@ export async function handlePaymentDm(ctx: BrainCtx, m: Message): Promise<boolea
   }
   const asked = last && reportOf(last);
   if (asked && (ARRIVED.test(text) || MISSING.test(text))) {
-    await payeeAnswer(ctx, m, asked, ARRIVED.test(text));
+    // A typed answer can only mean one payment: with several waiting on
+    // them, the payee taps the DM they mean (review: Joe's "got it" marked
+    // Kian paid and left Priya pending).
+    const open = [...new Set(ctx.store.transfers().filter((t) => t.to_phone === m.sender_phone && t.status === "reported").map((t) => t.approved_by_message_id))];
+    if (open.length > 1) {
+      await say(ctx, { chat: { dm_phone: m.sender_phone }, purpose: "clarifying_question", id: `which_check:${m.message_id}`, reply_to: m.message_id, text: T.whichCheck() });
+      return true;
+    }
+    if (open.length === 1) await payeeAnswer(ctx, m, open[0]!, ARRIVED.test(text));
     return true;
   }
   if (last && (last.purpose === "payment_link" || last.purpose === "approval_followup" || last.action_id.startsWith("payment_missing:")) && SENT.test(text)) {
-    const row = parseLinkRow(last) ?? latestLinkFor(ctx, m.sender_phone);
+    const row = parseLinkRow(last);
     const o = row && stillOwed(ctx, row.debtor, row.payee, row.request_id);
     if (!o) return false;
     await report(ctx, m, o);
     return true;
   }
   return false;
-}
-
-function latestLinkFor(ctx: BrainCtx, debtor: string) {
-  return ctx.store
-    .outbox()
-    .filter((o) => o.purpose === "payment_link" && o.to_phone === debtor)
-    .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())
-    .map(parseLinkRow)
-    .find(Boolean);
 }
 
 // The gate's payment_reported (and a typed approval) in links mode: "just
@@ -287,11 +310,13 @@ export async function reportFromText(ctx: BrainCtx, m: Message): Promise<void> {
   };
   // From the payee: "priya paid me", confirmed as it's said.
   const owedToMe = [...all, ...reportedTo(ctx, m.sender_phone, groups)].filter((o) => o.payee === m.sender_phone);
-  const fromWhom = owedToMe.filter((o) => named(o, o.debtor));
+  // Same check as the payer's report: "priya paid me back 25 for the concert
+  // tickets" isn't her $10 pizza share (review).
+  const fromWhom = owedToMe.filter((o) => named(o, o.debtor) && !aboutSomethingElse(text, o));
   if (fromWhom.length > 0) {
     for (const o of fromWhom)
       for (const { e } of o.items)
-        await ctx.db.record_payment({ transfer_id: `tr_${m.message_id}_${e.expense_id}`, expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider: providerFor(ctx, o.payee, text) });
+        await ctx.db.record_payment({ transfer_id: `tr_${m.message_id}_${e.expense_id}_${o.debtor}`, expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider: providerFor(ctx, o.payee, text) });
     await tapback(ctx, m, "like");
     return;
   }
@@ -364,7 +389,7 @@ export async function paymentReminders(ctx: BrainCtx) {
     const covered = ctx.store.expenses().filter((e) => e.settle_message_id === request.action_id);
     for (const o of owes(ctx, covered)) {
       if (optedOut(ctx, o.debtor)) continue;
-      const prefix = `approval_followup:${o.debtor}:${o.payee}:${request.action_id}:`;
+      const prefix = reminderPrefix(o.debtor, o.payee, request.action_id);
       const step = outbox.filter((x) => x.action_id.startsWith(prefix)).length;
       const due = schedule[step];
       if (due === undefined || now.getTime() < request.created_at.getTime() + due) continue;
@@ -384,6 +409,8 @@ export async function paymentReminders(ctx: BrainCtx) {
     const id = `payment_check:${report_id}:again`;
     if (waiting.length === 0 || outbox.some((x) => x.action_id === id) || now.getTime() < check.created_at.getTime() + d.FOLLOWUP_DM2_AFTER) continue;
     const t = waiting[0]!;
+    // The module skips DMs to someone who texted STOP; asking every tick would never end.
+    if (optedOut(ctx, t.to_phone)) continue;
     await say(ctx, {
       chat: { dm_phone: t.to_phone },
       purpose: "payment_check",

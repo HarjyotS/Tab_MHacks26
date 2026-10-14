@@ -2,7 +2,8 @@
 // PENDING_QUESTION_TTL, which used to leave an expense missing who paid or
 // how much sitting on the ledger forever. Now it gets one more ask the next
 // morning, and if nobody knows by NEEDS_INFO_DROP_AFTER it's dropped quietly
-// (the re-ask says so). Settle-ups list what's still open (settle.ts).
+// (the re-ask said so; nothing is dropped without one). Settle-ups list
+// what's still open (settle.ts).
 import * as T from "../copy/templates.js";
 import type { Problem } from "../extraction/types.js";
 import type { Expense } from "../store/types.js";
@@ -39,18 +40,23 @@ export async function staleExpenses(ctx: BrainCtx) {
   await perExpense(ctx, ctx.store.expenses().filter((e) => e.status === "needs_info"), async (e) => {
     // Never under a question Tab is still waiting on.
     if (openThreads(ctx, { group_id: e.group_id }).some((t) => t.expense_id === e.expense_id || t.expense_ids?.includes(e.expense_id))) return;
-    if (now.getTime() - e.created_at.getTime() >= d.NEEDS_INFO_DROP_AFTER) {
+    // Only what Tab can ask again: who paid, or how much. Anything else
+    // waiting on details (a large amount to confirm, a name it didn't know)
+    // is never dropped without a word (review: "$2,400 for rent?" went void).
+    const problems = missing(e);
+    if (problems.length === 0) return;
+    const id = `reask:${e.expense_id}`;
+    // Dropped only after the re-ask, which says it will be.
+    if (alreadyQueued(ctx, id) && now.getTime() - e.created_at.getTime() >= d.NEEDS_INFO_DROP_AFTER) {
       await ctx.db.cancel_outbox({ expense_id: e.expense_id });
       await ctx.db.upsert_expense({ ...e, status: "void" });
       ctx.log("needs_info_dropped", { expense_id: e.expense_id, group_id: e.group_id });
       return;
     }
-    const id = `reask:${e.expense_id}`;
     const timezone = ctx.store.group(e.group_id)?.timezone ?? "America/Detroit";
     if (alreadyQueued(ctx, id) || now < reaskAt(ctx, e, timezone)) return;
-    const problems = missing(e);
     const source = ctx.store.messages().find((m) => m.message_id === e.source_message_id);
-    if (problems.length === 0 || !source?.text) return;
+    if (!source?.text) return;
     const people = activeMembers(ctx, e.group_id).map((m) => ({ phone: m.phone, name: m.name }));
     const question = T.clarifyingQuestion(problems[0]!, { description: e.description === "Expense" ? undefined : e.description, people });
     await say(ctx, {

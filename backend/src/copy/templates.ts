@@ -654,10 +654,13 @@ export function paymentLink(a: { payee: Person; amount_cents: number; label: str
 export const handlePrompt = (label: string) =>
   `hey it's tab, people are about to pay you back for ${label}\nwhat's your venmo or cash app? like @your-name or $yourname`;
 
+// Says the handle back, so a misread is easy to spot and fix.
 export function handleSaved(h: { venmo?: string; cashtag?: string }): string {
-  const what = h.venmo && h.cashtag ? "venmo and cash app links" : h.venmo ? "venmo link" : "cash app link";
-  return `got it, i'll send people your ${what}`;
+  const what = [h.venmo ? `venmo @${h.venmo}` : "", h.cashtag ? `cash app $${h.cashtag}` : ""].filter(Boolean).join(" and ");
+  return `got it, i'll send people your ${what}\nwrong? just text the right one`;
 }
+
+export const whichCheck = () => "a couple payments are waiting on you, tap 👍 or 👎 on the one you mean";
 
 export function handleArrived(a: { payee: Person; amount_cents: number; label: string; links: PayLinks }): string {
   return `here's ${displayName(a.payee)}'s link for the ${money(a.amount_cents)} (${a.label})\n${linkLines(a.links)}\ntap 👍 here once it's sent`;

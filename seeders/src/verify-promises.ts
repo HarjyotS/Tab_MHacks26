@@ -112,6 +112,15 @@ try {
   await waitFor('settled', () => db.db.backendExpenses.expenseId.find(pizza)?.status === 'settled');
   check('"priya paid me" from the payee settles it, and the expense with it', true);
 
+  // One payee message can cover two people.
+  const pie = `${RUN}-pie`;
+  await finalized(pie, 3000n);
+  const both = await say(JOE, 'kian and priya paid me');
+  await db.reducers.recordPayment({ transferId: `${RUN}-t4-${KIAN}`, expenseId: pie, fromPhone: KIAN, messageId: both, provider: 'other' });
+  await db.reducers.recordPayment({ transferId: `${RUN}-t4-${PRIYA}`, expenseId: pie, fromPhone: PRIYA, messageId: both, provider: 'other' });
+  await waitFor('both paid', () => share(pie, KIAN)?.status === 'paid' && share(pie, PRIYA)?.status === 'paid');
+  check('one payee message pays two people', db.db.backendExpenses.expenseId.find(pie)?.status === 'settled');
+
   // A $0 expense still missing details can be dropped.
   const vague = `${RUN}-vague`;
   const vagueRow = {
@@ -129,6 +138,14 @@ try {
   await finalized(tacos, 4500n);
   await say(KIAN, 'my venmo is kian-l');
   await db.reducers.setPaymentHandle({ phone: KIAN, venmo: 'kian-l', cashtag: undefined });
+  // A link Tab sent someone else, quoting Kian's handle, with his number in the id.
+  const linkRow = `payment_link:${PRIYA}:${KIAN}|settle-${RUN}`;
+  await db.reducers.enqueueOutbox({
+    actionId: linkRow, kind: 'dm', groupId: undefined, toPhone: PRIYA, targetMessageId: undefined,
+    text: 'you owe Kian $15.00\nvenmo: https://venmo.com/kian-l?txn=pay&amount=15.00&note=Tacos', reaction: undefined,
+    expenseId: undefined, purpose: 'payment_link', sendAfter: Timestamp.now(),
+  });
+  await waitFor('link queued', () => Boolean(db.db.backendOutbox.actionId.find(linkRow)));
   await db.reducers.forgetPerson({ phone: KIAN });
   await waitFor('forgotten', () => !share(tacos, KIAN));
   const shares = [...db.db.backendShares.iter()].filter(s => s.expenseId === tacos);
@@ -138,6 +155,9 @@ try {
   check('their words are cleared', [...db.db.backendMessages.iter()].filter(m => m.senderPhone.startsWith('forgotten:')).every(m => m.text === undefined));
   check('they left the group', [...db.db.backendMembers.iter()].filter(m => m.groupId === GROUP && m.phone.startsWith('forgotten:')).every(m => m.leftAt !== undefined && m.name === undefined));
   check('their transfers point to the placeholder', ![...db.db.backendTransfers.iter()].some(t => t.fromPhone === KIAN || t.toPhone === KIAN));
+  check('no id still carries their number', ![...db.db.backendOutbox.iter()].some(o => o.actionId.includes(KIAN)) && ![...db.db.backendTransfers.iter()].some(t => t.transferId.includes(KIAN)));
+  const scrubbed = [...db.db.backendOutbox.iter()].find(o => o.actionId.startsWith(`payment_link:${PRIYA}:forgotten:`));
+  check("a link quoting their handle loses its text and isn't sent", scrubbed?.text === undefined && scrubbed?.status === 'cancelled');
   const kept = db.db.backendPeople.phone.find(KIAN);
   check('only the opt-out is kept', kept?.optedOut === true && kept.venmo === undefined && kept.cashtag === undefined);
 

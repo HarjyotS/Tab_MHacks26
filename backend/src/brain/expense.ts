@@ -213,7 +213,8 @@ export async function proposeNew(
   const expense_id = expenseIdFor(a.source.message_id);
   // Nobody who texted STOP is in a new split (§19), except a payer someone
   // else named, who still needs their share.
-  const members = activeMembers(ctx, a.group_id).filter((x) => x.phone === payer || splitMembers(ctx, a.group_id).includes(x));
+  const allowed = new Set(splitMembers(ctx, a.group_id).map((x) => x.phone));
+  const members = activeMembers(ctx, a.group_id).filter((x) => x.phone === payer || allowed.has(x.phone));
   const included = new Set(
     result.participants.kind === "list"
       ? result.participants.phones

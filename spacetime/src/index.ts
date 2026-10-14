@@ -718,7 +718,11 @@ export const record_payment = spacetime.reducer(
   (ctx, input) => {
     requireRole(ctx, 'backend');
     requireValue(input.provider, PAYMENT_PROVIDERS, 'payment provider');
-    if (ctx.db.transfers.by_approval_expense.filter([input.message_id, input.expense_id]).next().value) return;
+    // One message can cover several people ("priya and kian paid me"): a
+    // repeat is the same message, expense, and person.
+    for (const t of ctx.db.transfers.by_approval_expense.filter([input.message_id, input.expense_id])) {
+      if (t.from_phone === input.from_phone) return;
+    }
     const expense = ctx.db.expenses.expense_id.find(input.expense_id);
     if (!expense || !expense.payer_phone) throw new Error('Expense has no payer');
     if (expense.status !== 'finalized') throw new Error('Expense is not ready for settlement');
@@ -831,8 +835,9 @@ export const set_payment_handle = spacetime.reducer(
 /**
  * "delete my data" (SPEC 19), confirmed by the person. Their words, photos,
  * name, and payment handles are deleted, and their number is replaced
- * everywhere by a placeholder, so the group's amounts still add up but no
- * longer point to them. They're marked as having left each group, so they're
+ * everywhere by a placeholder (rows, and ids that carried it), so the
+ * group's amounts still add up but no longer point to them. Tab's messages
+ * that quoted their number or handle lose their text. They're marked as having left each group, so they're
  * in no new splits. Only the opt-out stays, keyed by the number, so Tab never
  * texts them again unless they text START.
  */
@@ -841,13 +846,42 @@ export const forget_person = spacetime.reducer(
   (ctx, { phone }) => {
     requireRole(ctx, 'backend');
     const gone = `forgotten:${ctx.timestamp.microsSinceUnixEpoch}`;
+    const swap = (s: string) => s.split(phone).join(gone);
+    const handles = [ctx.db.people.phone.find(phone)?.venmo, ctx.db.people.phone.find(phone)?.cashtag]
+      .filter((h): h is string => Boolean(h));
+    const mentions = (text: string | undefined) => text !== undefined && (text.includes(phone) || handles.some(h => text.includes(h)));
+
+    // Their messages: words and photos go. Ids that carry the number (the
+    // bridge's system events) get the placeholder too.
     for (const m of [...ctx.db.messages]) {
-      if (m.sender_phone === phone) ctx.db.messages.message_id.update({ ...m, sender_phone: gone, text: undefined, image_url: undefined });
+      const theirs = m.sender_phone === phone;
+      if (!theirs && !m.message_id.includes(phone)) continue;
+      const next = {
+        ...m, message_id: swap(m.message_id), sender_phone: theirs ? gone : m.sender_phone,
+        text: theirs ? undefined : m.text, image_url: theirs ? undefined : m.image_url,
+      };
+      if (next.message_id !== m.message_id) {
+        ctx.db.messages.delete(m);
+        ctx.db.messages.insert(next);
+      } else ctx.db.messages.message_id.update(next);
     }
+    // Tab's messages: to them, about them (ids like payment_link:<phone>:...),
+    // or quoting their payment handle (links sent to others). Anything still
+    // waiting to go out is cancelled.
     for (const o of [...ctx.db.outbox]) {
-      if (o.to_phone !== phone) continue;
+      const toThem = o.to_phone === phone;
+      const quotes = mentions(o.text);
+      if (!toThem && !quotes && !o.action_id.includes(phone)) continue;
       const pending = o.status === 'queued' || o.status === 'sending';
-      ctx.db.outbox.action_id.update({ ...o, to_phone: gone, text: undefined, status: pending ? 'cancelled' : o.status });
+      const next = {
+        ...o, action_id: swap(o.action_id), to_phone: toThem ? gone : o.to_phone,
+        text: toThem || quotes ? undefined : o.text,
+        status: (toThem || quotes) && pending ? 'cancelled' : o.status,
+      };
+      if (next.action_id !== o.action_id) {
+        ctx.db.outbox.delete(o);
+        ctx.db.outbox.insert(next);
+      } else ctx.db.outbox.action_id.update(next);
     }
     for (const member of [...ctx.db.members]) {
       if (member.phone !== phone) continue;
@@ -875,12 +909,26 @@ export const forget_person = spacetime.reducer(
       if (expense.payer_phone === phone) ctx.db.expenses.expense_id.update({ ...expense, payer_phone: gone });
     }
     for (const transfer of [...ctx.db.transfers]) {
-      if (transfer.from_phone !== phone && transfer.to_phone !== phone) continue;
-      ctx.db.transfers.transfer_id.update({
-        ...transfer,
+      if (transfer.from_phone !== phone && transfer.to_phone !== phone && !transfer.transfer_id.includes(phone)) continue;
+      const next = {
+        ...transfer, transfer_id: swap(transfer.transfer_id),
         from_phone: transfer.from_phone === phone ? gone : transfer.from_phone,
         to_phone: transfer.to_phone === phone ? gone : transfer.to_phone,
-      });
+      };
+      if (next.transfer_id === transfer.transfer_id) {
+        ctx.db.transfers.transfer_id.update(next);
+        continue;
+      }
+      ctx.db.transfers.delete(transfer);
+      ctx.db.transfers.insert(next);
+      for (const job of [...ctx.db.transfer_completion_schedule]) {
+        if (job.transfer_id === transfer.transfer_id) ctx.db.transfer_completion_schedule.scheduled_id.update({ ...job, transfer_id: next.transfer_id });
+      }
+      const mirrored = ctx.db.nessie_mirror_progress.transfer_id.find(transfer.transfer_id);
+      if (mirrored) {
+        ctx.db.nessie_mirror_progress.delete(mirrored);
+        ctx.db.nessie_mirror_progress.insert({ ...mirrored, transfer_id: next.transfer_id });
+      }
     }
     upsertPerson(ctx, phone, { opted_out: true, clear_handles: true });
   }

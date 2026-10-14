@@ -47,7 +47,7 @@ async function settled(w: W) {
   return { id: `exp_${pizza.message_id}`, request: `settle_request:${GROUP}:${s.message_id}` };
 }
 
-const linkFor = (w: W, debtor: Name, payee: Name, request: string) => w.db.out.get(`payment_link:${PEOPLE[debtor]}:${PEOPLE[payee]}:${request}`)!;
+const linkFor = (w: W, debtor: Name, payee: Name, request: string) => w.db.out.get(`payment_link:${PEOPLE[debtor]}:${PEOPLE[payee]}|${request}`)!;
 
 describe("STOP and START (§19)", () => {
   it("STOP by DM: one confirmation, then no DMs, no new splits, and Tab leaves their messages alone", async () => {
@@ -178,7 +178,7 @@ describe("payment links (§7.6): Tab never moves money", () => {
 
     await w.dm("Joe", "$joecash");
     expect(w.db.person(PEOPLE.Joe)).toMatchObject({ cashtag: "joecash" });
-    const late = w.db.out.get(`payment_link:${PEOPLE.Kian}:${PEOPLE.Joe}:${request}:handle`)!;
+    const late = w.db.out.get(`payment_link:${PEOPLE.Kian}:${PEOPLE.Joe}|${request}|handle`)!;
     expect(late.text).toBe("here's Joe's link for the $10.00 (pizza)\ncash app: https://cash.app/$joecash/10.00\ntap 👍 here once it's sent");
 
     // A second settle-up doesn't ask again.
@@ -260,6 +260,12 @@ describe("handles and links", () => {
     expect(parseHandle("@joe-smith", true)).toEqual({ venmo: "joe-smith" });
     expect(parseHandle("$joecash", true)).toEqual({ cashtag: "joecash" });
     expect(parseHandle("venmo is Joe_Smith-1 and cash app $joe1", true)).toEqual({ venmo: "Joe_Smith-1", cashtag: "joe1" });
+    // Ordinary words are never handles (review).
+    expect(parseHandle("my venmo username is joe-smith", false)).toEqual({ venmo: "joe-smith" });
+    expect(parseHandle("my venmo handle is @joe-smith", false)).toEqual({ venmo: "joe-smith" });
+    expect(parseHandle("venmo please", true)).toBeUndefined();
+    expect(parseHandle("venmo or cash app both work", true)).toBeUndefined();
+    expect(parseHandle("my venmo is acting up, ill pay later", false)).toBeUndefined();
     expect(parseHandle("my venmo is joe-smith", false)).toEqual({ venmo: "joe-smith" });
     expect(parseHandle("venmo'd @priya-k 20", false)).toBeUndefined();
     expect(parseHandle("nevermind", true)).toBeUndefined();
