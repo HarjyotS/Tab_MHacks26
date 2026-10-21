@@ -15,6 +15,7 @@ echo "backend health: $(curl -s -m 3 http://127.0.0.1:${HUB_PORT:-4100}/health |
 echo "running commit: $(git -C "$REPO" log -1 --format='%h %s (%cr)')"
 echo "backend last start: $(grep '"event":"running"' "$LOGS/backend.log" 2>/dev/null | tail -1 | cut -c8-26) UTC"
 echo "last message handled: $(grep '"event":"classified"' "$LOGS/backend.log" 2>/dev/null | tail -1 | cut -c8-26) UTC"
-echo "database retries: $(grep -c '"event":"db_retry"' "$LOGS/backend.log" 2>/dev/null || echo 0)"
-echo "failed messages: $(grep -c '"event":"message_failed"' "$LOGS/backend.log" 2>/dev/null || echo 0)"
+count() { local n; n=$(grep -c "$1" "$LOGS/backend.log" 2>/dev/null); echo "${n:-0}"; }
+echo "database retries: $(count '"event":"db_retry"')"
+echo "failed messages: $(count '"event":"message_failed"')"
 echo "last updates:"; tail -n 5 "$LOGS/update.log" 2>/dev/null | sed 's/^/  /'
