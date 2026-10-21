@@ -8,6 +8,7 @@ import { DevHub, type Hub } from "./hub.ts";
 import { ImageStore } from "./images.ts";
 import { osascriptSender, photonDmSender, spectrumSender } from "./sender.ts";
 import { spacetimeHub } from "./spacetime-hub.ts";
+import { backendHub } from "./backend-hub.ts";
 import { State } from "./state.ts";
 import { uiReplier } from "./reply.ts";
 import { uiTapbacker } from "./tapback.ts";
@@ -59,11 +60,14 @@ if (config.hub === "spacetime") {
   log(`Connected to SpacetimeDB ${config.spacetime.database} as ${spacetime.identity}.`);
   log(`If ingest fails with "Requires service role", have the module owner run: npm run grant:role -- ${spacetime.identity} client`);
   hub = spacetime;
+} else if (config.hub === "backend") {
+  hub = backendHub({ url: config.backend.url, token: config.backend.token, timezone: config.timezone });
+  log(`Talking to the backend at ${config.backend.url}.`);
 } else if (config.hub === "dev") {
   devHub = new DevHub(config.echo, log);
   hub = devHub;
 } else {
-  console.error(`Unknown HUB=${config.hub}. Use dev or spacetime.`);
+  console.error(`Unknown HUB=${config.hub}. Use backend, spacetime, or dev.`);
   process.exit(1);
 }
 
@@ -116,7 +120,8 @@ async function every(name: string, ms: number, fn: () => Promise<void>) {
   }
 }
 
-await bridge.syncRosters();
+// The hub may not be up yet (the backend starts alongside): the roster loop tries again.
+await bridge.syncRosters().catch((err) => log(`[roster] ${err instanceof Error ? err.message : err}`));
 const loops = [
   every("poll", config.pollMs, () => bridge.poll()),
   every("outbox", config.outboxMs, () => bridge.drainOutbox()),

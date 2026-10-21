@@ -26,6 +26,8 @@ NODE="$(command -v node || true)"
 [[ -f "$REPO/.env" ]] || { echo "missing $REPO/.env (the backend's settings): see ops/README.md"; exit 1; }
 [[ -f "$REPO/client/.env" ]] || { echo "missing $REPO/client/.env (the bridge's settings): see ops/README.md"; exit 1; }
 [[ -x "$REPO/node_modules/.bin/tsx" ]] || { echo "run 'npm ci' in $REPO first"; exit 1; }
+grep -q '^DATABASE_URL=.' "$REPO/.env" || { echo "no DATABASE_URL in $REPO/.env: see ops/README.md, step 5"; exit 1; }
+grep -q '^HUB=backend' "$REPO/client/.env" || echo "note: client/.env should say HUB=backend (ops/README.md, step 6)"
 
 mkdir -p "$AGENTS" "$LOGS"
 PATH_FOR_SERVICES="${BUN:h}:${NODE:h}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"

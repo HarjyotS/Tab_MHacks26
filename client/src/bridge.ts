@@ -1,14 +1,14 @@
 import { GROUP_STYLE, type ChatSource, type RawAttachment, type RawMessage } from "./chatdb.ts";
 import { appleDate, isAssociated, messageText, normalizeHandle, reactionTarget, tapback } from "./decode.ts";
 import { parseCommand, type Gate } from "./gate.ts";
-import type { Hub } from "./hub.ts";
+import { HubUnavailable, type Hub } from "./hub.ts";
 import { SentMatcher } from "./matcher.ts";
 import type { Outgoing, Sender, Target } from "./sender.ts";
 import type { State } from "./state.ts";
 import { NotSentError } from "./messages-ui.ts";
 import type { Replier } from "./reply.ts";
 import type { Tapbacker } from "./tapback.ts";
-import type { InboundMessage, OutboxRow } from "./types.ts";
+import type { InboundMessage, OutboxRow, OutboxUpdate } from "./types.ts";
 
 export interface ImagePublisher {
   publish(attachmentPath: string): Promise<string>;
@@ -46,6 +46,10 @@ type Outcome = "done" | "wait";
  */
 export class Bridge {
   private readonly matcher = new SentMatcher();
+  /** Outbox rows whose "sending" mark the hub may have taken while this bridge sent nothing. */
+  private readonly unsent = new Set<string>();
+  /** Photos already published for messages still waiting to be ingested: file → URL. */
+  private readonly published = new Map<string, string>();
   /** Rows waiting on a chat link or a photo download: rowid → first seen. */
   private readonly waiting = new Map<number, number>();
   private highWater = 0;
@@ -121,9 +125,45 @@ export class Bridge {
     }
   }
 
-  /** Sends every outbox row that is due. */
+  /** Sends every outbox row that is due, once the hub knows how earlier sends went. */
   async drainOutbox(): Promise<void> {
-    for (const row of this.hub.dueOutbox(new Date(this.opts.now()))) await this.deliver(row);
+    if (!(await this.flushMarks())) return;
+    const due = await this.hub.dueOutbox(new Date(this.opts.now()));
+    // A row the hub may have marked sending while this bridge, told the hub
+    // was down, never sent it: still ours to send.
+    for (const row of due) if (row.status === "queued" || this.unsent.has(row.action_id)) await this.deliver(row);
+  }
+
+  /** Tells the hub how sends went that it couldn't hear about at the time. False while it's still down. */
+  private async flushMarks(): Promise<boolean> {
+    const pending = this.state.data.pendingMarks;
+    for (const [actionId, update] of Object.entries(pending)) {
+      try {
+        await this.hub.markOutbox(actionId, update);
+      } catch (err) {
+        if (err instanceof HubUnavailable) return false;
+        this.opts.log(`[bridge] couldn't record ${actionId} as ${update.status}: ${err}`);
+      }
+      delete pending[actionId];
+      this.state.save();
+    }
+    return true;
+  }
+
+  /**
+   * Records how a send went. The message is out whatever the hub says, so if
+   * it's down the outcome is kept and told later (sent_photon_id is what
+   * routes tapbacks and replies on it).
+   */
+  private async mark(actionId: string, update: OutboxUpdate): Promise<void> {
+    try {
+      await this.hub.markOutbox(actionId, update);
+    } catch (err) {
+      if (!(err instanceof HubUnavailable)) throw err;
+      this.state.data.pendingMarks[actionId] = { status: update.status, sent_photon_id: update.sent_photon_id, error: update.error };
+      this.state.save();
+      this.opts.log(`[bridge] ${actionId} ${update.status}; the hub is down, so that's recorded for later`);
+    }
   }
 
   private async consider(row: RawMessage): Promise<void> {
@@ -133,8 +173,12 @@ export class Bridge {
     try {
       outcome = await this.handle(row, now - firstSeen);
     } catch (err) {
-      const giveUp = now - firstSeen >= this.opts.attachmentWaitMs;
-      this.opts.log(`[bridge] row ${row.rowid} failed${giveUp ? ", dropping it" : ", will retry"}: ${err}`);
+      // A hub that's down loses nothing: the row waits however long it takes.
+      const down = err instanceof HubUnavailable;
+      const giveUp = !down && now - firstSeen >= this.opts.attachmentWaitMs;
+      if (!down || !this.waiting.has(row.rowid)) {
+        this.opts.log(`[bridge] row ${row.rowid} failed${giveUp ? ", dropping it" : ", will retry"}: ${err}`);
+      }
       outcome = giveUp ? "done" : "wait";
     }
     if (outcome === "wait") this.waiting.set(row.rowid, firstSeen);
@@ -195,7 +239,10 @@ export class Bridge {
       return "done";
     }
     for (const [i, photo] of photos.entries()) {
-      const image_url = await this.images.publish(photo.filename!);
+      // Retries while the hub is down reuse the copy already made.
+      const image_url = this.published.get(photo.filename!) ?? (await this.images.publish(photo.filename!));
+      if (this.published.size > 500) this.published.clear();
+      this.published.set(photo.filename!, image_url);
       await this.hub.ingest({
         ...base,
         // Extra photos in the same bubble get their own ids; the first keeps the row's guid.
@@ -206,6 +253,7 @@ export class Bridge {
         ...replyTo,
       });
     }
+    for (const photo of photos) this.published.delete(photo.filename!);
     return "done";
   }
 
@@ -244,8 +292,15 @@ export class Bridge {
   }
 
   private async deliver(row: OutboxRow): Promise<void> {
-    const fail = (error: string) => this.hub.markOutbox(row.action_id, { status: "failed", error });
-    await this.hub.markOutbox(row.action_id, { status: "sending" });
+    const fail = (error: string) => this.mark(row.action_id, { status: "failed", error });
+    try {
+      await this.hub.markOutbox(row.action_id, { status: "sending" });
+    } catch (err) {
+      // Nothing is sent. The mark may still land, so remember the row is ours.
+      if (err instanceof HubUnavailable) this.unsent.add(row.action_id);
+      throw err;
+    }
+    this.unsent.delete(row.action_id);
 
     if (row.kind === "reaction") return this.deliverTapback(row, fail);
     const target = this.targetFor(row);
@@ -256,7 +311,7 @@ export class Bridge {
     if (this.opts.photonDm && target.kind === "dm" && row.purpose === "payment_receipt" && "text" in content) {
       try {
         await this.opts.photonDm(target.handle, content.text);
-        await this.hub.markOutbox(row.action_id, { status: "sent", sent_at: new Date(this.opts.now()) });
+        await this.mark(row.action_id, { status: "sent", sent_at: new Date(this.opts.now()) });
         this.opts.log(`[bridge] ${row.action_id} sent through Photon`);
         return;
       } catch (err) {
@@ -278,7 +333,7 @@ export class Bridge {
       if (target.kind === "dm") this.gate.noteBridgeDm(target.handle, this.opts.now());
       const guid = await expectation.landed;
       if (!guid) this.opts.log(`[bridge] ${row.action_id} sent, but never showed up in chat.db; tapbacks on it won't route`);
-      await this.hub.markOutbox(row.action_id, {
+      await this.mark(row.action_id, {
         status: "sent",
         sent_at: new Date(this.opts.now()),
         ...(guid ? { sent_photon_id: guid } : {}),
@@ -324,7 +379,7 @@ export class Bridge {
       this.opts.log(`[bridge] ${row.action_id} was sent, but not in ${row.target_message_id}'s thread`);
     }
     if (!guid) this.opts.log(`[bridge] ${row.action_id} reply sent, but never showed up in chat.db`);
-    await this.hub.markOutbox(row.action_id, {
+    await this.mark(row.action_id, {
       status: "sent",
       sent_at: new Date(this.opts.now()),
       ...(guid ? { sent_photon_id: guid } : {}),
@@ -366,7 +421,7 @@ export class Bridge {
     }
     const guid = await expectation.landed;
     if (!guid) return fail(`the ${row.reaction} never showed up on ${row.target_message_id} in chat.db`);
-    await this.hub.markOutbox(row.action_id, { status: "sent", sent_at: new Date(this.opts.now()), sent_photon_id: guid });
+    await this.mark(row.action_id, { status: "sent", sent_at: new Date(this.opts.now()), sent_photon_id: guid });
   }
 
   /** Tab only ever speaks in enabled groups and to their members. */

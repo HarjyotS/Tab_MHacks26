@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { Bridge } from "../src/bridge.ts";
 import { ChatDb } from "../src/chatdb.ts";
 import { Gate } from "../src/gate.ts";
-import { DevHub } from "../src/hub.ts";
+import { DevHub, HubUnavailable } from "../src/hub.ts";
 import { State } from "../src/state.ts";
 import { ATTRIBUTED_BODIES, FakeMessages, FakeReplier, FakeSender, FakeTapbacker } from "./helpers.ts";
 
@@ -74,7 +74,7 @@ function setup(opts: { threadColumn?: boolean } = {}) {
     await bridge.poll();
     await draining;
   }
-  return { fx, gate, hub, sender, tapbacker, replier, bridge, clock, logs, deliverNext, tapbackNext, replyNext, turnOn };
+  return { fx, gate, hub, state, sender, tapbacker, replier, bridge, clock, logs, deliverNext, tapbackNext, replyNext, turnOn };
 }
 
 test("ignores a group until Tab's phone says /tab on, then announces members and ingests", async () => {
@@ -401,4 +401,75 @@ test("never decodes the owner's own DMs unless Tab is waiting for a send to that
   fx.message({ chat: fx.dm(A), handle: A, fromMe: true, text: null, attributedBody: new Uint8Array([0xff, 0x00, 0x13]) });
   await bridge.poll();
   expect(hub.ingested).toHaveLength(before);
+});
+
+test("keeps a message while the backend is down, however long that takes", async () => {
+  const { fx, hub, bridge, clock, turnOn } = setup();
+  await turnOn();
+  const real = hub.ingest.bind(hub);
+  let down = true;
+  hub.ingest = async (m) => {
+    if (down) throw new HubUnavailable("backend unreachable");
+    return real(m);
+  };
+  const before = hub.ingested.length;
+  fx.message({ chat: HOUSE, handle: A, text: "i paid 40 for gas" });
+  await bridge.poll();
+  clock.offset += 10 * 60_000; // well past attachmentWaitMs
+  await bridge.poll();
+  expect(hub.ingested).toHaveLength(before);
+
+  down = false;
+  await bridge.poll();
+  expect(hub.ingested.slice(before).map((m) => m.text)).toEqual(["i paid 40 for gas"]);
+});
+
+test("a send the hub couldn't hear about is kept and told once it's back", async () => {
+  const { fx, hub, state, bridge, deliverNext, turnOn } = setup();
+  await turnOn();
+  fx.message({ chat: HOUSE, handle: A, text: "@tab ping" });
+  await bridge.poll();
+  const [pong] = hub.dueOutbox(new Date(8.64e15));
+  const real = hub.markOutbox.bind(hub);
+  let down = true;
+  hub.markOutbox = async (id, update) => {
+    if (down && update.status !== "sending") throw new HubUnavailable("backend restarting");
+    return real(id, update);
+  };
+  await deliverNext();
+  expect(hub.row(pong!.action_id)?.status).toBe("sending");
+  const kept = state.data.pendingMarks[pong!.action_id];
+  expect(kept).toMatchObject({ status: "sent" });
+  expect(kept!.sent_photon_id).toBeString();
+
+  await bridge.drainOutbox(); // still down: nothing else goes out either
+  expect(state.data.pendingMarks[pong!.action_id]).toBeDefined();
+  down = false;
+  await bridge.drainOutbox();
+  expect(hub.row(pong!.action_id)).toMatchObject({ status: "sent", sent_photon_id: kept!.sent_photon_id });
+  expect(state.data.pendingMarks).toEqual({});
+});
+
+test("a row marked sending while the hub looked down, but never sent, still goes out", async () => {
+  const { fx, hub, sender, bridge, deliverNext, turnOn } = setup();
+  await turnOn();
+  fx.message({ chat: HOUSE, handle: A, text: "@tab ping" });
+  await bridge.poll();
+  const [pong] = hub.dueOutbox(new Date(8.64e15));
+  const real = hub.markOutbox.bind(hub);
+  let flaky = true;
+  // The mark lands, but the answer never comes back (a timeout).
+  hub.markOutbox = async (id, update) => {
+    await real(id, update);
+    if (flaky && update.status === "sending") throw new HubUnavailable("timed out");
+  };
+  expect(bridge.drainOutbox()).rejects.toBeInstanceOf(HubUnavailable);
+  await Bun.sleep(0);
+  expect(hub.row(pong!.action_id)?.status).toBe("sending");
+  expect(sender.sentGuids).toHaveLength(0);
+
+  flaky = false;
+  await deliverNext();
+  expect(hub.row(pong!.action_id)?.status).toBe("sent");
+  expect(sender.sentGuids).toHaveLength(1);
 });

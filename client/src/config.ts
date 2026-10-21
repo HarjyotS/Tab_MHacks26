@@ -27,6 +27,11 @@ export const config = {
     /** Optional fixed token; otherwise the client keeps its own in .state/spacetime-token. */
     token: env.SPACETIME_CLIENT_TOKEN || undefined,
   },
+  /** HUB=backend: the backend's hub on this Mac (it keeps the data in Postgres). */
+  backend: {
+    url: env.BACKEND_HUB_URL ?? `http://127.0.0.1:${env.HUB_PORT || 4100}`,
+    token: env.TAB_HUB_TOKEN || undefined,
+  },
   timezone: env.GROUP_TIMEZONE ?? "America/Detroit",
   echo: env.ECHO !== "0",
   port,

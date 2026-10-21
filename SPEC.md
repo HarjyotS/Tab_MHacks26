@@ -100,6 +100,8 @@ Three moments matter more than any individual feature: a receipt turning into a 
 
 ## 4. Architecture
 
+> **Since the beta (October 2026), production keeps the data in Neon Postgres, not SpacetimeDB.** The backend holds every row in memory and saves each change to Postgres in one transaction (`backend/src/store/engine.ts` is the module's reducers ported check for check, `postgres.ts` the saving). The bridge reaches the backend on `127.0.0.1:4100` (`HUB=backend`, `backend/src/hub.ts`) instead of subscribing to SpacetimeDB. The tables, fields, and reducers in §5 are unchanged; only where they run moved. The diagram below is the hackathon setup, which still works without `DATABASE_URL`; the web ledger (§12.3) still reads SpacetimeDB until it's ported.
+
 ### 4.1 Overview
 
 ```mermaid

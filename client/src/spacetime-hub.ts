@@ -77,7 +77,7 @@ export async function spacetimeHub(opts: SpacetimeHubOptions): Promise<Hub & { i
     },
     dueOutbox(now: Date): OutboxRow[] {
       return [...connection.db.clientOutbox.iter()]
-        .filter((r) => r.status === "queued" && r.sendAfter.toDate() <= now)
+        .filter((r) => (r.status === "queued" || r.status === "sending") && r.sendAfter.toDate() <= now)
         .map((r) => ({
           action_id: r.actionId,
           kind: r.kind as OutboxKind,

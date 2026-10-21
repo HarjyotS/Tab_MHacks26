@@ -8,9 +8,9 @@ This is the checklist for putting Tab on an always-on Mac (a cloud Mac or a Mac 
 |---|---|---|
 | Messages.app | the Mac | Signed into Tab's Apple ID. This is how Tab texts. |
 | Bridge (`client/`, Bun) | the Mac | Reads the Messages database, sends texts and tapbacks, serves photos and their on-device text. |
-| Backend (`backend/`, Node) | the Mac | The brain: the screener (Jev), Grok, splits, reminders. |
+| Backend (`backend/`, Node) | the Mac | The brain: the screener (Jev), Grok, splits, reminders. Holds Tab's data and saves every change to the database. The bridge talks to it on `127.0.0.1:4100`. |
 | Auto-updater (`ops/update.sh`) | the Mac | Every 2 minutes: pulls `main`, runs the tests, restarts what changed. |
-| SpacetimeDB | Maincloud (cloud) | The database. You create your own (free) in step 5, and you own it. |
+| Neon Postgres | Vercel (cloud) | The database, `tab-db` on Harjyot's Vercel account (free plan, Oregon). The backend creates its tables itself. |
 
 All four Mac pieces run as launchd services (macOS's built-in service manager). They start at login, restart if they crash, and log to `~/Library/Logs/tab/`.
 
@@ -18,15 +18,22 @@ All four Mac pieces run as launchd services (macOS's built-in service manager). 
 
 You need:
 
-- **The Mac.** A cloud Mac with at least 4 GB of RAM, or a Mac mini. macOS 15 or newer. You need remote desktop access to it (Screen Sharing / VNC), not just SSH. Some steps are clicks in System Settings, and Messages needs a real logged-in desktop.
+- **The Mac.** A cloud Mac with at least 4 GB of RAM, or a Mac mini. macOS 15 or newer. You need remote desktop access to it (NoMachine, Screen Sharing or VNC), not just SSH. Some steps are clicks in System Settings, and Messages needs a real logged-in desktop.
 - **Tab's Apple ID.** A fresh Apple ID just for Tab, not anyone's personal one.
 - **Tab's phone number.** An iPhone (any used one works) with a prepaid SIM, signed into Tab's Apple ID. Without it, Tab can only text from the Apple ID's email address.
-- **The API keys, from Harjyot, privately** (an encrypted file plus its password by text, or a password manager share; never plain email or Slack):
+- **The secrets, from Harjyot, privately** (an encrypted file plus its password by text, or a password manager share; never plain email or Slack):
+  - `DATABASE_URL` (the Neon database)
   - `XAI_API_KEY` (Grok)
   - `TYPESAFE_API_KEY` (Jev, the screener)
-- **A GitHub account**, to log in to SpacetimeDB's cloud (Maincloud) in step 5.
 
 > Only one copy of Tab may run at a time. Once this server is up, nobody else runs the bridge or backend, or every message gets answered twice.
+
+**On HostMyApple** (our cloud Mac), the host's rules come first. Break them and we lose the machine:
+
+- **Restart, never Shut Down.** A shut-down VM stays off until the host turns it back on.
+- **No FileVault.** Skip step 2.5.
+- **No VPN apps.**
+- A macOS update can take it offline for up to 45 minutes. Don't force a reboot during one.
 
 ## 2. Mac settings
 
@@ -36,7 +43,8 @@ In **System Settings**:
 2. **Lock Screen**: turn the screen saver off, set "Require password after screen saver" to **Never**, and set "Turn display off" to **Never**. Tapbacks click through Messages, which doesn't work on a locked screen.
 3. **Energy** (or Battery → Options on a laptop): turn on "Prevent automatic sleeping" and "Start up automatically after a power failure" if they're offered. The `app.tab.awake` service keeps it awake too.
 4. **General → Software Update → Automatic Updates**: turn off "Install macOS updates". A surprise restart takes Tab offline, so update by hand.
-5. **Privacy & Security → FileVault**: on, if the host allows it. The Mac holds group chats.
+5. **Privacy & Security → FileVault**: on, if the host allows it. The Mac holds group chats. HostMyApple doesn't: leave it off there.
+6. **General → Sharing → Remote Login**: on, so the Mac can be reached over SSH.
 
 On a cloud Mac, also check with the host that the desktop session stays unlocked after you disconnect from remote desktop.
 
@@ -77,38 +85,26 @@ npm ci
 (cd client && bun install --frozen-lockfile)
 ```
 
-## 5. Your own database
+## 5. The database
 
-Tab's database runs on SpacetimeDB's free cloud, Maincloud. You publish your own copy, so you own it: nobody else is needed to update it or to let the bot in.
+Tab's data lives in Neon Postgres, on Harjyot's Vercel account: the database `tab-db` (free plan, Oregon), connected to the `tab-ledger` project. There's nothing to install or publish. The backend creates its tables the first time it starts, and adds new columns itself after updates.
 
-```sh
-curl -sSf https://install.spacetimedb.com | sh            # the spacetime CLI
-exec zsh
-spacetime version install 2.10.2 && spacetime version use 2.10.2   # the version Tab's module is built with
-spacetime login                                            # opens a browser; sign in with GitHub
-cd ~/tab
-spacetime publish --server maincloud tab-db -p spacetime   # any free name; if taken, try another
-spacetime call --server maincloud tab-db claim_module_owner
-```
-
-Use your name instead of `tab-db` everywhere below if you picked another. `claim_module_owner` makes your login the database's owner, the only one who can let the bot's two parts in (step 9). It's a fresh database: the hackathon's demo data stays behind.
+All you need is its address, `DATABASE_URL`. It's in the encrypted settings file (step 6), or on Vercel: **Storage → tab-db → .env.local**, the `DATABASE_URL` line (the pooled one, with `-pooler` in the host). It contains the database password, so keep it private.
 
 ## 6. Settings files
 
-Two files, both gitignored. If Harjyot sent the encrypted settings file, it holds both with the keys filled in: decrypt it into `~/tab` with the password he texted you,
+Two files, both gitignored. If Harjyot sent the encrypted settings file, it holds both with the secrets filled in: decrypt it into `~/tab` with the password he texted you,
 
 ```sh
 openssl enc -d -aes-256-cbc -pbkdf2 -iter 600000 -in ~/Downloads/tab-env.tgz.enc | tar -xzf - -C ~/tab
 ```
 
-then set `SPACETIME_DB` (step 5's name) and `TAB_PHONE` in them. Otherwise create them:
+then set `TAB_PHONE` in `client/.env`. Otherwise create them:
 
 **`~/tab/.env`** (the backend):
 
 ```sh
-SPACETIME_HOST=https://maincloud.spacetimedb.com
-SPACETIME_DB=tab-db               # your database from step 5
-BACKEND_SPACETIME_TOKEN=          # filled in at step 9
+DATABASE_URL=                     # step 5
 XAI_API_KEY=                      # from Harjyot
 TYPESAFE_API_KEY=                 # from Harjyot
 ```
@@ -120,10 +116,8 @@ Leave `DEMO_MODE` and `PAYMENTS` out. The defaults are real timing and real paym
 ```sh
 TAB_PHONE=+1XXXXXXXXXX            # Tab's number, with +1
 TAB_NAME=Tab
-HUB=spacetime
+HUB=backend
 ECHO=0
-SPACETIME_HOST=https://maincloud.spacetimedb.com
-SPACETIME_DB=tab-db               # your database from step 5
 GROUP_TIMEZONE=America/Detroit
 ```
 
@@ -148,8 +142,8 @@ cd ~/tab/client && bun start      # window 1: the bridge
 cd ~/tab/backend && DOTENV_CONFIG_PATH=../.env npm start   # window 2: the backend
 ```
 
-- The bridge should print `Tab bridge up...` and log its database identity (a long hex string). If it says `authorization denied` on chat.db, Full Disk Access is missing (step 7).
-- The backend logs `connected`, its identity, and a line `BACKEND_SPACETIME_TOKEN=...`. Copy that line into `~/tab/.env`. Until step 9 it logs `no_rows_visible`: expected.
+- The bridge should print `Talking to the backend at http://127.0.0.1:4100` and `Tab bridge up...`. If it says `authorization denied` on chat.db, Full Disk Access is missing (step 7).
+- The backend logs `connected` with `"store":"postgres"`, then `running`. If it can't reach the database it exits with the error: check `DATABASE_URL`.
 
 Now check the bridge itself with no AI involved, using a throwaway test group. Stop the bridge (Ctrl+C), then run it with the dev hub:
 
@@ -161,31 +155,16 @@ From the iPhone (Tab's phone), text `/tab on` into a test group with you in it. 
 
 Stop both windows with Ctrl+C when it all works.
 
-## 9. Let the bot into your database
-
-The bridge and the backend each have their own database identity (printed in step 8; the bridge's token is saved in `client/.state/`). As the owner, give each its role:
-
-```sh
-cd ~/tab
-export SPACETIME_HOST=https://maincloud.spacetimedb.com SPACETIME_DB=tab-db
-export SPACETIME_AUTH_TOKEN="$(spacetime login show --token | awk '/auth token/{print $NF}')"
-npm run grant:role -- <bridge-identity> client
-npm run grant:role -- <backend-identity> backend
-unset SPACETIME_AUTH_TOKEN
-```
-
-Run the first run again (step 8) to check: the backend should now log `running` with no `no_rows_visible`.
-
-## 10. Install the services
+## 9. Install the services
 
 ```sh
 cd ~/tab && ops/install.sh
 ops/status.sh
 ```
 
-`status.sh` should show all four services running, the bridge health answering, and the commit you're on. From now on you don't start anything by hand. It all comes back after a reboot or a crash.
+`status.sh` should show all four services running, the bridge and backend health answering, and the commit you're on. From now on you don't start anything by hand. It all comes back after a reboot or a crash.
 
-## 11. Turn Tab on in a group
+## 10. Turn Tab on in a group
 
 Add Tab's number to the group chat, then text `/tab on` into the group **from the iPhone** (Tab's own phone). Tab introduces itself and asks for names. `/tab off` switches it off. Tab only reads groups it's been switched on in, plus DMs from their members.
 
@@ -206,13 +185,9 @@ So the workflow from a laptop is: merge or push to `main`, and within about 2 mi
 
 ### Updating the database
 
-The auto-updater never touches the database schema. That needs the owner's login (yours, from step 5). When a change touches `spacetime/src/`, publish it **before** pushing, from any machine logged in as the owner:
+Nothing to do by hand. When the backend starts it creates any table or column the code needs that the database doesn't have yet. It never drops or renames anything, so a push that adds a field deploys like any other. Renaming or removing a column needs a one-off migration: write it, test it on a copy, and say so in the PR.
 
-```sh
-spacetime publish --server maincloud tab-db -p spacetime
-```
-
-Adding tables and reducers upgrades in place and keeps the data. If you push first, the new backend may fail against the old module until it's published, and the update log carries a reminder.
+Neon's free plan holds 0.5 GB and sleeps when nothing's happening. The backend keeps every row in memory and only talks to Neon to save changes, so a sleeping database just adds a second to the first save after a quiet spell. Backups: Neon keeps a short restore window (Vercel → Storage → tab-db → Open in Neon).
 
 ## Everyday checks
 
@@ -231,10 +206,11 @@ tail -f ~/Library/Logs/tab/bridge.log
 | Sends fail: "Not authorized to send Apple events" | Privacy & Security → Automation: let bun control Messages. |
 | Tapbacks fail: "not allowed assistive access" | Accessibility for `~/.bun/bin/bun`. |
 | Tapbacks fail: "no enabled Tapback menu item" | The screen is locked or Messages is hidden behind something. Check step 2, and click into Messages once. |
-| Backend log: `no_rows_visible` | The backend token is wrong or lacks the backend role (step 9). |
-| `spacetime publish` complains about versions | `spacetime version install 2.10.2 && spacetime version use 2.10.2`, then publish again. |
+| Backend log: `db_retry`, or messages failing with `saving failed` | Neon is unreachable. Check the Mac's internet and Neon's status. Nothing is lost: the change rolls back and the bridge keeps the message until it goes through. |
+| Backend exits at startup with a database error | `DATABASE_URL` in `~/tab/.env` is wrong or missing (step 5). |
+| Bridge log: `backend unreachable` | The backend is down or restarting. Messages wait in the bridge until it's back. Check `ops/status.sh` and `backend.log`. |
 | Tab texts from an email address | The number isn't selected for iMessage on the Mac or iPhone (step 3), or the iPhone has been off for a long time. |
-| Every message answered twice | Another copy of Tab is running somewhere (a laptop). Stop it. |
+| Every message answered twice | Another copy of Tab is running somewhere (a laptop). Stop it. If it uses the same `DATABASE_URL`, the backend that started first stops itself at its next save (`save_failed_restarting`, "another backend started") rather than overwrite rows; launchd restarts the server's. |
 | Update log: `can't fast-forward` | Someone changed files on the server. `cd ~/tab && git status`, then `git stash` or `git reset --hard origin/main` once you're sure nothing there matters. |
 | Update log: `FAILED (...)` | The pushed commit broke tests. Fix it on a laptop and push again. The server stays on the last good commit until then. |
 | After a macOS update nothing works | The permissions in step 7 may need re-adding, and the services restarting: `ops/install.sh`. |
@@ -243,7 +219,7 @@ tail -f ~/Library/Logs/tab/bridge.log
 
 ## Web ledger (optional)
 
-"@tab ledger" sends a private link to a live web page of the group's balances. The page at tab-ledger.vercel.app still reads the hackathon database, so leave `LEDGER_*` out until it's redeployed against yours: set `VITE_SPACETIME_HOST=wss://maincloud.spacetimedb.com` and `VITE_SPACETIME_DB=tab-db` for `web/`, deploy it, then add to `~/tab/.env`:
+"@tab ledger" sends a private link to a live web page of the group's balances. The page at tab-ledger.vercel.app still reads the hackathon's SpacetimeDB, not Neon, so leave `LEDGER_*` out until it's moved over (it needs a small API on Vercel reading `tab-db`). When it is, add to `~/tab/.env`:
 
 ```sh
 LEDGER_BASE_URL=https://<where the web app is deployed>

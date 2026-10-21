@@ -55,9 +55,6 @@ if changed $BOT client; then
   npm test -w gate --silent >/dev/null 2>&1 || rollback "gate tests"
   (cd client && bun test >/dev/null 2>&1) || rollback "client tests"
 fi
-if changed spacetime/src; then
-  log "NOTE: the SpacetimeDB module changed. Its owner must publish it to Maincloud (ops/README.md, 'Updating the database')."
-fi
 
 # Restart only what changed. Site, video, and docs changes restart nothing.
 if changed $BOT; then restart backend; fi

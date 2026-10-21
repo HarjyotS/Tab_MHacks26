@@ -1,5 +1,5 @@
 // The backend service: SPEC §11.1 processing loop plus the §11.2 scheduler,
-// reading Kian's backend_* views and writing only through reducers.
+// reading the Store and writing only through the reducers.
 //   npm start -w backend
 import { grokConfig, ledgerConfig, timing } from "./config.js";
 import { connectBackend } from "./db/connection.js";
@@ -18,6 +18,10 @@ import { summarizeBreakdown } from "./copy/summary.js";
 import { Memory, type BrainCtx } from "./brain/context.js";
 import { processMessage, tick } from "./brain/process.js";
 import { BACKEND_VIEWS, spacetimeStore } from "./store/spacetime.js";
+import { Engine } from "./store/engine.js";
+import { claimLease, load, migrate, neonSql, persistTo } from "./store/postgres.js";
+import type { Store } from "./store/types.js";
+import { startHub } from "./hub.js";
 import { serial } from "./serial.js";
 
 // Structured logs, one JSON object per line (no message text).
@@ -31,41 +35,94 @@ const xai = createXaiClient(grok.apiKey, grok.baseURL);
 const t = timing();
 const { classify, kind, prefilter } = createClassify();
 
-// A dropped connection can't recover in place; exit so the runner restarts us.
-const { conn, identity, token } = await connectBackend((error) => {
-  log("disconnected", { error: String(error) });
-  process.exit(1);
-});
-log("connected", { identity, gate: kind, prefilter, demo_mode: t.demo });
-if (!process.env.BACKEND_SPACETIME_TOKEN) {
-  log("save_token", {
-    hint: "Add BACKEND_SPACETIME_TOKEN to backend/.env to keep this identity, then have the module owner grant it the backend role.",
+// Where Tab's data lives. With DATABASE_URL, Postgres (Neon): the backend
+// holds the rows, the bridge talks to it over localhost (hub.ts). Without
+// it, the SpacetimeDB module, as at the hackathon.
+type Data = { store: Store; reducers: ReturnType<typeof createReducers>; onNewMessage: (cb: () => void) => void };
+
+async function postgresData(url: string): Promise<Data> {
+  const sql = neonSql(url);
+  await migrate(sql);
+  // This backend becomes the only one allowed to save (postgres.ts).
+  const owner = `${process.env.HOSTNAME || "backend"}:${process.pid}:${crypto.randomUUID()}`;
+  await claimLease(sql, owner);
+  let notify = () => {};
+  const engine = new Engine({
+    now: () => new Date(),
+    persist: persistTo(sql, { owner, log }),
+    autoComplete: true,
+    demo: t.demo,
+    onIngest: () => notify(),
+    // Unknown whether the change landed: restart, and memory reloads from
+    // Neon. launchd starts us again; the bridge holds messages meanwhile.
+    onSaveFailed: (err) => {
+      log("save_failed_restarting", { error: err.message.slice(0, 200) });
+      setTimeout(() => process.exit(1), 200);
+    },
+    log,
   });
-  console.log(`BACKEND_SPACETIME_TOKEN=${token}`);
+  await load(sql, engine);
+  // Simulated transfers that were waiting when the backend stopped.
+  await engine.completeDueTransfers();
+  const port = Number(process.env.HUB_PORT || 4100);
+  const hub = await startHub(engine, { port, token: process.env.TAB_HUB_TOKEN || undefined, log });
+  // On a restart (every deploy), stop taking requests and let saves in
+  // flight finish, so nothing the bridge was told is done goes missing.
+  const stop = (signal: string) => {
+    log("stopping", { signal });
+    hub.close();
+    engine.stop();
+    void Promise.race([engine.settled(), new Promise((r) => setTimeout(r, 15_000))]).then(() => process.exit(0));
+  };
+  process.once("SIGTERM", () => stop("SIGTERM"));
+  process.once("SIGINT", () => stop("SIGINT"));
+  log("connected", { store: "postgres", hub: `127.0.0.1:${port}`, gate: kind, prefilter, demo_mode: t.demo });
+  return { store: engine, reducers: createReducers(engine.client), onNewMessage: (cb) => (notify = cb) };
 }
 
-await new Promise<void>((resolve, reject) => {
-  conn
-    .subscriptionBuilder()
-    .onApplied(() => resolve())
-    .onError((ctx) =>
-      reject(new Error(`subscription failed: ${String(ctx.event)}`)),
-    )
-    .subscribe(BACKEND_VIEWS);
-});
-
-const store = spacetimeStore(conn.db);
-if (store.groups().length === 0)
-  log("no_rows_visible", {
-    hint: "Empty views usually mean this identity lacks the backend role.",
+async function spacetimeData(): Promise<Data> {
+  // A dropped connection can't recover in place; exit so the runner restarts us.
+  const { conn, identity, token } = await connectBackend((error) => {
+    log("disconnected", { error: String(error) });
+    process.exit(1);
   });
+  log("connected", { store: "spacetime", identity, gate: kind, prefilter, demo_mode: t.demo });
+  if (!process.env.BACKEND_SPACETIME_TOKEN) {
+    log("save_token", {
+      hint: "Add BACKEND_SPACETIME_TOKEN to backend/.env to keep this identity, then have the module owner grant it the backend role.",
+    });
+    console.log(`BACKEND_SPACETIME_TOKEN=${token}`);
+  }
+
+  await new Promise<void>((resolve, reject) => {
+    conn
+      .subscriptionBuilder()
+      .onApplied(() => resolve())
+      .onError((ctx) => reject(new Error(`subscription failed: ${String(ctx.event)}`)))
+      .subscribe(BACKEND_VIEWS);
+  });
+
+  const store = spacetimeStore(conn.db);
+  if (store.groups().length === 0)
+    log("no_rows_visible", {
+      hint: "Empty views usually mean this identity lacks the backend role.",
+    });
+  return {
+    store,
+    reducers: createReducers(conn.reducers),
+    onNewMessage: (cb) => conn.db.backendMessages.onInsert(() => cb()),
+  };
+}
+
+const data = process.env.DATABASE_URL ? await postgresData(process.env.DATABASE_URL) : await spacetimeData();
+const store = data.store;
 
 // The photo description and the receipt read fetch each image once.
 const images = new ImageCache();
 
 const ctx: BrainCtx = {
   store,
-  db: createReducers(conn.reducers),
+  db: data.reducers,
   now: () => new Date(),
   classify,
   extract: {
@@ -124,7 +181,7 @@ function drain() {
   });
 }
 
-conn.db.backendMessages.onInsert(
+data.onNewMessage(
   () =>
     void drain().catch((err: unknown) =>
       log("drain_failed", { error: String(err) }),
