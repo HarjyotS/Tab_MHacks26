@@ -1,17 +1,23 @@
 import type { InboundMessage, OutboxRow, OutboxUpdate } from "./types.ts";
 
 /**
- * The client's side of the SpacetimeDB contract (SPEC 5.5): it calls
- * `ingest_message` and `mark_outbox`, and reads queued outbox rows from its
- * subscription. A SpacetimeDB implementation slots in here once the module's
- * TypeScript bindings are generated.
+ * The client's side of the data contract (SPEC 5.5): it calls
+ * `ingest_message` and `mark_outbox`, and reads queued outbox rows. The
+ * backend's hub (backend-hub.ts) and SpacetimeDB (spacetime-hub.ts) both
+ * implement it.
  */
 export interface Hub {
   ingest(message: InboundMessage): Promise<void>;
   markOutbox(actionId: string, update: OutboxUpdate): Promise<void>;
-  /** Queued rows whose send_after has passed, oldest first. */
-  dueOutbox(now: Date): OutboxRow[];
+  /**
+   * Rows whose send_after has passed, oldest first: queued ones, and ones
+   * marked sending (the bridge only resends those it knows it never sent).
+   */
+  dueOutbox(now: Date): OutboxRow[] | Promise<OutboxRow[]>;
 }
+
+/** The hub can't take anything right now (backend restarting, database down): try again later. */
+export class HubUnavailable extends Error {}
 
 type NewOutbox = Omit<OutboxRow, "action_id" | "status" | "send_after" | "purpose"> &
   Partial<Pick<OutboxRow, "send_after" | "purpose">>;
@@ -85,7 +91,7 @@ export class DevHub implements Hub {
   }
 
   dueOutbox(now: Date): OutboxRow[] {
-    return [...this.outbox.values()].filter((r) => r.status === "queued" && r.send_after <= now);
+    return [...this.outbox.values()].filter((r) => (r.status === "queued" || r.status === "sending") && r.send_after <= now);
   }
 
   row(actionId: string): (OutboxRow & { sent_photon_id?: string; error?: string }) | undefined {

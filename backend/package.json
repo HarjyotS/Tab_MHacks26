@@ -11,13 +11,15 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@neondatabase/serverless": "^1.2.0",
+    "@tab/gate": "*",
     "dotenv": "^18.0.5",
     "openai": "^7.27.0",
     "spacetimedb": "2.10.2",
-    "zod": "^4.6.5",
-    "@tab/gate": "*"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
     "@types/node": "^26.6.4",
     "tsx": "^4.23.15",
     "typescript": "^5.9.3",

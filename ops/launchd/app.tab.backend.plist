@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<!-- The backend (backend/): reads the repo-root .env. It exits when its
-     SpacetimeDB connection drops, and launchd starts it again. -->
+<!-- The backend (backend/): reads the repo-root .env, keeps Tab's data in
+     Postgres (DATABASE_URL), and serves the bridge on 127.0.0.1:4100. If it
+     exits, launchd starts it again. -->
 <plist version="1.0">
 <dict>
   <key>Label</key><string>app.tab.backend</string>

@@ -2,6 +2,8 @@
 
 The group-chat agent that keeps the tab. SpacetimeDB is the runtime source of truth for expenses, deterministic split math, approvals, scheduled simulated settlement, and the live ledger. Nessie is used only by a setup-time seeder to create mock banking profiles.
 
+> The server now keeps Tab's data in Neon Postgres through the backend (SPEC §4, `ops/README.md`). The SpacetimeDB setup below is the hackathon's, still used for local development, the seeders, and the web ledger.
+
 ## Requirements
 
 - Node.js 22 or newer

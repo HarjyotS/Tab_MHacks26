@@ -1,3 +1,4 @@
+import type { OutboxStatus } from "./types.ts";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
@@ -11,9 +12,11 @@ export interface StateData {
   rosters: Record<string, string[]>;
   /** When the bridge last DMed each member (ms since epoch), for the DM reply window. */
   lastBridgeDmAt: Record<string, number>;
+  /** Outcomes of sends the hub couldn't take at the time (it was down), by action_id, to tell it later. */
+  pendingMarks: Record<string, { status: OutboxStatus; sent_photon_id?: string; error?: string }>;
 }
 
-const EMPTY: StateData = { cursor: null, enabledGroups: [], rosters: {}, lastBridgeDmAt: {} };
+const EMPTY: StateData = { cursor: null, enabledGroups: [], rosters: {}, lastBridgeDmAt: {}, pendingMarks: {} };
 
 export class State {
   data: StateData;
