@@ -191,12 +191,19 @@ const TAPBACK_CODES: Record<Reaction, number> = { love: 2000, like: 2001, dislik
 export class FakeTapbacker implements Tapbacker {
   readonly calls: { target: string; reaction: Reaction }[] = [];
   misfireOnto: string | null = null;
+  /** Pretend the picker swallowed nothing: no tapback lands in chat.db. */
+  noOp = false;
+  dismissed = 0;
   private waiters: (() => void)[] = [];
 
   constructor(private readonly fx: FakeMessages) {}
 
   async react(target: string, reaction: Reaction, _fits: (title: string) => boolean): Promise<void> {
     this.calls.push({ target, reaction });
+    if (this.noOp) {
+      for (const wake of this.waiters.splice(0)) wake();
+      return;
+    }
     const landedOn = this.misfireOnto ?? target;
     this.fx.message({
       chat: this.fx.chatOf(landedOn),
@@ -206,6 +213,10 @@ export class FakeTapbacker implements Tapbacker {
       associatedGuid: `p:0/${landedOn}`,
     });
     for (const wake of this.waiters.splice(0)) wake();
+  }
+
+  async dismiss(): Promise<void> {
+    this.dismissed++;
   }
 
   nextReact(): Promise<void> {

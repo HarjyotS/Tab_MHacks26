@@ -581,3 +581,15 @@ test("other replies that can't thread go out as they are", async () => {
   const sent = sender.calls[0]!.content;
   expect("text" in sent && sent.text).toBe("you owe Joe $15.00");
 });
+
+test("a tapback that never lands closes the picker before anything else goes out", async () => {
+  const { fx, hub, tapbacker, bridge, turnOn } = setup();
+  await turnOn();
+  const msg = fx.message({ chat: HOUSE, handle: A, text: "paid 20 for an uber" });
+  await bridge.poll();
+  tapbacker.noOp = true;
+  const row = hub.enqueue({ kind: "reaction", group_id: HOUSE, target_message_id: msg, reaction: "like" });
+  await bridge.drainOutbox();
+  expect(hub.row(row.action_id)?.error).toContain("never showed up");
+  expect(tapbacker.dismissed).toBe(1);
+});
