@@ -12,6 +12,7 @@ import { backendHub } from "./backend-hub.ts";
 import { State } from "./state.ts";
 import { uiReplier } from "./reply.ts";
 import { uiTapbacker } from "./tapback.ts";
+import { ImsgRpc, imsgReplier, imsgTapbacker } from "./imsg.ts";
 
 const log = (line: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${line}`);
 
@@ -83,7 +84,15 @@ const photon =
 if (photon) log("Payment confirmations go out through Photon (Spectrum cloud).");
 const images = new ImageStore(config.imageDir, config.imageBaseUrl, config.imageMaxAgeMs);
 
-const tapbacker = config.tapbacks ? uiTapbacker() : null;
+// imsg (SIP off, helper injected with `imsg launch`) reacts and replies to any
+// message by guid; the UI only to each chat's newest. Its readiness is
+// logged at startup, and an action it can't start falls back like the UI's.
+const imsg = config.tapbackMode === "imsg" || config.replyMode === "imsg" ? new ImsgRpc(config.imsgPath, log) : null;
+if (imsg) {
+  const check = await imsg.ready(["tapback", "send.rich"]);
+  log(check.ok ? "imsg helper is up: tapbacks and replies go through it." : `imsg isn't ready (${check.why}); run "imsg launch" with SIP off.`);
+}
+const tapbacker = config.tapbackMode === "off" ? null : config.tapbackMode === "imsg" && imsg ? imsgTapbacker(imsg) : uiTapbacker();
 
 const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
   commandPrefix: config.commandPrefix,
@@ -94,7 +103,7 @@ const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
   sendMatchTimeoutMs: config.sendMatchTimeoutMs,
   photonDm: photon ? (handle, body) => photon.send(handle, body) : undefined,
   tapbackVerifyMs: config.tapbackVerifyMs,
-  replier: config.replies ? uiReplier() : null,
+  replier: config.replyMode === "off" ? null : config.replyMode === "imsg" && imsg ? imsgReplier(imsg) : uiReplier(),
   attachmentWaitMs: config.attachmentWaitMs,
   chatWaitMs: config.chatWaitMs,
   now: Date.now,
@@ -141,7 +150,7 @@ const loops = [
 ];
 
 log(
-  `Tab bridge up. Sending via ${config.sendVia}, tapbacks ${tapbacker ? "on" : "off"}, serving images on ${config.imageBaseUrl}.`,
+  `Tab bridge up. Sending via ${config.sendVia}, tapbacks ${config.tapbackMode}, replies ${config.replyMode}, serving images on ${config.imageBaseUrl}.`,
 );
 log(
   gate.enabledGroups().length
@@ -158,6 +167,7 @@ async function shutdown() {
   await Promise.race([Promise.all(loops), Bun.sleep(5_000)]);
   server.stop();
   await sender.stop();
+  imsg?.stop();
   state.save();
   db.close();
   process.exit(0);

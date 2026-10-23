@@ -6,7 +6,9 @@ import type { Reaction } from "./types.ts";
  * whether a Messages window title is that message's chat (titleFits).
  */
 export interface Tapbacker {
-  react(targetGuid: string, reaction: Reaction, fits: (title: string) => boolean): Promise<void>;
+  /** True when it can react to any message by guid (imsg), not just the chat's newest (the UI). */
+  anyMessage?: boolean;
+  react(targetGuid: string, reaction: Reaction, fits: (title: string) => boolean, chatGuid?: string): Promise<void>;
   /** Closes the tapback picker if a tapback didn't land, so it can't block what comes next. */
   dismiss?(): Promise<void>;
 }

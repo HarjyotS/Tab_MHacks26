@@ -2,7 +2,9 @@ import { runUiScript, uiScript, withChatTitle } from "./messages-ui.ts";
 
 /** Sends text as an inline (threaded) reply to a message. `fits` checks Messages' window title (titleFits). */
 export interface Replier {
-  reply(targetGuid: string, text: string, fits: (title: string) => boolean): Promise<void>;
+  /** True when it can thread onto any message by guid (imsg), not just the chat's newest (the UI). */
+  anyMessage?: boolean;
+  reply(targetGuid: string, text: string, fits: (title: string) => boolean, chatGuid?: string): Promise<void>;
 }
 
 // Select-all before pasting: anything stray in the field is replaced, not sent along.

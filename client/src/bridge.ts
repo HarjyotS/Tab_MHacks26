@@ -371,7 +371,9 @@ export class Bridge {
     const replier = this.opts.replier;
     if (!replier || !row.target_message_id) return false;
     const target = this.db.messageByGuid(row.target_message_id);
-    if (!target?.chat_guid || this.db.latestInChat(target.chat_guid)?.guid !== target.guid) return false;
+    if (!target?.chat_guid) return false;
+    // Through the UI, Messages can only reply to the newest message; imsg replies to any.
+    if (!replier.anyMessage && this.db.latestInChat(target.chat_guid)?.guid !== target.guid) return false;
     // Only thread into the chat this row is meant for; a target elsewhere gets a normal send.
     const sameChat = target.chat_style === GROUP_STYLE
       ? target.chat_guid === key
@@ -381,7 +383,7 @@ export class Bridge {
 
     const expectation = this.matcher.expect(key, text, this.opts.sendMatchTimeoutMs);
     try {
-      await replier.reply(row.target_message_id, text, fits);
+      await replier.reply(row.target_message_id, text, fits, target.chat_guid);
     } catch (err) {
       if (err instanceof NotSentError) {
         expectation.cancel();
@@ -423,7 +425,7 @@ export class Bridge {
         : !!target.handle && this.gate.isMember(normalizeHandle(target.handle));
     if (!allowed) return fail(`refusing to tapback in ${target.chat_guid}: Tab isn't on there`);
     // Messages tapbacks the chat's last message, not the one the link opens, so only act while they're the same.
-    if (this.db.latestInChat(target.chat_guid)?.guid !== target.guid) {
+    if (!this.tapbacker.anyMessage && this.db.latestInChat(target.chat_guid)?.guid !== target.guid) {
       return fail(`skipped: ${row.target_message_id} is no longer the newest message in its chat`);
     }
 
@@ -431,7 +433,7 @@ export class Bridge {
     const fits = this.titleCheck(target.chat_guid);
     const expectation = this.matcher.expect(tapbackKey(row.target_message_id), row.reaction, this.opts.tapbackVerifyMs);
     try {
-      await this.tapbacker.react(row.target_message_id, row.reaction, fits);
+      await this.tapbacker.react(row.target_message_id, row.reaction, fits, target.chat_guid);
     } catch (err) {
       expectation.cancel();
       return fail(String(err));

@@ -193,12 +193,13 @@ export class FakeTapbacker implements Tapbacker {
   misfireOnto: string | null = null;
   /** Pretend the picker swallowed nothing: no tapback lands in chat.db. */
   noOp = false;
+  anyMessage = false;
   dismissed = 0;
   private waiters: (() => void)[] = [];
 
   constructor(private readonly fx: FakeMessages) {}
 
-  async react(target: string, reaction: Reaction, _fits: (title: string) => boolean): Promise<void> {
+  async react(target: string, reaction: Reaction, _fits: (title: string) => boolean, _chatGuid?: string): Promise<void> {
     this.calls.push({ target, reaction });
     if (this.noOp) {
       for (const wake of this.waiters.splice(0)) wake();
@@ -228,13 +229,14 @@ export class FakeTapbacker implements Tapbacker {
 export class FakeReplier implements Replier {
   readonly calls: { target: string; text: string }[] = [];
   fail = false;
+  anyMessage = false;
   /** Send the reply, then throw as if cleanup after Return failed. */
   failAfterSending = false;
   private waiters: (() => void)[] = [];
 
   constructor(private readonly fx: FakeMessages) {}
 
-  async reply(target: string, text: string, _fits: (title: string) => boolean): Promise<void> {
+  async reply(target: string, text: string, _fits: (title: string) => boolean, _chatGuid?: string): Promise<void> {
     this.calls.push({ target, text });
     if (this.fail) throw new NotSentError("NOT_SENT: Messages has no enabled Reply menu item for this message");
     this.fx.message({ chat: this.fx.chatOf(target), fromMe: true, text, threadOriginator: target });
