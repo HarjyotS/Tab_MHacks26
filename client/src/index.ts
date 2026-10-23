@@ -90,6 +90,7 @@ const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
   tabName: config.tabName,
   tabPhone: config.tabPhone,
   tabEmail: config.tabEmail,
+  autoJoin: config.autoJoin,
   sendMatchTimeoutMs: config.sendMatchTimeoutMs,
   photonDm: photon ? (handle, body) => photon.send(handle, body) : undefined,
   tapbackVerifyMs: config.tapbackVerifyMs,
@@ -136,7 +137,9 @@ log(
 log(
   gate.enabledGroups().length
     ? `Active in: ${gate.enabledGroups().join(", ")}`
-    : `Not active in any group yet. Text "${config.commandPrefix} on" into a group from Tab's phone.`,
+    : config.autoJoin
+      ? "Not in any group yet. Add Tab to a group chat and it switches on by itself (AUTO_JOIN)."
+      : `Not active in any group yet. Text "${config.commandPrefix} on" into a group from Tab's phone.`,
 );
 
 async function shutdown() {

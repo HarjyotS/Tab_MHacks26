@@ -11,6 +11,8 @@ export const config = {
   chatDbPath: env.CHAT_DB_PATH ?? join(homedir(), "Library", "Messages", "chat.db"),
   tabPhone: env.TAB_PHONE || undefined,
   tabEmail: env.TAB_EMAIL || undefined,
+  /** On only for Tab's own account: on someone's personal one it would join all their groups. */
+  autoJoin: /^(on|true|1|yes)$/i.test(env.AUTO_JOIN?.trim() ?? ""),
   tabName: env.TAB_NAME ?? "Tab",
   /** Comma-separated group chat guids to switch on at startup, in addition to "/tab on". */
   groupIds: (env.TAB_GROUP_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean),

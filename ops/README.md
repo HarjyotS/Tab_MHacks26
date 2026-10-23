@@ -111,6 +111,7 @@ Leave `DEMO_MODE` and `PAYMENTS` out. The defaults are real timing and real paym
 
 ```sh
 TAB_EMAIL=tab@addtab.app          # what Tab texts from, and what its contact card carries
+AUTO_JOIN=on                      # Tab switches itself on in every group it's added to
 TAB_PHONE=                        # only if Tab ever gets a number
 TAB_NAME=Tab
 HUB=backend
@@ -163,7 +164,7 @@ ops/status.sh
 
 ## 10. Turn Tab on in a group
 
-Add `tab@addtab.app` to the group chat like any contact, then send `/tab on` into the group **as Tab**: from Messages on the Mac (in NoMachine), where you're signed in as Tab. Tab introduces itself, sends its contact card, and asks for names. `/tab off` switches it off. Tab only reads groups it's been switched on in, plus DMs from their members.
+Add `tab@addtab.app` to the group chat like any contact. With `AUTO_JOIN=on`, the next message in the group (the "added Tab" notice counts) switches Tab on: it introduces itself within about 30 seconds, sends its contact card, and asks for names. `/tab off` and `/tab on` only count when Tab's own account sends them (from Messages on the Mac); a group switched off stays off, even with `AUTO_JOIN`, until `/tab on`. `/tab off` switches it off. Tab only reads groups it's been switched on in, plus DMs from their members.
 
 ## Auto-updates
 

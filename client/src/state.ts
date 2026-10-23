@@ -8,6 +8,8 @@ export interface StateData {
   cursor: number | null;
   /** Group chat guids Tab is active in. */
   enabledGroups: string[];
+  /** Groups someone switched off with "/tab off": AUTO_JOIN leaves them alone until "/tab on". */
+  disabledGroups: string[];
   /** Last participant list seen per enabled group, used to detect joins and leaves. */
   rosters: Record<string, string[]>;
   /** When the bridge last DMed each member (ms since epoch), for the DM reply window. */
@@ -16,7 +18,7 @@ export interface StateData {
   pendingMarks: Record<string, { status: OutboxStatus; sent_photon_id?: string; error?: string }>;
 }
 
-const EMPTY: StateData = { cursor: null, enabledGroups: [], rosters: {}, lastBridgeDmAt: {}, pendingMarks: {} };
+const EMPTY: StateData = { cursor: null, enabledGroups: [], disabledGroups: [], rosters: {}, lastBridgeDmAt: {}, pendingMarks: {} };
 
 export class State {
   data: StateData;

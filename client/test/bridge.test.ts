@@ -13,7 +13,7 @@ const HOUSE = "iMessage;+;chat111";
 const PERSONAL = "iMessage;+;chat222";
 const HOUR = 3_600_000;
 
-function setup(opts: { threadColumn?: boolean } = {}) {
+function setup(opts: { threadColumn?: boolean; autoJoin?: boolean } = {}) {
   const fx = new FakeMessages(opts);
   fx.group(HOUSE, [A, B], "the house");
   fx.group(PERSONAL, [A], "family");
@@ -44,6 +44,7 @@ function setup(opts: { threadColumn?: boolean } = {}) {
       now: () => Date.now() + clock.offset,
       log: (line) => logs.push(line),
       replier,
+      autoJoin: opts.autoJoin,
     },
   );
   /** Sends the next due outbox row and lets the bridge see it land in chat.db. */
@@ -497,4 +498,43 @@ test("a Tab with no number sends a contact card with its Apple Account email", a
   expect("file" in card && card.file.data.toString()).toContain("EMAIL;type=INTERNET:tab@addtab.app");
   expect("file" in card && card.file.data.toString()).not.toContain("TEL");
   expect(hub.row(row.action_id)?.status).toBe("sent");
+});
+
+test("with AUTO_JOIN, Tab switches itself on in a group it's added to", async () => {
+  const { fx, hub, gate, bridge } = setup({ autoJoin: true });
+  fx.message({ chat: HOUSE, handle: A, text: "added tab, it does the math" });
+  await bridge.poll();
+  expect(gate.groupEnabled(HOUSE)).toBe(true);
+  expect(hub.ingested.map((m) => [m.kind, m.text, m.sender_phone])).toEqual([
+    ["system", "member_joined", A],
+    ["system", "member_joined", B],
+    ["text", "added tab, it does the math", A],
+  ]);
+  expect(gate.groupEnabled(PERSONAL)).toBe(false); // only groups with something new
+});
+
+test("with AUTO_JOIN, a group switched off stays off until /tab on", async () => {
+  const { fx, hub, gate, bridge, turnOn } = setup({ autoJoin: true });
+  fx.message({ chat: HOUSE, fromMe: true, text: "/tab off" });
+  await bridge.poll();
+  fx.message({ chat: HOUSE, handle: A, text: "paid 40 for gas" });
+  await bridge.poll();
+  expect(gate.groupEnabled(HOUSE)).toBe(false);
+  expect(hub.ingested).toHaveLength(0);
+
+  await turnOn();
+  expect(gate.groupEnabled(HOUSE)).toBe(true);
+  fx.message({ chat: HOUSE, fromMe: true, text: "/tab off" });
+  await bridge.poll();
+  fx.message({ chat: HOUSE, handle: B, text: "anyone?" });
+  await bridge.poll();
+  expect(gate.groupEnabled(HOUSE)).toBe(false);
+});
+
+test("without AUTO_JOIN, a new group stays off", async () => {
+  const { fx, hub, gate, bridge } = setup();
+  fx.message({ chat: HOUSE, handle: A, text: "hi" });
+  await bridge.poll();
+  expect(gate.groupEnabled(HOUSE)).toBe(false);
+  expect(hub.ingested).toHaveLength(0);
 });

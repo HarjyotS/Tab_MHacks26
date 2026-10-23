@@ -18,6 +18,8 @@ export interface BridgeOptions {
   commandPrefix: string;
   tabName: string;
   tabPhone?: string;
+  /** AUTO_JOIN=on: switch on every group Tab is added to (Tab's own account only). */
+  autoJoin?: boolean;
   /** Tab's Apple Account email, for an iMessage-only Tab without a number (TAB_EMAIL). */
   tabEmail?: string;
   /** How long to wait for a sent message to show up in chat.db. */
@@ -191,6 +193,15 @@ export class Bridge {
     if (!row.chat_guid) return waitedMs < this.opts.chatWaitMs ? "wait" : "done";
     const chat = row.chat_guid;
     const isGroup = row.chat_style === GROUP_STYLE;
+    // Someone added Tab to a group, or wrote in one it's in: with AUTO_JOIN
+    // it switches itself on, and the roster sync announces everyone, which is
+    // what makes the backend introduce Tab. Tab's own messages don't count,
+    // so a "/tab off" sent first keeps it out.
+    if (isGroup && !row.is_from_me && this.opts.autoJoin && this.gate.joinable(chat)) {
+      this.gate.enable(chat);
+      this.opts.log(`[bridge] Tab joined ${chat} by itself (AUTO_JOIN)`);
+      await this.syncRosters();
+    }
 
     if (row.is_from_me) {
       await this.handleOwn(row, chat, isGroup);
