@@ -18,6 +18,8 @@ export interface BridgeOptions {
   commandPrefix: string;
   tabName: string;
   tabPhone?: string;
+  /** Tab's Apple Account email, for an iMessage-only Tab without a number (TAB_EMAIL). */
+  tabEmail?: string;
   /** How long to wait for a sent message to show up in chat.db. */
   sendMatchTimeoutMs: number;
   /** Payment confirmations through Photon's hosted line; falls back to the local send on error. */
@@ -439,8 +441,8 @@ export class Bridge {
 
   private contentFor(row: OutboxRow): Outgoing | string {
     if (row.kind === "contact_card") {
-      if (!this.opts.tabPhone) return "contact_card needs TAB_PHONE";
-      const card = vcard(this.opts.tabName, this.opts.tabPhone);
+      if (!this.opts.tabPhone && !this.opts.tabEmail) return "contact_card needs TAB_PHONE or TAB_EMAIL";
+      const card = vcard(this.opts.tabName, this.opts.tabPhone, this.opts.tabEmail);
       return { file: { name: `${this.opts.tabName}.vcf`, data: Buffer.from(card), mimeType: "text/vcard" } };
     }
     if (!row.text) return `${row.kind} needs text`;
@@ -477,6 +479,16 @@ function systemMessage(
   };
 }
 
-function vcard(name: string, phone: string): string {
-  return ["BEGIN:VCARD", "VERSION:3.0", `FN:${name}`, `N:;${name};;;`, `TEL;type=CELL:${phone}`, "END:VCARD", ""].join("\r\n");
+// Whichever Tab texts from: its number, its Apple Account email, or both.
+function vcard(name: string, phone?: string, email?: string): string {
+  return [
+    "BEGIN:VCARD",
+    "VERSION:3.0",
+    `FN:${name}`,
+    `N:;${name};;;`,
+    ...(phone ? [`TEL;type=CELL:${phone}`] : []),
+    ...(email ? [`EMAIL;type=INTERNET:${email}`] : []),
+    "END:VCARD",
+    "",
+  ].join("\r\n");
 }

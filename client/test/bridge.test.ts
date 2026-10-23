@@ -473,3 +473,28 @@ test("a row marked sending while the hub looked down, but never sent, still goes
   expect(hub.row(pong!.action_id)?.status).toBe("sent");
   expect(sender.sentGuids).toHaveLength(1);
 });
+
+test("a Tab with no number sends a contact card with its Apple Account email", async () => {
+  const fx = new FakeMessages();
+  fx.group(HOUSE, [A, B], "the house");
+  const state = new State(null);
+  const gate = new Gate(state, 72 * HOUR);
+  const hub = new DevHub(false, () => {});
+  const sender = new FakeSender(fx);
+  const bridge = new Bridge(new ChatDb(fx.path), hub, sender, null, { publish: async (p) => p }, gate, state, {
+    commandPrefix: "/tab", tabName: "Tab", tabEmail: "tab@addtab.app", sendMatchTimeoutMs: 2_000, tapbackVerifyMs: 300,
+    attachmentWaitMs: 60_000, chatWaitMs: 10_000, now: Date.now, log: () => {},
+  });
+  fx.message({ chat: HOUSE, fromMe: true, text: "/tab on" });
+  await bridge.poll();
+  const row = hub.enqueue({ kind: "contact_card", group_id: HOUSE });
+  const sent = sender.nextSend();
+  const draining = bridge.drainOutbox();
+  await sent;
+  await bridge.poll();
+  await draining;
+  const card = sender.calls[0]!.content;
+  expect("file" in card && card.file.data.toString()).toContain("EMAIL;type=INTERNET:tab@addtab.app");
+  expect("file" in card && card.file.data.toString()).not.toContain("TEL");
+  expect(hub.row(row.action_id)?.status).toBe("sent");
+});

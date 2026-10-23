@@ -1,6 +1,6 @@
 # Running Tab on a Mac server
 
-This is the checklist for putting Tab on an always-on Mac (a cloud Mac or a Mac mini) so it texts from its own number. It takes about an hour. Once it's done, every push to `main` deploys itself.
+This is the checklist for putting Tab on an always-on Mac (a cloud Mac or a Mac mini) so it texts from its own Apple Account. It takes about an hour. Once it's done, every push to `main` deploys itself.
 
 ## What runs where
 
@@ -20,7 +20,7 @@ You need:
 
 - **The Mac.** A cloud Mac with at least 4 GB of RAM, or a Mac mini. macOS 15 or newer. You need remote desktop access to it (NoMachine, Screen Sharing or VNC), not just SSH. Some steps are clicks in System Settings, and Messages needs a real logged-in desktop.
 - **Tab's Apple ID.** A fresh Apple ID just for Tab, not anyone's personal one.
-- **Tab's phone number.** An iPhone (any used one works) with a prepaid SIM, signed into Tab's Apple ID. Without it, Tab can only text from the Apple ID's email address.
+- **Tab's address.** Tab is for iPhone groups only, so it texts from its Apple Account's email, `tab@addtab.app`, and needs no phone number. (A number would need an iPhone with a SIM signed into the same account; skip it unless Tab ever has to reach Android phones, which iMessage can't do anyway.)
 - **The secrets, from Harjyot, privately** (an encrypted file plus its password by text, or a password manager share; never plain email or Slack):
   - `DATABASE_URL` (the Neon database)
   - `XAI_API_KEY` (Grok)
@@ -48,20 +48,16 @@ In **System Settings**:
 
 On a cloud Mac, also check with the host that the desktop session stays unlocked after you disconnect from remote desktop.
 
-## 3. Tab's number
-
-On the **iPhone**:
-
-1. Settings → sign in with Tab's Apple ID.
-2. Settings → Apps → Messages → iMessage **on** → Send & Receive: tick the phone number, and set "Start new conversations from" to the number.
-3. Keep it plugged in, on Wi-Fi, and switched on. Apple checks the number through it now and then.
+## 3. Tab's Apple Account
 
 On the **Mac**:
 
-1. Open Messages, sign in with Tab's Apple ID.
-2. Messages → Settings → iMessage: tick the phone number, and set "Start new conversations from" to the number.
+1. Open Messages and sign in with Tab's Apple Account (`tab@addtab.app`). Apple sends a code to a device on that account, or by text to its recovery number.
+2. Messages → Settings → iMessage: make sure `tab@addtab.app` is ticked and is what "Start new conversations from" shows.
 3. Messages → Settings → General → **Keep messages: 30 days**. Tab deletes chatter from its own database, but Messages keeps its own copy, so keep that short.
-4. Text the number from your own phone. The reply should come from the number, not an email address.
+4. From your own iPhone, iMessage `tab@addtab.app`. The message should show up in Messages on the Mac.
+
+Everyone in a group with Tab needs an iPhone (iMessage). A group with an Android member turns into SMS, which Tab can't join.
 
 ## 4. Install the tools
 
@@ -114,7 +110,8 @@ Leave `DEMO_MODE` and `PAYMENTS` out. The defaults are real timing and real paym
 **`~/tab/client/.env`** (the bridge):
 
 ```sh
-TAB_PHONE=+1XXXXXXXXXX            # Tab's number, with +1
+TAB_EMAIL=tab@addtab.app          # what Tab texts from, and what its contact card carries
+TAB_PHONE=                        # only if Tab ever gets a number
 TAB_NAME=Tab
 HUB=backend
 ECHO=0
@@ -151,7 +148,7 @@ Now check the bridge itself with no AI involved, using a throwaway test group. S
 cd ~/tab/client && HUB=dev ECHO=1 bun start
 ```
 
-From the iPhone (Tab's phone), text `/tab on` into a test group with you in it. Then, from your own phone, try `@tab ping` (Tab replies "pong") and `@tab like` (Tab tapbacks your message). When macOS asks to let bun control Messages, click **Allow**. If tapbacks fail, run `bun run tapback-probe` and see Troubleshooting.
+In Messages on the Mac (signed in as Tab), make a test group with you in it and send `/tab on` into it: anything Tab's own account sends counts as Tab. Then, from your own phone, try `@tab ping` (Tab replies "pong") and `@tab like` (Tab tapbacks your message). When macOS asks to let bun control Messages, click **Allow**. If tapbacks fail, run `bun run tapback-probe` and see Troubleshooting.
 
 Stop both windows with Ctrl+C when it all works.
 
@@ -166,7 +163,7 @@ ops/status.sh
 
 ## 10. Turn Tab on in a group
 
-Add Tab's number to the group chat, then text `/tab on` into the group **from the iPhone** (Tab's own phone). Tab introduces itself and asks for names. `/tab off` switches it off. Tab only reads groups it's been switched on in, plus DMs from their members.
+Add `tab@addtab.app` to the group chat like any contact, then send `/tab on` into the group **as Tab**: from Messages on the Mac (in NoMachine), where you're signed in as Tab. Tab introduces itself, sends its contact card, and asks for names. `/tab off` switches it off. Tab only reads groups it's been switched on in, plus DMs from their members.
 
 ## Auto-updates
 
@@ -209,7 +206,7 @@ tail -f ~/Library/Logs/tab/bridge.log
 | Backend log: `db_retry`, or messages failing with `saving failed` | Neon is unreachable. Check the Mac's internet and Neon's status. Nothing is lost: the change rolls back and the bridge keeps the message until it goes through. |
 | Backend exits at startup with a database error | `DATABASE_URL` in `~/tab/.env` is wrong or missing (step 5). |
 | Bridge log: `backend unreachable` | The backend is down or restarting. Messages wait in the bridge until it's back. Check `ops/status.sh` and `backend.log`. |
-| Tab texts from an email address | The number isn't selected for iMessage on the Mac or iPhone (step 3), or the iPhone has been off for a long time. |
+| Someone can't add Tab, or Tab's texts turn green | They or someone in the group isn't on iMessage (Android, or iMessage off). Tab only works in all-iPhone groups. |
 | Every message answered twice | Another copy of Tab is running somewhere (a laptop). Stop it. If it uses the same `DATABASE_URL`, the backend that started first stops itself at its next save (`save_failed_restarting`, "another backend started") rather than overwrite rows; launchd restarts the server's. |
 | Update log: `can't fast-forward` | Someone changed files on the server. `cd ~/tab && git status`, then `git stash` or `git reset --hard origin/main` once you're sure nothing there matters. |
 | Update log: `FAILED (...)` | The pushed commit broke tests. Fix it on a laptop and push again. The server stays on the last good commit until then. |

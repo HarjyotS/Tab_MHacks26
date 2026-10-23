@@ -62,7 +62,7 @@ export function GroupsSection() {
 }
 
 const STEPS = [
-  { title: 'Add Tab to your group chat', body: "Add Tab's number like any other contact. It says hi, asks everyone's first name, and gets out of the way." },
+  { title: 'Add Tab to your group chat', body: "Add Tab like any other contact. It says hi, asks everyone's first name, and gets out of the way." },
   {
     title: 'Keep talking like normal',
     body: "Mention what you paid for, or drop a photo of the receipt. Tab logs it quietly and ignores everything that isn't about money.",
