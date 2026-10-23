@@ -22,17 +22,25 @@ export type Share = { person: Person; amount_cents: number };
 // ── Onboarding (§7.2) ────────────────────────────────────────────────────
 
 // 👋 shows only if the group uses emoji (style.ts), so it gets its own line.
+// §7.2: hello, how it works, Tab's contact card, then names. Short bubbles,
+// one idea each, sent in that order (talk.ts).
 export const onboardingIntro = (seed: string) =>
   pick(seed, [
-    `hey i'm tab ${deco("👋")}\ni keep track of who paid for what so nobody has to be the spreadsheet friend\njust say what you paid ("paid 40 for groceries") or drop a receipt pic. you can remove me anytime`,
-    `hey i'm tab ${deco("👋")}\ni keep the group's tab so nobody has to do the math\njust talk like normal ("got groceries 40") or drop a receipt pic. you can kick me out whenever`,
+    `hey i'm tab ${deco("👋")}\ni keep track of who paid for what so nobody has to be the spreadsheet friend`,
+    `hey i'm tab ${deco("👋")}\ni keep the group's tab so nobody has to do the math`,
   ]);
 
+export const onboardingHowTo = (seed: string) =>
+  pick(seed, [
+    `just text it like normal ("40 for gas") or send a receipt pic and i'll split it`,
+    `just say what you paid ("got groceries, 63") or drop a receipt pic and i'll do the rest`,
+  ]);
+
+// Follows the contact card, so "save my contact" points at it.
 export const namePrompt = (seed: string) =>
   pick(seed, [
-    "what should i call everyone? reply w your first name",
-    "drop your first names so i know who's who",
-    "what's everyone's name? just reply w your first name",
+    `save my contact ${deco("☝️")} and reply w your first name so i know who's who`,
+    `save my contact ${deco("☝️")} and drop your first names so i know who's who`,
   ]);
 
 // ── Proposals and reminders (§7.3, §7.5) ─────────────────────────────────

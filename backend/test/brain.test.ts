@@ -398,10 +398,14 @@ describe("onboarding (SPEC 7.2)", () => {
         .filter(
           (o) => o.group_id === "new" && o.purpose === "onboarding_intro",
         ),
-    ).toHaveLength(2); // intro + contact card
+    ).toHaveLength(3); // hello, how it works, contact card
     expect(db.outbox().filter((o) => o.purpose === "name_prompt")).toHaveLength(
       1,
     );
+    // In order, a second apart, and nothing extra (no wit line after the card).
+    const sent = db.outbox().filter((o) => o.group_id === "new").sort((a, b) => a.send_after.getTime() - b.send_after.getTime());
+    expect(sent.map((o) => o.action_id)).toEqual(["onboarding_intro:new", "onboarding_howto:new", "contact_card:new", "name_prompt:new"]);
+    expect(new Set(sent.map((o) => o.send_after.getTime())).size).toBe(4);
     advance(1000);
     await processMessage(
       ctx,

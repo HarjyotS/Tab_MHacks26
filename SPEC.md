@@ -540,7 +540,7 @@ stateDiagram-v2
 
 ### 7.2 Onboarding
 
-Trigger: Tab's phone texts `/tab on` into the group. Tab isn't "added" to a group it's already in, so this command is how a group opts in (section 10).
+Trigger: Tab's phone texts `/tab on` into the group. Tab isn't "added" to a group it's already in, so this command is how a group opts in (section 10). On Tab's own account the bridge runs with `AUTO_JOIN=on`, so being added to a group is enough: the next message there switches Tab on (a group switched off with `/tab off` stays off).
 
 | Step | What happens                                                                                                                                                                                                             | Notes                                                                       |
 | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------- |
@@ -550,12 +550,17 @@ Trigger: Tab's phone texts `/tab on` into the group. Tab isn't "added" to a grou
 | 4    | Optional Nessie fixtures are created before the demo with`seed:nessie` (12.2)                                                                                                                                            | Setup-only and never blocks onboarding or runtime.                          |
 | 5    | The group becomes`active` once every known member is named, or after the first expense                                                                                                                                   | Tab works fully before onboarding completes. Nothing blocks on it (P4).     |
 
-Default intro **[YOUR CALL on voice and wording]**, at most four short lines, in Tab's voice (9.3). The 👋 shows only once the group uses emoji. A separate name prompt follows ("what should i call everyone? reply w your first name").
+Default onboarding **[YOUR CALL on voice and wording]**, in Tab's voice (9.3): four items, a second apart so they arrive in order, one idea each, no wit line. The 👋 and ☝️ show only once the group uses emoji. The contact card carries Tab's logo and address.
 
 ```
 hey i'm tab 👋
 i keep track of who paid for what so nobody has to be the spreadsheet friend
-just say what you paid ("paid 40 for groceries") or drop a receipt pic. you can remove me anytime
+
+just text it like normal ("40 for gas") or send a receipt pic and i'll split it
+
+[Tab's contact card]
+
+save my contact ☝️ and reply w your first name so i know who's who
 ```
 
 ### 7.3 Text expense
