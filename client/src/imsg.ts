@@ -2,7 +2,8 @@ import type { Subprocess } from "bun";
 import { NotSentError } from "./messages-ui.ts";
 import type { Replier } from "./reply.ts";
 import type { Tapbacker } from "./tapback.ts";
-import type { Reaction } from "./types.ts";
+import { isTabEmoji } from "./reactions.ts";
+import type { ClassicReaction } from "./types.ts";
 
 /**
  * imsg (github.com/openclaw/imsg) talks to Messages through a helper injected
@@ -117,8 +118,8 @@ export class ImsgCallError extends Error {
   }
 }
 
-// imsg's classic reaction names.
-const KIND: Record<Reaction, string> = {
+// imsg's classic reaction names. An emoji goes as itself (a custom emoji tapback).
+const KIND: Record<ClassicReaction, string> = {
   love: "love",
   like: "like",
   dislike: "dislike",
@@ -135,7 +136,7 @@ export function imsgTapbacker(rpc: ImsgRpc): Tapbacker {
     anyMessage: true,
     async react(targetGuid, reaction, _fits, chatGuid) {
       if (!chatGuid) throw new NotSentError("NOT_SENT: imsg needs the chat's guid");
-      await rpc.request("tapback", { chat_guid: chatGuid, message_guid: targetGuid, reaction: KIND[reaction] }).catch((err) => {
+      await rpc.request("tapback", { chat_guid: chatGuid, message_guid: targetGuid, reaction: isTabEmoji(reaction) ? reaction : KIND[reaction] }).catch((err) => {
         throw notSent(err);
       });
     },

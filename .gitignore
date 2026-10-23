@@ -16,3 +16,7 @@ spacetime/build/
 .claude/settings.local.json
 .claude/worktrees/
 .state-ops/
+
+# Built on the server by ops/build-tab-ax.sh
+client/native/tab-ax
+client/native/tab-ax.tmp

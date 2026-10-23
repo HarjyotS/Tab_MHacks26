@@ -166,6 +166,15 @@ ops/status.sh
 
 Add `tab@addtab.app` to the group chat like any contact. With `AUTO_JOIN=on`, the next message in the group (the "added Tab" notice counts) switches Tab on: it introduces itself within about 30 seconds, sends its contact card, and asks for names. `/tab off` and `/tab on` only count when Tab's own account sends them (from Messages on the Mac); a group switched off stays off, even with `AUTO_JOIN`, until `/tab on`. `/tab off` switches it off. Tab only reads groups it's been switched on in, plus DMs from their members.
 
+## Emoji tapbacks (TAPBACK_MODE=ax)
+
+Every message bubble in Messages offers its tapbacks as accessibility actions: the six classic ones plus the five most recent emoji. With `TAPBACK_MODE=ax` in `client/.env`, the bridge runs `client/native/tab-ax` to find the exact bubble (by its text, time, and side) and run one, so Tab can react to any message on screen, with emoji: 👀 while it works on a reply, 💸 when someone says they sent money, 🤑 when the person owed says it came in, 🎉 when everyone's paid up, 🫡 when it saves a name.
+
+1. `ops/build-tab-ax.sh` builds it (needs `swiftc`: `xcode-select --install`). `install.sh` and `update.sh` run it when the source changes.
+2. `cd ~/tab/client && bun run seed-emoji` puts Tab's five emoji first in the Mac's recent emoji and restarts Messages. `install.sh` runs it too. Don't send other emoji from Tab's Mac by hand, or they push Tab's out.
+
+An emoji someone else reacted with in a chat takes one of the five slots there, so each of Tab's emoji has stand-ins ending in a classic tapback (`client/src/reactions.ts`); 👀 has none and is skipped. Seeing a lot of stand-ins in the bridge log? Run `seed-emoji` again.
+
 ## Private API: tapbacks and replies on any message (optional)
 
 Without it, Tab reacts and replies by clicking through Messages' window, which only works on each chat's newest message. [imsg](https://github.com/openclaw/imsg) loads a helper into Messages that does both by message id, on any message. It needs System Integrity Protection off, which lowers the Mac's protection, so only do this on Tab's own Mac.

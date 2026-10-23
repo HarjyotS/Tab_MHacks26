@@ -21,8 +21,14 @@ export const config = {
   // Fails closed: off / false / 0 / no (any case) all turn DM reading off.
   readDms: !/^(off|false|0|no)$/i.test(env.READ_DMS?.trim() ?? ""),
   sendVia: env.SEND_VIA === "osascript" ? "osascript" : "spectrum",
-  /** ui drives Messages' window (newest message only); imsg uses its injected helper (any message, SIP off); off. */
-  tapbackMode: env.TAPBACK_MODE === "off" ? "off" : env.TAPBACK_MODE === "imsg" ? "imsg" : "ui",
+  /**
+   * ax runs tab-ax on the message's bubble (any message on screen, emoji too);
+   * ui drives the tapback picker (newest message only, classic six); imsg
+   * uses its injected helper (any message, SIP off); off.
+   */
+  tapbackMode: (["off", "imsg", "ax"] as const).find((m) => m === env.TAPBACK_MODE) ?? "ui",
+  /** tab-ax, built from client/native/tab-ax.swift by ops/install.sh and ops/update.sh. */
+  tabAxPath: env.TAB_AX_PATH ?? resolve(import.meta.dir, "..", "native", "tab-ax"),
   replyMode: env.REPLY_MODE === "off" ? "off" : env.REPLY_MODE === "imsg" ? "imsg" : "ui",
   imsgPath: env.IMSG_PATH ?? "/opt/homebrew/bin/imsg",
   hub: env.HUB ?? "dev",

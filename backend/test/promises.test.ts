@@ -217,6 +217,47 @@ describe("payment links (§7.6): Tab never moves money", () => {
     expect(dmsTo(w, "Priya").at(-1)!.text).toBe("Joe got your $10.00 for pizza\nyou're all square");
   });
 
+  // Vegas chat: Harjyot said "Ok everyone paid", "Everyone paid we are good"
+  // (by DM), and "Its all been settled", and the balances never moved.
+  it('"ok everyone paid" from the person owed pays everyone back, with a 🎉', async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const { id } = await settled(w);
+    gateSays(w, { "Ok everyone paid": ["payment_reported", 0.53] });
+    const said = await w.say("Joe", "Ok everyone paid");
+    for (const who of ["Priya", "Kian", "Jake"] as const) expect(share(w, id, who).status).toBe("paid");
+    expect(w.db.expense(id)?.status).toBe("settled");
+    expect(w.db.outbox().filter((o) => o.kind === "reaction" && o.target_message_id === said.message_id).map((o) => o.reaction)).toEqual(["🎉"]);
+    await w.wait(1000);
+    expect(dmsTo(w, "Priya").at(-1)!.text).toBe("Joe got your $10.00 for pizza\nyou're all square");
+  });
+
+  it("counts a disputed share too, and works by DM", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const { id } = await settled(w);
+    await w.ctx.db.set_share({ ...share(w, id, "Priya"), status: "disputed" });
+    gateSays(w, { "Everyone paid we are good": ["answer", 0.44] });
+    await w.dm("Joe", "Everyone paid we are good");
+    for (const who of ["Priya", "Kian", "Jake"] as const) expect(share(w, id, who).status).toBe("paid");
+  });
+
+  it("leaves questions, plans, and someone else's word alone", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const { id } = await settled(w);
+    const quiet: Record<string, [Intent, number]> = {};
+    const lines = ["has everyone paid?", "once everyone pays we're good", "not everyone paid", "everyone paid for their own drinks", "its paid"];
+    for (const text of lines) quiet[text] = ["ignore", 0.9];
+    quiet["its all been settled"] = ["ignore", 0.9];
+    gateSays(w, quiet);
+    for (const text of lines) await w.say("Joe", text);
+    // Priya owes: she can't say everyone paid Joe.
+    await w.say("Priya", "its all been settled");
+    for (const who of ["Priya", "Kian", "Jake"] as const) expect(share(w, id, who).status).toBe("locked");
+    expect(w.db.transfers()).toEqual([]);
+  });
+
   // Vegas chat: "I just sent dhanush 30 bucks" while Dhanush owed the sender.
   it("never takes money sent to someone who owes you as their payment, and says so", async () => {
     const w = world(script);

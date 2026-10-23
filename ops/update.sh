@@ -46,6 +46,7 @@ log "deploying ${OLD:0:7} -> ${NEW:0:7}"
 # being thrown away.
 git merge --ff-only --quiet "origin/$BRANCH" || { log "can't fast-forward: local changes on the server? (git status)"; exit 1; }
 install_deps || rollback "install"
+if changed client/native; then "$REPO/ops/build-tab-ax.sh" || log "tab-ax not built: tapbacks use the picker"; fi
 
 BOT=(backend gate spacetime package-lock.json package.json)
 if changed $BOT client; then

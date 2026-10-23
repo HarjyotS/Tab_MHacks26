@@ -734,7 +734,8 @@ export const record_payment = spacetime.reducer(
     if (!message || (message.sender_phone !== input.from_phone && !byPayee)) throw new Error('Only the two people involved can report a payment');
     const share = ctx.db.shares.share_id.find(`${input.expense_id}:${input.from_phone}`);
     if (share?.status === 'paid') return; // already settled; a repeat of the message
-    if (!share || share.role !== 'participant' || !(share.status === 'locked' || (byPayee && share.status === 'approved'))) {
+    // The payee's word also ends a dispute: they say it's paid.
+    if (!share || share.role !== 'participant' || !(share.status === 'locked' || (byPayee && (share.status === 'approved' || share.status === 'disputed')))) {
       throw new Error('Share is not payable');
     }
     // The payee's word settles any earlier unconfirmed report of the same share.

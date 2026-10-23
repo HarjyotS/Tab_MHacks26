@@ -40,12 +40,19 @@ test("messageText prefers text, falls back to attributedBody, and strips attachm
   expect(cleanText("￼ receipt\r\n")).toBe("receipt");
 });
 
-test("tapback maps only classic tapback adds", () => {
+test("tapback maps classic adds, emoji that mean one, and Tab's own emoji", () => {
   expect(tapback(2001)).toBe("like");
   expect(tapback(2002)).toBe("dislike");
   expect(tapback(2005)).toBe("question");
   expect(tapback(3001)).toBeNull(); // removed like
-  expect(tapback(2006)).toBeNull(); // emoji tapback
+  expect(tapback(2006)).toBeNull(); // emoji tapback without its emoji
+  expect(tapback(2006, "👍🏿")).toBe("like");
+  expect(tapback(2006, "👎")).toBe("dislike");
+  expect(tapback(2006, "❤️")).toBe("love");
+  expect(tapback(2006, "👀")).toBe("👀");
+  expect(tapback(2006, "🤑")).toBe("🤑");
+  expect(tapback(2006, "🇮🇱")).toBeNull();
+  expect(tapback(3006, "👀")).toBeNull(); // removed
   expect(tapback(0)).toBeNull();
 });
 

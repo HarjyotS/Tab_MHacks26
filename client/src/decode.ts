@@ -1,4 +1,5 @@
-import type { Reaction } from "./types.ts";
+import { isTabEmoji } from "./reactions.ts";
+import type { ClassicReaction, Reaction } from "./types.ts";
 
 const APPLE_EPOCH_MS = Date.UTC(2001, 0, 1);
 
@@ -54,7 +55,7 @@ export function messageText(row: { text: string | null; attributedBody: Uint8Arr
   return cleanText(row.text || decodeAttributedBody(row.attributedBody));
 }
 
-const TAPBACKS: Record<number, Reaction> = {
+const TAPBACKS: Record<number, ClassicReaction> = {
   2000: "love",
   2001: "like",
   2002: "dislike",
@@ -63,13 +64,29 @@ const TAPBACKS: Record<number, Reaction> = {
   2005: "question",
 };
 
+// An emoji tapback that means a classic one: a 👍🏽 approves like a 👍.
+const AS_CLASSIC: [RegExp, ClassicReaction][] = [
+  [/^👍[🏻-🏿]?$/u, "like"],
+  [/^👎[🏻-🏿]?$/u, "dislike"],
+  [/^(?:❤️?|♥️?)$/u, "love"],
+  [/^😂$/u, "laugh"],
+  [/^(?:‼️?|❗️?)$/u, "emphasize"],
+  [/^(?:❓|❔)$/u, "question"],
+];
+
 /**
  * associated_message_type: 2000-2005 add a classic tapback, 3000-3005 remove
- * one, and 1000, 2006, 2007, 4000 are stickers, emoji tapbacks and poll votes.
- * Returns the tapback for an add, or null for everything else.
+ * one, 2006 adds an emoji tapback (its emoji in associated_message_emoji),
+ * and 1000, 2007, 4000 are stickers and poll votes. Returns the tapback for
+ * an add: a classic one, an emoji that means one, or one of Tab's own emoji;
+ * null for everything else.
  */
-export function tapback(associatedType: number | null): Reaction | null {
-  return associatedType == null ? null : (TAPBACKS[associatedType] ?? null);
+export function tapback(associatedType: number | null, emoji?: string | null): Reaction | null {
+  if (associatedType == null) return null;
+  if (associatedType !== 2006) return TAPBACKS[associatedType] ?? null;
+  const e = emoji?.trim() ?? "";
+  for (const [re, classic] of AS_CLASSIC) if (re.test(e)) return classic;
+  return isTabEmoji(e) ? e : null;
 }
 
 /** True for any row that annotates another message rather than being one. */
