@@ -1,11 +1,13 @@
 import type { State } from "./state.ts";
 
 /**
- * Tab runs on a personal iMessage account, so chat.db holds every one of the
- * owner's conversations. The gate decides what Tab may see and where it may
- * speak:
+ * chat.db holds every conversation on the account the bridge runs on, which
+ * can be someone's personal one. The gate decides what Tab may see and where
+ * it may speak:
  *
- * - Group chats: only ones switched on with "/tab on" (or TAB_GROUP_IDS).
+ * - Group chats: only ones switched on with "/tab on" (or TAB_GROUP_IDS). On
+ *   Tab's own account, AUTO_JOIN=on switches on every group Tab is added to,
+ *   except ones someone switched off with "/tab off".
  * - DMs: only from members of an enabled group, and only when the bridge DMed
  *   them within the reply window or the message starts with "tab"/"@tab".
  *   STOP, START, and "delete my data" always get through (SPEC 19), so a
@@ -34,19 +36,29 @@ export class Gate {
 
   /** Returns false if the group was already enabled. */
   enable(chatGuid: string): boolean {
+    this.state.data.disabledGroups = this.state.data.disabledGroups.filter((g) => g !== chatGuid);
     if (this.groupEnabled(chatGuid)) return false;
     this.state.data.enabledGroups.push(chatGuid);
     this.state.save();
     return true;
   }
 
-  /** Returns false if the group wasn't enabled. */
+  /** Returns false if the group wasn't enabled. It stays off, even for AUTO_JOIN, until "/tab on". */
   disable(chatGuid: string): boolean {
-    if (!this.groupEnabled(chatGuid)) return false;
+    if (!this.state.data.disabledGroups.includes(chatGuid)) this.state.data.disabledGroups.push(chatGuid);
+    if (!this.groupEnabled(chatGuid)) {
+      this.state.save();
+      return false;
+    }
     this.state.data.enabledGroups = this.state.data.enabledGroups.filter((g) => g !== chatGuid);
     delete this.state.data.rosters[chatGuid];
     this.state.save();
     return true;
+  }
+
+  /** A group AUTO_JOIN may switch on: not on yet, and nobody switched it off. */
+  joinable(chatGuid: string): boolean {
+    return !this.groupEnabled(chatGuid) && !this.state.data.disabledGroups.includes(chatGuid);
   }
 
   roster(chatGuid: string): string[] {
