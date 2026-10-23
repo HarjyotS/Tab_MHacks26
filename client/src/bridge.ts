@@ -6,7 +6,7 @@ import { HubUnavailable, type Hub } from "./hub.ts";
 import { SentMatcher } from "./matcher.ts";
 import type { Outgoing, Sender, Target } from "./sender.ts";
 import type { State } from "./state.ts";
-import { NotSentError } from "./messages-ui.ts";
+import { NotSentError, titleFits } from "./messages-ui.ts";
 import type { Replier } from "./reply.ts";
 import type { Tapbacker } from "./tapback.ts";
 import type { InboundMessage, OutboxRow, OutboxUpdate } from "./types.ts";
@@ -334,10 +334,15 @@ export class Bridge {
     }
     const key = target.kind === "group" ? target.chatGuid : target.handle;
     if ("text" in content && row.target_message_id && (await this.deliverReply(row, key, content.text))) return;
+    // A question about a cost that can't go out as an inline reply (Messages
+    // only threads onto the newest message) quotes what it's about instead,
+    // so people know which cost Tab means (Harjyot).
+    const quoted = row.purpose === "clarifying_question" && "text" in content ? this.quote(row.target_message_id) : undefined;
+    const outgoing: Outgoing = quoted && "text" in content ? { text: `re: "${quoted}"\n${content.text}` } : content;
     for (let attempt = 1; ; attempt++) {
-      const expectation = this.matcher.expect(key, "text" in content ? content.text : null, this.opts.sendMatchTimeoutMs);
+      const expectation = this.matcher.expect(key, "text" in outgoing ? outgoing.text : null, this.opts.sendMatchTimeoutMs);
       try {
-        await this.sender.send(target, content);
+        await this.sender.send(target, outgoing);
       } catch (err) {
         expectation.cancel();
         if (attempt >= MAX_SEND_ATTEMPTS) return fail(String(err));
@@ -372,12 +377,11 @@ export class Bridge {
       ? target.chat_guid === key
       : !!target.handle && normalizeHandle(target.handle) === key;
     if (!sameChat) return false;
-    const chatTitle = this.db.chatName(target.chat_guid);
-    if (!chatTitle) return false;
+    const fits = this.titleCheck(target.chat_guid);
 
     const expectation = this.matcher.expect(key, text, this.opts.sendMatchTimeoutMs);
     try {
-      await replier.reply(row.target_message_id, text, chatTitle);
+      await replier.reply(row.target_message_id, text, fits);
     } catch (err) {
       if (err instanceof NotSentError) {
         expectation.cancel();
@@ -424,11 +428,10 @@ export class Bridge {
     }
 
     // Messages acts on whatever chat it shows, so only act once its window title proves it's this chat.
-    const chatTitle = this.db.chatName(target.chat_guid);
-    if (!chatTitle) return fail(`skipped: ${target.chat_guid} has no name, so there's no way to confirm Messages opened it`);
+    const fits = this.titleCheck(target.chat_guid);
     const expectation = this.matcher.expect(tapbackKey(row.target_message_id), row.reaction, this.opts.tapbackVerifyMs);
     try {
-      await this.tapbacker.react(row.target_message_id, row.reaction, chatTitle);
+      await this.tapbacker.react(row.target_message_id, row.reaction, fits);
     } catch (err) {
       expectation.cancel();
       return fail(String(err));
@@ -436,6 +439,22 @@ export class Bridge {
     const guid = await expectation.landed;
     if (!guid) return fail(`the ${row.reaction} never showed up on ${row.target_message_id} in chat.db`);
     await this.mark(row.action_id, { status: "sent", sent_at: new Date(this.opts.now()), sent_photon_id: guid });
+  }
+
+  /** The start of a message's text, for quoting it: about 40 characters, cut at a word. */
+  private quote(guid: string | undefined): string | undefined {
+    const raw = guid ? this.db.messageByGuid(guid) : null;
+    const text = raw ? messageText(raw)?.replace(/\s+/g, " ").trim() : undefined;
+    if (!text) return undefined;
+    if (text.length <= 40) return text;
+    const cut = text.slice(0, 40);
+    return `${cut.slice(0, cut.lastIndexOf(" ") > 20 ? cut.lastIndexOf(" ") : 40)}…`;
+  }
+
+  /** Messages acts on whatever chat it shows, so UI actions first check its window title is this chat. */
+  private titleCheck(chatGuid: string): (title: string) => boolean {
+    const chat = { name: this.db.chatName(chatGuid), handles: this.db.participants([chatGuid]).get(chatGuid) ?? [] };
+    return (title) => titleFits(title, chat);
   }
 
   /** Tab only ever speaks in enabled groups and to their members. */

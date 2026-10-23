@@ -34,6 +34,8 @@ import {
   handleHelp,
   handleNameReply,
   onboardNewGroups,
+  parseName,
+  reaskNames,
 } from "./talk.js";
 import { answerQuestion } from "./ask.js";
 import { answerWhatItWas, handleBalance, handleBreakdownQuestion, historyFallback, referentExpense } from "./history.js";
@@ -235,6 +237,8 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
         decision = "clarify";
       }
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent) && intent !== "answer";
+      // Tab is going to answer this: 👍 now, the reply when it's ready.
+      if (decision !== "ignore" && m.kind === "text") await eyes(ctx, m);
       ctx.log("classified", {
         message_id: m.message_id, group_id: m.group_id, intent, confidence, decision,
         prefiltered: result.prefiltered === true,
@@ -571,6 +575,7 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
   if (m.kind !== "text" || !m.text) return no;
   const anyOpen = openThreads(ctx, chatOf(m)).filter((t) => mayAnswer(t, m));
   if (anyOpen.length === 0) return no; // nothing open: exactly as before
+  if (await nameFromDigits(ctx, m, anyOpen)) return { answered: true };
   const passed = decision !== "ignore";
   // An inline reply picks its question for certain, but lowers no bar.
   const replied = threadForReply(ctx, m, anyOpen);
@@ -668,6 +673,30 @@ async function answerThreads(ctx: BrainCtx, m: Message, result: ClassifyResult, 
 
 // "its on the receipt" when it isn't: say so once and ask again, keeping
 // the question open. The message counts as an answer (kept, §19).
+// "wait who's dhanush? anyone reply w the last 4 digits of their number" →
+// "2230": the member whose number ends in those digits is Dhanush, and
+// whatever waited on the name goes on (Harjyot's idea, for members who never
+// said their name). Only an unnamed member, and only one match.
+async function nameFromDigits(ctx: BrainCtx, m: Message, open: Thread[]): Promise<boolean> {
+  if (!m.group_id) return false;
+  const four = (m.text ?? "").match(/(?<!\d)(\d{4})(?!\d)/)?.[1];
+  if (!four) return false;
+  const t = [...open]
+    .reverse()
+    .find((x) => (x.data.kind === "expense" || x.data.kind === "adjustment") && x.data.problems.some((p) => p.kind === "unknown_name"));
+  if (!t || (t.data.kind !== "expense" && t.data.kind !== "adjustment")) return false;
+  const matches = activeMembers(ctx, m.group_id).filter((x) => x.phone.replace(/\D/g, "").endsWith(four));
+  if (matches.length !== 1 || matches[0]!.name) return false;
+  const problem = t.data.problems.find((p) => p.kind === "unknown_name");
+  const name = problem?.kind === "unknown_name" ? parseName(problem.name) : undefined;
+  if (!name) return false;
+  await ctx.db.set_member_name({ member_id: matches[0]!.member_id, name });
+  await tapback(ctx, m, "like");
+  ctx.log("named_by_digits", { message_id: m.message_id, group_id: m.group_id });
+  await answerExpense(ctx, m, t, "");
+  return true;
+}
+
 async function followUp(ctx: BrainCtx, m: Message, t: Thread): Promise<Reply> {
   ctx.log("answer_unresolved", { message_id: m.message_id, group_id: m.group_id, kind: t.data.kind });
   if (t.followed_up) return { answered: true }; // asked again once already: quiet (P1)
@@ -1110,6 +1139,7 @@ function nameOf(ctx: BrainCtx, m: Message): string {
 export async function tick(ctx: BrainCtx): Promise<void> {
   const now = ctx.now();
   await onboardNewGroups(ctx);
+  await reaskNames(ctx);
   await perExpense(ctx, ctx.store.expenses().filter((x) => x.status === "proposed" && x.objection_deadline), async (e) => {
     const deadline = e.objection_deadline!;
     if (now >= deadline) {

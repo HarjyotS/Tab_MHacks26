@@ -195,7 +195,7 @@ export class FakeTapbacker implements Tapbacker {
 
   constructor(private readonly fx: FakeMessages) {}
 
-  async react(target: string, reaction: Reaction, _chatTitle: string): Promise<void> {
+  async react(target: string, reaction: Reaction, _fits: (title: string) => boolean): Promise<void> {
     this.calls.push({ target, reaction });
     const landedOn = this.misfireOnto ?? target;
     this.fx.message({
@@ -223,7 +223,7 @@ export class FakeReplier implements Replier {
 
   constructor(private readonly fx: FakeMessages) {}
 
-  async reply(target: string, text: string, _chatTitle: string): Promise<void> {
+  async reply(target: string, text: string, _fits: (title: string) => boolean): Promise<void> {
     this.calls.push({ target, text });
     if (this.fail) throw new NotSentError("NOT_SENT: Messages has no enabled Reply menu item for this message");
     this.fx.message({ chat: this.fx.chatOf(target), fromMe: true, text, threadOriginator: target });

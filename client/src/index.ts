@@ -103,6 +103,8 @@ const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
 
 const server = Bun.serve({
   port: config.port,
+  // Photos and their text are for the backend on this Mac, never the internet.
+  hostname: process.env.CLIENT_HOST || "127.0.0.1",
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === "/health") return Response.json({ ok: true, groups: gate.enabledGroups().length });

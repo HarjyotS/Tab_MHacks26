@@ -1,5 +1,6 @@
 // Tapbacks the newest incoming message in an enabled group, then checks chat.db
 // to confirm it landed on that message. Usage: bun run tapback-probe [like|love|…]
+import { titleFits } from "./messages-ui.ts";
 import { ChatDb } from "./chatdb.ts";
 import { config } from "./config.ts";
 import { messageText, reactionTarget, tapback } from "./decode.ts";
@@ -24,9 +25,11 @@ if (db.latestInChat(target.chat_guid!)?.guid !== target.guid) {
 const before = db.maxRowId();
 const started = Date.now();
 try {
-  const title = db.chatName(target.chat_guid!);
-  if (!title) throw new Error("that chat has no name, so the probe can't confirm Messages opened it");
-  await uiTapbacker().react(target.guid, reaction, title);
+  const chat = { name: db.chatName(target.chat_guid!), handles: db.participants([target.chat_guid!]).get(target.chat_guid!) ?? [] };
+  await uiTapbacker().react(target.guid, reaction, (title) => {
+    console.log(`Messages shows "${title}"`);
+    return titleFits(title, chat);
+  });
 } catch (err) {
   console.error(`The UI script failed after ${Date.now() - started} ms: ${err}`);
   process.exit(1);

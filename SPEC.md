@@ -1034,6 +1034,9 @@ Access: an unguessable group URL such as `/g/<random id>`, with no login for the
 
 ## 13. iMessage UX rules [CONTRACT]
 
+
+> **Since the beta:** Tab 👍s a message the moment it decides to answer it, before Grok works out the reply, so people see it's on it; the same 👍 means "logged", and a ❓ replaces it when a question follows. Questions about a cost go out as inline replies to the message they're about; when Messages can't thread (the message is no longer the newest), the question starts with a short quote of it (`re: "Also got a $16 refund"`). Members who never said their name are asked again while the group is talking, and "who's dhanush?" lists the unnamed members' last 4 digits so anyone can answer with one.
+
 | Tab's tapback | Meaning                                        |
 | ------------- | ---------------------------------------------- |
 | Like          | Logged, or understood                          |
