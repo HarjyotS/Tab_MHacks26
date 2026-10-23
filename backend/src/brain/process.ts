@@ -7,7 +7,7 @@ import type { Expense, Message } from "../store/types.js";
 import { activeMembers, type BrainCtx, chatKey, chatOf, eyes, type Pending, perExpense, say, tapback } from "./context.js";
 
 const SLOW = new Set<Intent>(["expense", "receipt", "split_adjustment", "correction", "money_question"]);
-import { agreesWithSplit, applyAdjustment, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
+import { agreesWithSplit, applyAdjustment, applyOrExplain, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
 import { staleExpenses } from "./ghosting.js";
 import { handlePaymentDm, linksMode, reportFromText } from "./payments.js";
@@ -1087,7 +1087,7 @@ async function answerConfirm(
     const expense = ctx.store.expense(p.expense_id);
     if (expense?.status === "proposed" || expense?.status === "finalized") {
       await tapback(ctx, m, "like", expense.expense_id);
-      await applyAdjustment(ctx, expense, p.extraction.result);
+      await applyOrExplain(ctx, m, expense, p.extraction.result);
     }
   } else if (p.then === "large_amount" && p.extraction) {
     const group_id = groupFor(ctx, p.source);

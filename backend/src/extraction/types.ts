@@ -16,6 +16,9 @@ export type ExpenseExtraction = {
   // means only that: a fixed amount (custom split).
   fixed: { phone: string; amount_cents?: number; item?: string; had?: true }[];
   missing: ("amount" | "payer" | "item_price")[];
+  // "joe and tanuj split the rest": on a receipt, they get every item nobody
+  // else owns (set by brain/expense.ts, never by Grok).
+  rest?: string[];
 };
 
 export type ClaimResolution = {

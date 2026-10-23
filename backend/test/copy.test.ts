@@ -630,6 +630,18 @@ describe("group balance with splits that aren't locked in", () => {
   it("is square only when nothing is open either", () => {
     expect(T.balanceReply({ debts: [] })).toBe("everyone's square rn");
   });
+  it("names the open splits, so \"not locked in yet\" says what (Vegas chat)", () => {
+    const pending = [
+      { from: p("Tanuj"), to: p("Harjyot"), amount_cents: 667 },
+      { from: p("Dhanush"), to: p("Harjyot"), amount_cents: 667 },
+    ];
+    expect(T.balanceReply({ debts: [{ from: p("Joe"), to: p("Harjyot"), amount_cents: 7930 }], pending, open: ["uber"] }))
+      .toBe("ok so rn: Joe owes Harjyot $79.30\nuber isn't locked in yet: Tanuj owes Harjyot $6.67, Dhanush owes Harjyot $6.67");
+    expect(T.balanceReply({ debts: [{ from: p("Joe"), to: p("Harjyot"), amount_cents: 7930 }], pending, open: ["uber", "gas"] }))
+      .toContain("\nuber and gas aren't locked in yet: ");
+    expect(T.balanceReply({ debts: [], pending, open: ["uber"] }))
+      .toBe("nothing's locked in yet (uber), but as it stands:\nTanuj owes Harjyot $6.67\nDhanush owes Harjyot $6.67\nsay \"settle up\" when you're ready");
+  });
 });
 
 describe("a split with one person owing", () => {

@@ -240,6 +240,7 @@ export async function handleBalanceQuery(ctx: BrainCtx, m: Message, more?: (mine
     : T.balanceReply({
         debts: all,
         pending: pendingDebts(ctx, groups),
+        open: openSplits(ctx, groups),
         // Past six lines the rest is on the ledger (§7.8).
         ledger_url: all.length > 6 && groups.length === 1 ? await ledgerUrl(ctx, groups[0]!) : undefined,
       });
@@ -277,6 +278,15 @@ function pendingFor(ctx: BrainCtx, group_id: string, phone: string): T.Pending[]
 
 // What open splits would come to, netted per pair like `debts`: proposed
 // expenses, and receipts still being claimed (shares already worked out).
+// The splits pendingDebts counts, by name, for "uber isn't locked in yet".
+export function openSplits(ctx: BrainCtx, groups: string[]): string[] {
+  return ctx.store
+    .expenses()
+    .filter((e) => groups.includes(e.group_id) && e.payer_phone && (e.status === "proposed" || e.status === "itemizing"))
+    .sort((a, b) => a.created_at.getTime() - b.created_at.getTime())
+    .map((e) => e.description.toLowerCase());
+}
+
 export function pendingDebts(ctx: BrainCtx, groups: string[]): Debt[] {
   const out: Debt[] = [];
   for (const group_id of groups) {

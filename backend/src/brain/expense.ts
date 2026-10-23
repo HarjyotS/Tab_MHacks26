@@ -4,7 +4,7 @@ import type {
   Extracted,
   Problem,
 } from "../extraction/types.js";
-import type { Person } from "../copy/format.js";
+import { displayName, type Person } from "../copy/format.js";
 import * as T from "../copy/templates.js";
 import type { Expense, LineItem, Message, Share } from "../store/types.js";
 import {
@@ -15,6 +15,7 @@ import {
   say,
   tapback,
   type BrainCtx,
+  Memory,
   type Pending,
 } from "./context.js";
 import { namesExpense } from "./correction.js";
@@ -22,6 +23,8 @@ import { extractInput } from "./inputs.js";
 import { startItemizing } from "./receipt.js";
 import { acceptSplit } from "./settle.js";
 import { addInvite, addThread, closeExpenseThreads, openThreads } from "./threads.js";
+import { Engine } from "../store/engine.js";
+import { createReducers, ReducerError } from "../db/reducers.js";
 
 export const expenseIdFor = (source_message_id: string) =>
   `exp_${source_message_id}`;
@@ -485,11 +488,25 @@ export async function handleAdjustment(
   // Reopening a locked-in expense is always confirmed first.
   // A locked-in expense named outright, by someone the gate is sure about, just changes.
   if (opts.confirmOnly || (locked && !named)) {
-    const question = locked
-      ? T.reopenToChange(expense.description)
-      : T.confirmSplitChange({ description: expense.description, ...whoIsLeft(ctx, expense, result, m.sender_phone) });
-    await holdOpen(ctx, expense);
     const id = `clarify:${m.message_id}`;
+    // What everyone would owe after the change, so a misread shows before the yes.
+    const preview = await previewAdjustment(ctx, expense, result);
+    if (!preview) {
+      const sent = await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: T.splitDoesntAddUp(expense.description), expense_id: expense.expense_id });
+      if (sent) await tapback(ctx, m, "question", expense.expense_id);
+      addInvite(ctx, chatOf(m), { id, text: T.splitDoesntAddUp(expense.description), kind: "adjust_open", expense_id: expense.expense_id });
+      return;
+    }
+    const members = activeMembers(ctx, expense.group_id);
+    const question = T.confirmSplitPreview({
+      description: expense.description,
+      locked,
+      lines: preview.map((p) => ({
+        name: displayName({ phone: p.phone, name: members.find((x) => x.phone === p.phone)?.name }),
+        cents: p.cents,
+      })),
+    });
+    await holdOpen(ctx, expense);
     const sent = await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id, reply_to: m.message_id, text: question, expense_id: expense.expense_id });
     if (sent) await tapback(ctx, m, "question", expense.expense_id);
     addThread(ctx, chatOf(m), {
@@ -503,7 +520,26 @@ export async function handleAdjustment(
     return;
   }
   await tapback(ctx, m, "like", expense.expense_id);
-  await applyAdjustment(ctx, expense, result);
+  await applyOrExplain(ctx, m, expense, result);
+}
+
+// Applies a change, or says plainly that it can't add up, instead of the
+// generic "my brain lagged" a failed write ends in.
+export async function applyOrExplain(ctx: BrainCtx, m: Message, expense: Expense, result: ExpenseExtraction): Promise<void> {
+  try {
+    await applyAdjustment(ctx, expense, result);
+  } catch (err) {
+    if (!(err instanceof ReducerError)) throw err;
+    ctx.log("adjustment_refused", { expense_id: expense.expense_id, error: err.message.slice(0, 200) });
+    await say(ctx, {
+      chat: chatOf(m),
+      purpose: "clarifying_question",
+      id: `doesnt_add_up:${m.message_id}`,
+      reply_to: m.message_id,
+      text: T.splitDoesntAddUp(expense.description),
+      expense_id: expense.expense_id,
+    });
+  }
 }
 
 // §7.5: while Tab is asking about a proposed split, it must not lock in
@@ -697,6 +733,7 @@ function shareFractions(
       ...extracted.result,
       fixed,
       exclusions: [...new Set([...extracted.result.exclusions.filter((p) => !pinned.has(p) && !rest.has(p)), ...leftOut])],
+      ...(rest.size ? { rest: [...rest] } : {}),
     },
     problems: extracted.problems.filter(
       (p) => !(p.kind === "missing_item_price" && (priced.has(`${p.phone}|${p.item}`) || (p.phone === asked && byAnswer))),
@@ -864,6 +901,57 @@ async function applyOwnership(
   const live = new Set(liveShares(ctx, expense.expense_id).map((s) => s.phone));
   for (const o of owned.filter((x) => live.has(x.phone)))
     await ctx.db.add_claim({ item_id: o.item_id, phone: o.phone, source_message_id: expense.source_message_id });
+  // "joe and tanuj split the rest": every item nobody above owns is theirs,
+  // so the owners don't also share it (Vegas chat: the steak eaters paid a
+  // quarter of the sides too).
+  const rest = (result.rest ?? []).filter((p) => live.has(p));
+  if (rest.length === 0) return;
+  const mine = new Set(owned.map((o) => o.item_id));
+  for (const item of ctx.store.lineItems(expense.expense_id).filter((i) => !mine.has(i.item_id)))
+    for (const phone of rest) await ctx.db.add_claim({ item_id: item.item_id, phone, source_message_id: expense.source_message_id });
+}
+
+// What everyone would owe if this change went through, worked out on a copy
+// so nothing changes and nothing is sent. Undefined when it can't add up.
+export async function previewAdjustment(
+  ctx: BrainCtx,
+  expense: Expense,
+  result: ExpenseExtraction,
+): Promise<{ phone: string; cents: number | null }[] | undefined> {
+  const copy = new Engine({ now: ctx.now });
+  const id = expense.expense_id;
+  const group = ctx.store.group(expense.group_id);
+  if (group) copy.grps.set(group.group_id, group);
+  const members = ctx.store.members(expense.group_id);
+  for (const m of members) {
+    copy.mems.set(m.member_id, m);
+    const p = ctx.store.person(m.phone);
+    if (p) copy.ppl.set(p.phone, p);
+  }
+  const current = ctx.store.expense(id) ?? expense;
+  copy.exps.set(id, current);
+  for (const s of ctx.store.shares(id)) copy.shrs.set(s.share_id, s);
+  for (const i of ctx.store.lineItems(id)) copy.items.set(i.item_id, i);
+  for (const c of ctx.store.claims(id)) copy.clms.set(c.claim_id, c);
+  copy.markSaved();
+  const scratch: BrainCtx = {
+    ...ctx,
+    store: copy,
+    db: createReducers(copy.client),
+    memory: new Memory(),
+    wit: undefined,
+    summarize: undefined,
+    log: () => {},
+  };
+  try {
+    await applyAdjustment(scratch, current, result);
+  } catch {
+    return undefined;
+  }
+  return copy
+    .shares(id)
+    .filter((s) => s.role === "participant" || s.amount_cents > 0)
+    .map((s) => ({ phone: s.phone, cents: s.status === "opted_out" ? null : s.amount_cents }));
 }
 
 // "Jake only had a $3 Diet Coke": a fixed amount, the rest split evenly
