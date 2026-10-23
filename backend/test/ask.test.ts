@@ -454,7 +454,7 @@ describe("last resort and the rest of the brain", () => {
     const m = await w.say("Priya", DRINKS);
     const replies = w.db.outbox().filter((o) => o.target_message_id === m.message_id && o.kind !== "reaction");
     expect(replies).toHaveLength(1);
-    expect(replies[0]!.text).toMatch(/change the split/i);
+    expect(replies[0]!.text).toMatch(/^change the bistro to:/i);
     expect(t.create).not.toHaveBeenCalled();
   });
 

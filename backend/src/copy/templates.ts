@@ -405,6 +405,19 @@ export const reopenToChange = (description: string) =>
 
 // An unsure adjustment, confirmed first. An opt-out names who's left
 // ("just you and Priya on Pizza then?") or who's out when that's shorter.
+// The change itself, before anyone says yes: what each person would owe
+// (Vegas chat: "yup" to "change the split?" put two people at $0 by mistake).
+export function confirmSplitPreview(a: { description: string; lines: { name: string; cents: number | null }[]; locked?: boolean }): string {
+  const head = a.locked ? `${a.description} is locked in. reopen it and make it` : `change ${a.description} to`;
+  const lines = a.lines.map((l) => `${l.name} ${l.cents === null ? "out" : money(l.cents)}`);
+  return `${head}:\n${lines.join("\n")}\nok?`;
+}
+
+// A change whose amounts can't cover the bill (two people pinned to their
+// steaks, nobody left for the sides).
+export const splitDoesntAddUp = (description: string) =>
+  `that doesn't add up for ${description}, someone still has to cover the rest. who had what?`;
+
 export function confirmSplitChange(a: { description: string; only?: string[]; without?: string[] }): string {
   if (a.only?.length) return `just ${listJoin(a.only)} on ${a.description} then?`;
   if (a.without?.length) return `so ${a.description} without ${listJoin(a.without)} then?`;
@@ -424,19 +437,25 @@ export type Debt = { from: Person; to: Person; amount_cents: number };
 
 // `pending`: what open splits (proposed, or a receipt still being claimed)
 // would come to, so "who owes who" never says "square" over open money.
+// `open` names those splits ("uber"): "not locked in yet" alone didn't say
+// what (Vegas chat).
 export function balanceReply(a: {
   debts: Debt[];
   ledger_url?: string;
   pending?: Debt[];
+  open?: string[];
 }): string {
   const line = (d: Debt) => `${displayName(d.from)} owes ${displayName(d.to)} ${money(d.amount_cents)}`;
   const pending = a.pending ?? [];
+  const open = a.open ?? [];
+  const which = open.length === 0 ? "" : open.length <= 3 ? listJoin(open) : `${open.length} splits`;
   if (a.debts.length === 0) {
     if (pending.length === 0) return "everyone's square rn";
-    return `nothing's locked in yet, but as it stands:\n${pending.slice(0, 6).map(line).join("\n")}\nsay "settle up" when you're ready`;
+    return `nothing's locked in yet${which ? ` (${which})` : ""}, but as it stands:\n${pending.slice(0, 6).map(line).join("\n")}\nsay "settle up" when you're ready`;
   }
-  const open = pending.length ? `\nnot locked in yet: ${pending.slice(0, 6).map(line).join(", ")}` : "";
-  return lockedBalance(a) + open;
+  if (pending.length === 0) return lockedBalance(a);
+  const head = which ? `${which} ${open.length === 1 ? "isn't" : "aren't"} locked in yet` : "not locked in yet";
+  return `${lockedBalance(a)}\n${head}: ${pending.slice(0, 6).map(line).join(", ")}`;
 }
 
 function lockedBalance(a: { debts: Debt[]; ledger_url?: string }): string {

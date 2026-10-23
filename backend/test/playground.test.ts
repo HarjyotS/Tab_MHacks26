@@ -162,9 +162,8 @@ describe("changing a locked-in expense (§7.7)", () => {
     const id = `exp_${pizza.message_id}`;
     expect(w.db.expense(id)!.status).toBe("finalized");
     await w.say("Kian", COKE);
-    expect(w.said("clarifying_question")).toEqual([
-      "pizza is already locked in, reopen it and change the split?",
-    ]);
+    expect(w.said("clarifying_question")).toHaveLength(1);
+    expect(w.said("clarifying_question")[0]).toMatch(/^pizza is locked in\. reopen it and make it:\n/);
     await w.say("Kian", "yes");
     expect(w.db.expense(id)).toMatchObject({
       status: "proposed",

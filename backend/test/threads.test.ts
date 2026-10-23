@@ -398,6 +398,72 @@ describe("THE BISTRO (never silent on money talk)", () => {
     return { w, e, shares, asked, logged };
   }
 
+  // Vegas chat: "I got the strip, and dhanush got the well done one, joe and
+  // tanuj split the rest" left the steak eaters paying a quarter of the sides.
+  it('gives "the rest" of a receipt to just the people who split it', async () => {
+    const text = "priya got the burger, alex got the salad, sam and jordan split the rest";
+    const { w, e, shares } = await bistro(
+      {
+        expense: {
+          [`adjustment|${text}`]: adjust([], [
+            { name: "priya", amount_cents: null, item: "the burger", only: false },
+            { name: "alex", amount_cents: null, item: "the salad", only: false },
+            { name: "sam", amount_cents: null, item: "half of the rest", only: false },
+            { name: "jordan", amount_cents: null, item: "half of the rest", only: false },
+          ]),
+        },
+      },
+      { [text]: ["split_adjustment", 0.95] },
+    );
+    await sayIn(w, "bistro", PEOPLE.Priya, text);
+    const s = shares();
+    const claimed = (phone: string) => w.db.claims(e.expense_id).filter((c) => c.phone === phone).length;
+    expect(claimed(PEOPLE.Priya)).toBe(1); // the burger only
+    expect(claimed(ALEX)).toBe(1); // the salad only
+    expect(claimed(SAM)).toBe(2); // drinks and cheesecake, shared with Jordan
+    expect(claimed(JORDAN)).toBe(2);
+    // Burger $14.99 and salad $9.99 plus their share of tax and tip; Sam and
+    // Jordan half of $13.97 each, plus theirs.
+    expect(s[SAM]!.amount_cents).toBe(s[JORDAN]!.amount_cents);
+    expect(s[PEOPLE.Priya]!.amount_cents).toBeGreaterThan(s[ALEX]!.amount_cents);
+    expect(s[ALEX]!.amount_cents).toBeGreaterThan(s[SAM]!.amount_cents);
+    expect(Object.values(s).reduce((t, x) => t + x.amount_cents, 0)).toBe(e.total_cents);
+  });
+
+  it("shows who'd be out before the yes, so a misread gets caught", async () => {
+    // "joe and tanuj did the splits" was read as Joe and Tanuj not being there.
+    const text = "sam and jordan did the splits";
+    const { w, shares, asked } = await bistro(
+      { expense: { [`adjustment|${text}`]: adjust(["sam", "jordan"], []) } },
+      { [text]: ["split_adjustment", 0.62] },
+    );
+    await sayIn(w, "bistro", PEOPLE.Priya, text);
+    expect(asked().at(-1)).toMatch(/^change the bistro to:\n/);
+    expect(asked().at(-1)).toMatch(/sam out/);
+    expect(asked().at(-1)).toMatch(/jordan out/);
+    expect(shares()[SAM]!.status).not.toBe("opted_out"); // nothing changes before the yes
+  });
+
+  it("says a change can't add up, instead of failing, when nobody's left for the rest", async () => {
+    const text = "priya only had the burger and alex only had the salad, sam and jordan werent there";
+    const { w, shares, asked } = await bistro(
+      {
+        expense: {
+          [`adjustment|${text}`]: adjust(["sam", "jordan"], [
+            { name: "priya", amount_cents: null, item: "the burger", only: true },
+            { name: "alex", amount_cents: null, item: "the salad", only: true },
+          ]),
+        },
+      },
+      { [text]: ["split_adjustment", 0.62] },
+    );
+    const before = JSON.stringify(shares());
+    await sayIn(w, "bistro", PEOPLE.Priya, text);
+    expect(asked().at(-1)).toBe("that doesn't add up for the bistro, someone still has to cover the rest. who had what?");
+    expect(w.db.outbox().some((o) => o.text?.includes("brain lagged"))).toBe(false);
+    expect(JSON.stringify(shares())).toBe(before);
+  });
+
   it('reads "alex had both drinks" as the drinks being Alex\'s, with the rest shared by Sam and Alex (§7.5 item ownership)', async () => {
     // Playground: this pinned Alex to only the drinks (Alex $7.23, Sam $39.84).
     const text = "it was just sam and alex, and alex had both drinks";
@@ -410,7 +476,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
       { [text]: ["split_adjustment", 0.81] },
     );
     await sayIn(w, "bistro", PEOPLE.Priya, text);
-    expect(asked().at(-1)).toBe("change the split on the bistro?"); // unsure gate: confirm first
+    expect(asked().at(-1)).toMatch(/^change the bistro to:\n/); // unsure gate: confirm first, with the amounts
     await sayIn(w, "bistro", PEOPLE.Priya, "yes");
     expect(w.db.expense(e.expense_id)).toMatchObject({ status: "proposed", split_mode: "itemized" });
     // Alex: drinks $5.98 + half of the other $32.97; Sam: the other half.
@@ -470,7 +536,9 @@ describe("THE BISTRO (never silent on money talk)", () => {
       { [text]: ["name_reply", 0.41] },
     );
     await sayIn(w, "bistro", SAM, text);
-    expect(asked().at(-1)).toBe("just you and priya on the bistro then?");
+    expect(asked().at(-1)).toMatch(/^change the bistro to:\n/);
+    expect(asked().at(-1)).toMatch(/alex out/i);
+    expect(asked().at(-1)).toMatch(/jordan out/i);
     await sayIn(w, "bistro", SAM, "yes");
     expect(shares()[ALEX]!.status).toBe("opted_out");
     expect(shares()[JORDAN]!.status).toBe("opted_out");
@@ -490,7 +558,7 @@ describe("THE BISTRO (never silent on money talk)", () => {
       { [text]: ["claim", 0.5] },
     );
     await sayIn(w, "bistro", PEOPLE.Priya, text);
-    expect(asked().at(-1)).toBe("change the split on the bistro?");
+    expect(asked().at(-1)).toMatch(/^change the bistro to:\n/);
     await sayIn(w, "bistro", PEOPLE.Priya, "yes");
     expect(shares()[PEOPLE.Priya]!.fixed_cents).toBe(598);
     expect(shares()[JORDAN]!.fixed_cents).toBe(799);

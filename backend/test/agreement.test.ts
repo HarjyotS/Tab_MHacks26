@@ -68,7 +68,9 @@ describe("the payer's 👍 on the proposal", () => {
     const { w, id } = await tp({ expense: { "adjustment|jake wasnt there": adjust({ exclusion_names: ["jake"] }) } });
     await w.react("Priya", `split_proposal:${id}`);
     await w.say("Kian", "jake wasnt there");
-    expect(w.said("clarifying_question")).toEqual(["tp is already locked in, reopen it and change the split?"]);
+    const [q] = w.said("clarifying_question");
+    expect(q).toMatch(/^tp is locked in\. reopen it and make it:\n/);
+    expect(q).toContain("Jake out");
   });
 });
 

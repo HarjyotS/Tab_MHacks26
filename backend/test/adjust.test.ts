@@ -73,9 +73,11 @@ describe("unsure adjustments (SPEC 6.4 clarify band)", () => {
     unsureAdjustments(w);
     const pizza = await w.say("Joe", "got pizza, $48");
     await w.say("Kian", "jake only had a $3 coke");
-    expect(w.said("clarifying_question")).toEqual([
-      "change the split on pizza?",
-    ]);
+    // The change itself, before the yes: Jake's $3, everyone else the rest.
+    const [preview] = w.said("clarifying_question");
+    expect(w.said("clarifying_question")).toHaveLength(1);
+    expect(preview).toMatch(/^change pizza to:\n[\s\S]*\nok\?$/);
+    expect(preview).toContain("Jake $3.00");
     expect(
       w.db
         .shares(`exp_${pizza.message_id}`)
