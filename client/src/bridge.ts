@@ -383,7 +383,9 @@ export class Bridge {
 
     const expectation = this.matcher.expect(key, text, this.opts.sendMatchTimeoutMs);
     try {
-      await replier.reply(row.target_message_id, text, fits, target.chat_guid);
+      const chat = target.chat_guid;
+      const newest = () => this.db.latestInChat(chat)?.guid === target.guid;
+      await replier.reply(row.target_message_id, text, fits, chat, replier.anyMessage ? undefined : newest);
     } catch (err) {
       if (err instanceof NotSentError) {
         expectation.cancel();
@@ -433,7 +435,9 @@ export class Bridge {
     const fits = this.titleCheck(target.chat_guid);
     const expectation = this.matcher.expect(tapbackKey(row.target_message_id), row.reaction, this.opts.tapbackVerifyMs);
     try {
-      await this.tapbacker.react(row.target_message_id, row.reaction, fits, target.chat_guid);
+      const chat = target.chat_guid;
+      const newest = () => this.db.latestInChat(chat)?.guid === target.guid;
+      await this.tapbacker.react(row.target_message_id, row.reaction, fits, chat, this.tapbacker.anyMessage ? undefined : newest);
     } catch (err) {
       expectation.cancel();
       return fail(String(err));

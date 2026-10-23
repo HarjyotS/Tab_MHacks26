@@ -6,7 +6,7 @@
 // PAYMENTS=simulated keeps the hackathon flow instead (a 👍 on the settle
 // request runs a simulated transfer).
 import * as T from "../copy/templates.js";
-import { listJoin } from "../copy/format.js";
+import { displayName, listJoin } from "../copy/format.js";
 import type { PaymentProvider } from "../db/types.js";
 import type { Expense, Message, Outbox, Share } from "../store/types.js";
 import { activeMembers, type BrainCtx, outsideQuietHours, say, tapback } from "./context.js";
@@ -339,6 +339,20 @@ export async function reportFromText(ctx: BrainCtx, m: Message): Promise<void> {
     owedToMe.set(o.debtor, sum);
   }
   const fromWhom = [...owedToMe.values()].filter((o) => named(o, o.debtor));
+  // "I just sent dhanush 30 bucks" names someone who owes the sender, but
+  // the money went the other way: never their payment (Vegas chat). Say so.
+  const sentTo = fromWhom.filter((o) => sentToThem(text, person(ctx, o.group_id, o.debtor).name));
+  if (sentTo.length > 0 && sentTo.length === fromWhom.length) {
+    const o = sentTo[0]!;
+    await say(ctx, {
+      chat: m.group_id ? { group_id: m.group_id } : { dm_phone: m.sender_phone },
+      purpose: "clarifying_question",
+      id: `paid_wrong_way:${m.message_id}`,
+      reply_to: m.message_id,
+      text: T.paidWrongWay({ name: displayName(person(ctx, o.group_id, o.debtor)), cents: o.cents }),
+    });
+    return;
+  }
   if (fromWhom.length > 0) {
     // "priya paid me back 25 for the concert tickets" isn't her $10 pizza share.
     const ours = fromWhom.filter((o) => !aboutSomethingElse(text, o));
@@ -366,6 +380,17 @@ export async function reportFromText(ctx: BrainCtx, m: Message): Promise<void> {
     const who = options.map((o) => person(ctx, o.group_id, o.payee));
     await say(ctx, { chat: m.group_id ? { group_id: m.group_id } : { dm_phone: m.sender_phone }, purpose: "clarifying_question", id: `which_payee:${m.message_id}`, reply_to: m.message_id, text: T.whichPayee(who) });
   }
+}
+
+// "sent dhanush 30", "paid dhanush back", "venmo'd dhanush": money from the
+// sender to that person, the opposite of "dhanush paid me".
+function sentToThem(text: string, name: string | undefined): boolean {
+  if (!name) return false;
+  const who = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `\\b(?:sent|send|paid|pay|payed|venmo'?d|venmoed|zelle'?d|zelled|cash ?app'?d|gave|give|transferred|wired)\\s+(?:it\\s+)?(?:to\\s+)?${who}(?![\\p{L}\\p{N}])`,
+    "iu",
+  ).test(text);
 }
 
 // A stated amount that isn't what they owe, or "for the X" naming none of

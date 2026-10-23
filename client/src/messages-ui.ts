@@ -10,25 +10,21 @@
 /** Thrown when the UI action certainly didn't send anything. */
 export class NotSentError extends Error {}
 
+/** A newer message came in while Tab was opening the picker or reply field: Messages would act on that one. */
+export class NotNewestError extends NotSentError {}
+
 /**
- * Builds a script that: saves the clipboard (when `paste` is set), opens the
- * chat for argv[1] (a message guid), waits for the window title to equal
- * argv[2] (the chat name) and for an enabled Edit menu item starting with
- * `menuPrefix`, clicks it, then runs `finalKeys`. argv[3] is the text to paste.
+ * Step one of a two-step action: open the message's chat, check the title,
+ * and choose the Edit menu item, leaving the picker or reply field open.
+ * argv: message guid, chat title.
  */
-export function uiScript(menuPrefix: string, finalKeys: string[], paste: boolean, settle = 0.4): string[] {
+export function openScript(menuPrefix: string, settle: number): string[] {
   return `
 on run argv
   set targetGuid to item 1 of argv
   set chatTitle to item 2 of argv
-  set savedClipboard to missing value
   set opened to false
-  tell application "System Events" to set previousApp to name of first application process whose frontmost is true
   try
-    ${paste ? `try
-      set savedClipboard to the clipboard
-    end try
-    set the clipboard to (item 3 of argv)` : ""}
     open location "sms://open?message-guid=" & targetGuid
     tell application "Messages" to activate
     tell application "System Events" to tell process "Messages"
@@ -46,26 +42,48 @@ on run argv
         delay 0.1
       end repeat
       if not ready then error "NOT_SENT: Messages didn't show " & chatTitle & " with ${menuPrefix} available"
-      -- Close anything an earlier action left open (a tapback picker, a
-      -- reply field): it would swallow this one's keys (VM, live).
       key code 53
       delay 0.2
       click item 1 of menuItems
       set opened to true
-      -- The picker or reply field takes a moment to open on a slow Mac;
-      -- keys pressed before it's there land in the chat instead.
       delay ${settle}
       if not frontmost or name of window 1 is not chatTitle then error "NOT_SENT: Messages lost focus or switched chats"
-      ${finalKeys.join("\n      ")}
     end tell
   on error errMsg
-    -- The tapback picker (or reply field) is still open: close it, or it
-    -- blocks every later tapback and reply (live run).
     if opened then
       try
         tell application "System Events" to key code 53
       end try
     end if
+    error errMsg
+  end try
+end run`.trim().split("\n").flatMap((line) => ["-e", line]);
+}
+
+/**
+ * Step two: still on that exact chat, press the keys (pasting argv[2] first
+ * when `paste`), and put the clipboard back. argv: chat title[, text].
+ */
+export function finishScript(keys: string[], paste: boolean): string[] {
+  return `
+on run argv
+  set chatTitle to item 1 of argv
+  set savedClipboard to missing value
+  try
+    tell application "System Events" to tell process "Messages"
+      if not frontmost or name of window 1 is not chatTitle then error "NOT_SENT: Messages lost focus or switched chats"
+    end tell
+    ${paste ? `try
+      set savedClipboard to the clipboard
+    end try
+    set the clipboard to (item 2 of argv)` : ""}
+    tell application "System Events" to tell process "Messages"
+      ${keys.join("\n      ")}
+    end tell
+  on error errMsg
+    try
+      tell application "System Events" to key code 53
+    end try
     if savedClipboard is not missing value then set the clipboard to savedClipboard
     error errMsg
   end try
@@ -73,10 +91,32 @@ on run argv
   try
     if savedClipboard is not missing value then set the clipboard to savedClipboard
   end try
-  try
-    if previousApp is not "Messages" then tell application "System Events" to set frontmost of process previousApp to true
-  end try
 end run`.trim().split("\n").flatMap((line) => ["-e", line]);
+}
+
+type Run = (lines: string[], args: string[], timeoutMs: number) => Promise<void>;
+
+/**
+ * Messages' "Last Message" items act on whatever is newest the moment they
+ * open, so a message arriving during the clicks would get Tab's reply or
+ * tapback (Vegas chat: a question about the steakhouse threaded under
+ * someone's joke). Open the picker or field, check `newest` (chat.db has
+ * the message by then), and only then press the keys; otherwise close it
+ * and say nothing was sent.
+ */
+export async function twoStep(
+  steps: { open: string[]; finish: string[] },
+  args: { guid: string; title: string; text?: string },
+  newest?: () => boolean,
+  run: Run = runUiScript,
+  dismiss: () => Promise<void> = dismissPicker,
+): Promise<void> {
+  await run(steps.open, [args.guid, args.title], 8_000);
+  if (newest && !newest()) {
+    await dismiss().catch(() => {});
+    throw new NotNewestError("NOT_SENT: a newer message came in, and Messages would have acted on that one");
+  }
+  await run(steps.finish, args.text === undefined ? [args.title] : [args.title, args.text], 6_000);
 }
 
 /**
@@ -139,7 +179,8 @@ export async function withChatTitle(
     try {
       return await act(knownTitle);
     } catch (err) {
-      if (!(err instanceof NotSentError)) throw err;
+      // A newer message isn't a stale title: reading it again won't help.
+      if (!(err instanceof NotSentError) || err instanceof NotNewestError) throw err;
       knownTitle = undefined;
     }
   }

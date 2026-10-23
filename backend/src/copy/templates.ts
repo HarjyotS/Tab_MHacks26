@@ -742,6 +742,14 @@ export function whichPayee(payees: Person[]): string {
 
 export const linkHint = () => "i texted you a link, just tap 👍 on it once it's sent";
 
+// "I just sent dhanush 30 bucks" when Dhanush owes the sender.
+export const paidWrongWay = (a: { name: string; cents: number }) =>
+  `${a.name} owes you ${money(a.cents)}, you don't owe them. if ${a.name} paid you, say "${a.name.toLowerCase()} paid me"`;
+
+// "tab call dhanush lil calc"
+export const renamed = (a: { from: string; to: string }) => `bet, ${a.from} is ${a.to} now`;
+export const renameWho = (name: string) => `who's ${name}? say their name like i have it, or the last 4 of their number`;
+
 // ── Ghosting (§7.3): one more ask the next morning, then it's dropped ────
 
 export const reAsk = (question: string) => `still need this one for the tab: ${question}\nif nobody knows i'll drop it in a couple days`;

@@ -1,4 +1,4 @@
-import { dismissPicker, runUiScript, uiScript, withChatTitle } from "./messages-ui.ts";
+import { dismissPicker, finishScript, openScript, twoStep, withChatTitle } from "./messages-ui.ts";
 import type { Reaction } from "./types.ts";
 
 /**
@@ -8,7 +8,7 @@ import type { Reaction } from "./types.ts";
 export interface Tapbacker {
   /** True when it can react to any message by guid (imsg), not just the chat's newest (the UI). */
   anyMessage?: boolean;
-  react(targetGuid: string, reaction: Reaction, fits: (title: string) => boolean, chatGuid?: string): Promise<void>;
+  react(targetGuid: string, reaction: Reaction, fits: (title: string) => boolean, chatGuid?: string, newest?: () => boolean): Promise<void>;
   /** Closes the tapback picker if a tapback didn't land, so it can't block what comes next. */
   dismiss?(): Promise<void>;
 }
@@ -32,16 +32,17 @@ const PICKER_KEY: Record<Reaction, string> = {
  * go out quickly isn't worth holding up the reply behind it.
  */
 export function uiTapbacker(): Tapbacker {
-  const scripts = new Map<Reaction, string[]>();
+  const open = openScript("Tapback", 0.9);
+  const finish = new Map<Reaction, string[]>();
   return {
-    async react(targetGuid, reaction, fits) {
-      let lines = scripts.get(reaction);
-      if (!lines) {
-        lines = uiScript("Tapback", [`keystroke "${PICKER_KEY[reaction]}"`], false, 0.9);
-        scripts.set(reaction, lines);
+    async react(targetGuid, reaction, fits, _chatGuid, newest) {
+      let keys = finish.get(reaction);
+      if (!keys) {
+        keys = finishScript([`keystroke "${PICKER_KEY[reaction]}"`], false);
+        finish.set(reaction, keys);
       }
-      const script = lines;
-      await withChatTitle(targetGuid, fits, (title) => runUiScript(script, [targetGuid, title], 8_000));
+      const steps = { open, finish: keys };
+      await withChatTitle(targetGuid, fits, (title) => twoStep(steps, { guid: targetGuid, title }, newest));
     },
     dismiss: dismissPicker,
   };

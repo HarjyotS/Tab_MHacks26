@@ -69,6 +69,52 @@ export async function reaskNames(ctx: BrainCtx) {
   }
 }
 
+// "tab call dhanush lil calc", "tab change dhanush's contact to lil calc",
+// "tab rename dhanush to lil calc", "tab my name is joe": anyone can fix a
+// name, as long as they're talking to Tab (Vegas chat: "he gave you the
+// wrong name"). The person is found by the name Tab has or their last 4.
+const RENAMES = [
+  /^@?tab\b[\s,:]*(?:pls\s+|please\s+)?(?:can you\s+)?(?:change|set|update|make)\s+(.+?)(?:'s|s'|’s)?\s+(?:name|contact|contact name)\s+(?:to|as)\s+(.+)$/i,
+  /^@?tab\b[\s,:]*(?:pls\s+|please\s+)?rename\s+(.+?)\s+(?:to|as)\s+(.+)$/i,
+  /^@?tab\b[\s,:]*(?:pls\s+|please\s+)?call\s+(\S+(?:\s+\d{4})?)\s+(.+)$/i,
+  /^@?tab\b[\s,:]*(.+?)(?:'s|’s)\s+(?:real\s+)?name\s+is\s+(.+)$/i,
+  /^@?tab\b[\s,:]*(my)\s+(?:real\s+)?name\s+is\s+(.+)$/i,
+];
+// "tab call joe later" is a phone call, not a name.
+const CALL = 2;
+const NOT_A_NICKNAME = /^(?:and|to|about|later|back|him|her|them|when|if|after|tomorrow|tonight|now|soon|rn|asap)\b/i;
+const NEW_NAME = /^[\p{L}\p{N}][\p{L}\p{N}'\- ]{0,23}$/u;
+
+export async function handleRename(ctx: BrainCtx, m: Message): Promise<boolean> {
+  if (!m.group_id || m.kind !== "text") return false;
+  const text = (m.text ?? "").trim().replace(/[.!]+$/, "");
+  const which = RENAMES.findIndex((re) => re.test(text));
+  if (which < 0) return false;
+  const [, rawWho, rawName] = text.match(RENAMES[which]!)!;
+  const name = rawName!.trim().replace(/^["'“”]|["'“”]$/g, "").trim();
+  if (!NEW_NAME.test(name) || name.split(/\s+/).length > 3) return false;
+  if (which === CALL && (/^(?:me|my)$/i.test(rawWho!.trim()) || NOT_A_NICKNAME.test(name))) return false;
+  const members = activeMembers(ctx, m.group_id);
+  const who = rawWho!.trim().toLowerCase();
+  const four = who.match(/(?<!\d)(\d{4})(?!\d)/)?.[1];
+  const target =
+    who === "me" || who === "my"
+      ? members.find((x) => x.phone === m.sender_phone)
+      : four
+        ? members.filter((x) => x.phone.replace(/\D/g, "").endsWith(four)).at(0)
+        : members.filter((x) => x.name?.toLowerCase() === who.replace(/^@/, "")).at(0);
+  if (!target) {
+    await say(ctx, { chat: chatOf(m), purpose: "clarifying_question", id: `rename_who:${m.message_id}`, reply_to: m.message_id, text: T.renameWho(rawWho!.trim()) });
+    return true;
+  }
+  const from = displayName(target);
+  await ctx.db.set_member_name({ member_id: target.member_id, name });
+  await tapback(ctx, m, "like");
+  await say(ctx, { chat: chatOf(m), purpose: "other", id: `renamed:${m.message_id}`, reply_to: m.message_id, text: T.renamed({ from, to: name }) });
+  ctx.log("member_renamed", { message_id: m.message_id, group_id: m.group_id });
+  return true;
+}
+
 // Text arrives normalized to ASCII quotes (process.ts), so "I’m" is "I'm".
 const NAME_PREFIX =
   /^(@?tab\b[\s,:]*)?(hi|hey|hello|yo)?[\s,!]*(it'?s|i'?m|im|i am|call me|name'?s|my name is|this is)?\s*/i;

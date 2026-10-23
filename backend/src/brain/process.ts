@@ -34,6 +34,7 @@ import {
   handleHelp,
   handleNameReply,
   onboardNewGroups,
+  handleRename,
   parseName,
   reaskNames,
 } from "./talk.js";
@@ -192,6 +193,11 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
     // someone who texted STOP is left alone. Their text isn't kept.
     if (await handlePersonCommand(ctx, m)) {
       await ctx.db.set_message_result({ message_id: m.message_id, intent: "ignore", status: "done" });
+      return;
+    }
+    // "tab call dhanush lil calc": a name fix, said to Tab.
+    if (await handleRename(ctx, m)) {
+      await ctx.db.set_message_result({ message_id: m.message_id, intent: "name_reply", status: "done" });
       return;
     }
     // §7.6: "sent", "got it", or a Venmo handle, answering one of Tab's
