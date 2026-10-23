@@ -34,7 +34,7 @@ Where the spec is silent, it is the owner's call. Where two sections disagree, t
 
 ### 1.1 Pitch
 
-Add Tab's number to your group chat. From then on it quietly tracks who paid for what, splits receipts, follows up with people who haven't responded, and settles everyone up, all without anyone downloading an app or logging an expense.
+Add Tab to your group chat (iPhone groups: Tab is an iMessage contact). From then on it quietly tracks who paid for what, splits receipts, follows up with people who haven't responded, and settles everyone up, all without anyone downloading an app or logging an expense.
 
 ### 1.2 The problem
 

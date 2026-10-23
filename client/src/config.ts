@@ -10,6 +10,7 @@ const hours = (value: string | undefined, fallback: number) => Number(value ?? f
 export const config = {
   chatDbPath: env.CHAT_DB_PATH ?? join(homedir(), "Library", "Messages", "chat.db"),
   tabPhone: env.TAB_PHONE || undefined,
+  tabEmail: env.TAB_EMAIL || undefined,
   tabName: env.TAB_NAME ?? "Tab",
   /** Comma-separated group chat guids to switch on at startup, in addition to "/tab on". */
   groupIds: (env.TAB_GROUP_IDS ?? "").split(",").map((s) => s.trim()).filter(Boolean),

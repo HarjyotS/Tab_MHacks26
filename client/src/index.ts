@@ -89,6 +89,7 @@ const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
   commandPrefix: config.commandPrefix,
   tabName: config.tabName,
   tabPhone: config.tabPhone,
+  tabEmail: config.tabEmail,
   sendMatchTimeoutMs: config.sendMatchTimeoutMs,
   photonDm: photon ? (handle, body) => photon.send(handle, body) : undefined,
   tapbackVerifyMs: config.tapbackVerifyMs,
