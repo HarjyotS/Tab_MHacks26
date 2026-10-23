@@ -154,6 +154,11 @@ function toContract(
   const { members, message } = input;
   const text = message.text ?? "";
   const ground = (cents: number) => isGrounded(cents, text);
+  // Grok sometimes gives the dollars as written instead of cents ("we paid
+  // 24,000" as 24000, Vegas chat). The amount the message says, in cents, is
+  // the one that counts; a number that isn't in the message is still refused.
+  const inCents = (cents: number): number | undefined =>
+    ground(cents) ? cents : ground(cents * 100) ? cents * 100 : undefined;
   const resolve = (name: string): string | null => {
     const phone = resolveName(name, members, message.sender_phone);
     if (!phone) problems.push({ kind: "unknown_name", name });
@@ -195,10 +200,11 @@ function toContract(
 
   let amount = r.amount_cents ?? undefined;
   if (amount !== undefined) {
-    if (!ground(amount)) {
+    const stated = inCents(amount);
+    if (stated === undefined) {
       problems.push({ kind: "ungrounded_amount", amount_cents: amount });
       amount = undefined;
-    } else if (amount <= 0) {
+    } else if ((amount = stated) <= 0) {
       problems.push({ kind: "invalid_amount", amount_cents: amount });
       amount = undefined;
     } else if (r.amount_is_per_person && PER_PERSON.test(text)) {
@@ -219,9 +225,10 @@ function toContract(
     const phone = resolve(f.name);
     if (!phone) continue;
     let cents = f.amount_cents ?? undefined;
-    if (cents !== undefined && !ground(cents)) {
-      problems.push({ kind: "ungrounded_amount", amount_cents: cents });
-      cents = undefined;
+    if (cents !== undefined) {
+      const stated = inCents(cents);
+      if (stated === undefined) problems.push({ kind: "ungrounded_amount", amount_cents: cents });
+      cents = stated;
     }
     const item = f.item && (mode !== "adjustment" || itemSaid(f.item, text)) ? f.item : undefined;
     // Nothing left to pin (its amount wasn't in the message, and no item).
