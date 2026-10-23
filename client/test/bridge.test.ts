@@ -593,3 +593,35 @@ test("a tapback that never lands closes the picker before anything else goes out
   expect(hub.row(row.action_id)?.error).toContain("never showed up");
   expect(tapbacker.dismissed).toBe(1);
 });
+
+test("with imsg, Tab tapbacks and replies to a message that's no longer the newest", async () => {
+  const { fx, hub, tapbacker, replier, sender, bridge, deliverNext, turnOn } = setup();
+  await turnOn();
+  const uber = fx.message({ chat: HOUSE, handle: A, text: "paid 20 for an uber" });
+  fx.message({ chat: HOUSE, handle: B, text: "nice" });
+  await bridge.poll();
+  tapbacker.anyMessage = true;
+  replier.anyMessage = true;
+  const chats: (string | undefined)[] = [];
+  const react = tapbacker.react.bind(tapbacker);
+  tapbacker.react = async (t, r, f, chat) => (chats.push(chat), react(t, r, f, chat));
+
+  const like = hub.enqueue({ kind: "reaction", group_id: HOUSE, target_message_id: uber, reaction: "like" });
+  const reacted = tapbacker.nextReact();
+  const draining = bridge.drainOutbox();
+  await reacted;
+  await bridge.poll();
+  await draining;
+  expect(hub.row(like.action_id)?.status).toBe("sent");
+  expect(chats).toEqual([HOUSE]);
+
+  const ask = hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "who rode?", target_message_id: uber, purpose: "clarifying_question" });
+  const replied = replier.nextReply();
+  const draining2 = bridge.drainOutbox();
+  await replied;
+  await bridge.poll();
+  await draining2;
+  expect(replier.calls.map((c) => c.text)).toEqual(["who rode?"]); // threaded, no quote needed
+  expect(sender.calls).toHaveLength(0);
+  expect(hub.row(ask.action_id)?.status).toBe("sent");
+});

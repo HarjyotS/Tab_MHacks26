@@ -166,6 +166,25 @@ ops/status.sh
 
 Add `tab@addtab.app` to the group chat like any contact. With `AUTO_JOIN=on`, the next message in the group (the "added Tab" notice counts) switches Tab on: it introduces itself within about 30 seconds, sends its contact card, and asks for names. `/tab off` and `/tab on` only count when Tab's own account sends them (from Messages on the Mac); a group switched off stays off, even with `AUTO_JOIN`, until `/tab on`. `/tab off` switches it off. Tab only reads groups it's been switched on in, plus DMs from their members.
 
+## Private API: tapbacks and replies on any message (optional)
+
+Without it, Tab reacts and replies by clicking through Messages' window, which only works on each chat's newest message. [imsg](https://github.com/openclaw/imsg) loads a helper into Messages that does both by message id, on any message. It needs System Integrity Protection off, which lowers the Mac's protection, so only do this on Tab's own Mac.
+
+1. Library validation off, and imsg installed (Terminal):
+   ```sh
+   sudo defaults write /Library/Preferences/com.apple.security.libraryvalidation.plist DisableLibraryValidation -bool true
+   brew install steipete/tap/imsg
+   ```
+2. SIP off: start the Mac in macOS Recovery, open Utilities → Terminal, run `csrutil disable`, then restart. On HostMyApple, Recovery and its console come from their control panel or support (NoMachine doesn't run in Recovery). Restart, never Shut Down.
+3. Load the helper, and keep it loaded across restarts and Messages relaunches:
+   ```sh
+   imsg launch --install-agent
+   imsg status --json    # "advanced_features": true, and the methods include "tapback" and "send.rich"
+   ```
+4. In `~/tab/client/.env`: `TAPBACK_MODE=imsg` and `REPLY_MODE=imsg`, then `ops/update.sh --restart`. The bridge log says `imsg helper is up`.
+
+If the helper isn't loaded (after a macOS update, say), tapbacks fail and replies go out as normal messages until `imsg launch` runs again. Undo: `csrutil enable` in Recovery, and set both modes back to `ui`.
+
 ## Auto-updates
 
 `app.tab.update` runs `ops/update.sh` every 2 minutes:
