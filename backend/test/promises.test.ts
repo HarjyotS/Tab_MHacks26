@@ -217,6 +217,18 @@ describe("payment links (§7.6): Tab never moves money", () => {
     expect(dmsTo(w, "Priya").at(-1)!.text).toBe("Joe got your $10.00 for pizza\nyou're all square");
   });
 
+  // Vegas chat: "I just sent dhanush 30 bucks" while Dhanush owed the sender.
+  it("never takes money sent to someone who owes you as their payment, and says so", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const { id } = await settled(w);
+    gateSays(w, { "i just sent priya 10 bucks": ["payment_reported", 0.95] });
+    await w.say("Joe", "i just sent priya 10 bucks");
+    expect(share(w, id, "Priya").status).toBe("locked");
+    expect(w.db.transfers()).toEqual([]);
+    expect(w.said("clarifying_question").at(-1)).toBe('Priya owes you $10.00, you don\'t owe them. if Priya paid you, say "Priya paid me"');
+  });
+
   it("a 👍 on the group's settle request pays nothing; only someone's own link does", async () => {
     const w = world(script);
     w.ctx.payments = "links";

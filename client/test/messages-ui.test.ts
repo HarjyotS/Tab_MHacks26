@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { NotSentError, titleFits, withChatTitle } from "../src/messages-ui.ts";
+import { NotNewestError, NotSentError, titleFits, twoStep, withChatTitle } from "../src/messages-ui.ts";
 
 const VEGAS = { name: "Vegas Trip 26", handles: ["+14083103927", "+16692612230", "+14436367028", "+16692610502"] };
 
@@ -49,4 +49,31 @@ test("a chat's title is read once, then reused while it fits, and read again whe
   expect(seen).toEqual([seen[0]!, seen[0]!, "Vegas Trip 26"]);
   // A title for another chat is never used for this one.
   await expect(withChatTitle("x", (t) => t === "the house", act, async () => "Vegas Trip 26")).rejects.toBeInstanceOf(NotSentError);
+});
+
+test("a message that arrives while the picker opens cancels the action, and nothing is pressed", async () => {
+  const ran: string[] = [];
+  let dismissed = 0;
+  const run = async (lines: string[]) => void ran.push(lines === steps.open ? "open" : "finish");
+  const steps = { open: ["-e", "open"], finish: ["-e", "finish"] };
+  const dismiss = async () => void dismissed++;
+  await twoStep(steps, { guid: "g", title: "Vegas Trip 26" }, () => true, run, dismiss);
+  expect(ran).toEqual(["open", "finish"]);
+  ran.length = 0;
+  const err = await twoStep(steps, { guid: "g", title: "Vegas Trip 26", text: "who rode?" }, () => false, run, dismiss).catch((e) => e);
+  expect(err).toBeInstanceOf(NotNewestError);
+  expect(err).toBeInstanceOf(NotSentError); // the bridge falls back to a normal send
+  expect(ran).toEqual(["open"]);
+  expect(dismissed).toBe(1);
+});
+
+test("a newer message doesn't make the title be read again", async () => {
+  let peeks = 0;
+  const fits = (t: string) => t === "Vegas Trip 26";
+  const peek = async () => (peeks++, "Vegas Trip 26");
+  await withChatTitle("g", fits, async () => {}, peek); // remember the title
+  peeks = 0;
+  const err = await withChatTitle("g", fits, async () => { throw new NotNewestError("newer"); }, peek).catch((e) => e);
+  expect(err).toBeInstanceOf(NotNewestError);
+  expect(peeks).toBe(0);
 });

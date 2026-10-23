@@ -166,3 +166,28 @@ describe("name replies the gate calls chatter", () => {
     expect(w.db.outbox().filter((o) => o.kind === "reaction")).toHaveLength(0);
   });
 });
+
+describe("fixing someone's name", () => {
+  it("renames a member when someone tells Tab, by name or last 4", async () => {
+    const w = world({});
+    withDhanush(w);
+    w.db.mems.get(`${GROUP}:${DHANUSH}`)!.name = "Dhanush";
+    await w.say("Joe", "tab change dhanush's contact to lil calc");
+    expect(w.db.members(GROUP).find((m) => m.phone === DHANUSH)?.name).toBe("lil calc");
+    expect(w.said("other").at(-1)?.toLowerCase()).toBe("bet, dhanush is lil calc now");
+    await w.say("Kian", "tab call 2230 Dhanush");
+    expect(w.db.members(GROUP).find((m) => m.phone === DHANUSH)?.name).toBe("Dhanush");
+    await w.say("Priya", "tab my name is Pri");
+    expect(w.db.members(GROUP).find((m) => m.phone === PEOPLE.Priya)?.name).toBe("Pri");
+  });
+
+  it("asks who, for a name it doesn't have; leaves phone calls and chat alone", async () => {
+    const w = world({});
+    await w.say("Joe", "tab rename marco to big m");
+    expect(w.said("clarifying_question").at(-1)).toBe("who's marco? say their name like i have it, or the last 4 of their number");
+    await w.say("Joe", "tab call joe later");
+    await w.say("Joe", "call priya tonight");
+    expect(w.db.members(GROUP).find((m) => m.phone === PEOPLE.Joe)?.name).toBe("Joe");
+    expect(w.db.members(GROUP).find((m) => m.phone === PEOPLE.Priya)?.name).toBe("Priya");
+  });
+});

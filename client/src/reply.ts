@@ -1,19 +1,20 @@
-import { runUiScript, uiScript, withChatTitle } from "./messages-ui.ts";
+import { finishScript, openScript, twoStep, withChatTitle } from "./messages-ui.ts";
 
 /** Sends text as an inline (threaded) reply to a message. `fits` checks Messages' window title (titleFits). */
 export interface Replier {
   /** True when it can thread onto any message by guid (imsg), not just the chat's newest (the UI). */
   anyMessage?: boolean;
-  reply(targetGuid: string, text: string, fits: (title: string) => boolean, chatGuid?: string): Promise<void>;
+  reply(targetGuid: string, text: string, fits: (title: string) => boolean, chatGuid?: string, newest?: () => boolean): Promise<void>;
 }
 
 // Select-all before pasting: anything stray in the field is replaced, not sent along.
-const LINES = uiScript(
-  "Reply to",
-  ['keystroke "a" using command down', 'keystroke "v" using command down', "delay 0.3", "if not frontmost then error \"NOT_SENT: Messages lost focus before sending\"", "keystroke return"],
-  true,
-  0.6,
-);
+const STEPS = {
+  open: openScript("Reply to", 0.6),
+  finish: finishScript(
+    ['keystroke "a" using command down', 'keystroke "v" using command down', "delay 0.3", "if not frontmost then error \"NOT_SENT: Messages lost focus before sending\"", "keystroke return"],
+    true,
+  ),
+};
 
 /**
  * Drives Messages' UI: open the message's chat, check its window title is
@@ -25,8 +26,8 @@ const LINES = uiScript(
  */
 export function uiReplier(): Replier {
   return {
-    async reply(targetGuid, text, fits) {
-      await withChatTitle(targetGuid, fits, (title) => runUiScript(LINES, [targetGuid, title, text], 12_000));
+    async reply(targetGuid, text, fits, _chatGuid, newest) {
+      await withChatTitle(targetGuid, fits, (title) => twoStep(STEPS, { guid: targetGuid, title, text }, newest));
     },
   };
 }
