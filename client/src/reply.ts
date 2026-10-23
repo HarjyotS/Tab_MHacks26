@@ -5,7 +5,13 @@ export interface Replier {
   reply(targetGuid: string, text: string, fits: (title: string) => boolean): Promise<void>;
 }
 
-const LINES = uiScript("Reply to", ['keystroke "v" using command down', "delay 0.3", "if not frontmost then error \"NOT_SENT: Messages lost focus before sending\"", "keystroke return"], true);
+// Select-all before pasting: anything stray in the field is replaced, not sent along.
+const LINES = uiScript(
+  "Reply to",
+  ['keystroke "a" using command down', 'keystroke "v" using command down', "delay 0.3", "if not frontmost then error \"NOT_SENT: Messages lost focus before sending\"", "keystroke return"],
+  true,
+  0.6,
+);
 
 /**
  * Drives Messages' UI: open the message's chat, check its window title is

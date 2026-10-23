@@ -437,7 +437,11 @@ export class Bridge {
       return fail(String(err));
     }
     const guid = await expectation.landed;
-    if (!guid) return fail(`the ${row.reaction} never showed up on ${row.target_message_id} in chat.db`);
+    if (!guid) {
+      // The picker may still be open: close it before the next send needs Messages.
+      await this.tapbacker.dismiss?.().catch(() => {});
+      return fail(`the ${row.reaction} never showed up on ${row.target_message_id} in chat.db`);
+    }
     await this.mark(row.action_id, { status: "sent", sent_at: new Date(this.opts.now()), sent_photon_id: guid });
   }
 

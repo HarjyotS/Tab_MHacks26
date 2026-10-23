@@ -4,7 +4,7 @@ import { Bridge } from "./bridge.ts";
 import { ChatDb } from "./chatdb.ts";
 import { config } from "./config.ts";
 import { Gate } from "./gate.ts";
-import { DevHub, type Hub } from "./hub.ts";
+import { DevHub, HubUnavailable, type Hub } from "./hub.ts";
 import { ImageStore } from "./images.ts";
 import { osascriptSender, photonDmSender, spectrumSender } from "./sender.ts";
 import { spacetimeHub } from "./spacetime-hub.ts";
@@ -114,11 +114,18 @@ const server = Bun.serve({
 
 let running = true;
 async function every(name: string, ms: number, fn: () => Promise<void>) {
+  let down = false;
   while (running) {
     try {
       await fn();
+      if (down) log(`[${name}] backend is back`);
+      down = false;
     } catch (err) {
-      log(`[${name}] ${err instanceof Error ? (err.stack ?? err.message) : err}`);
+      // The backend restarting (every deploy) is one line, not a stack every 500ms.
+      if (err instanceof HubUnavailable) {
+        if (!down) log(`[${name}] waiting for the backend: ${err.message}`);
+        down = true;
+      } else log(`[${name}] ${err instanceof Error ? (err.stack ?? err.message) : err}`);
     }
     await Bun.sleep(ms);
   }

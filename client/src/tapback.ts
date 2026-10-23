@@ -1,4 +1,4 @@
-import { runUiScript, uiScript, withChatTitle } from "./messages-ui.ts";
+import { dismissPicker, runUiScript, uiScript, withChatTitle } from "./messages-ui.ts";
 import type { Reaction } from "./types.ts";
 
 /**
@@ -7,6 +7,8 @@ import type { Reaction } from "./types.ts";
  */
 export interface Tapbacker {
   react(targetGuid: string, reaction: Reaction, fits: (title: string) => boolean): Promise<void>;
+  /** Closes the tapback picker if a tapback didn't land, so it can't block what comes next. */
+  dismiss?(): Promise<void>;
 }
 
 // Keys 1-6 in Messages' tapback picker, in its left-to-right order.
@@ -33,11 +35,12 @@ export function uiTapbacker(): Tapbacker {
     async react(targetGuid, reaction, fits) {
       let lines = scripts.get(reaction);
       if (!lines) {
-        lines = uiScript("Tapback", [`keystroke "${PICKER_KEY[reaction]}"`], false);
+        lines = uiScript("Tapback", [`keystroke "${PICKER_KEY[reaction]}"`], false, 0.9);
         scripts.set(reaction, lines);
       }
       const script = lines;
       await withChatTitle(targetGuid, fits, (title) => runUiScript(script, [targetGuid, title], 8_000));
     },
+    dismiss: dismissPicker,
   };
 }

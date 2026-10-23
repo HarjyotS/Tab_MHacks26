@@ -16,7 +16,7 @@ export class NotSentError extends Error {}
  * argv[2] (the chat name) and for an enabled Edit menu item starting with
  * `menuPrefix`, clicks it, then runs `finalKeys`. argv[3] is the text to paste.
  */
-export function uiScript(menuPrefix: string, finalKeys: string[], paste: boolean): string[] {
+export function uiScript(menuPrefix: string, finalKeys: string[], paste: boolean, settle = 0.4): string[] {
   return `
 on run argv
   set targetGuid to item 1 of argv
@@ -46,9 +46,15 @@ on run argv
         delay 0.1
       end repeat
       if not ready then error "NOT_SENT: Messages didn't show " & chatTitle & " with ${menuPrefix} available"
+      -- Close anything an earlier action left open (a tapback picker, a
+      -- reply field): it would swallow this one's keys (VM, live).
+      key code 53
+      delay 0.2
       click item 1 of menuItems
       set opened to true
-      delay 0.4
+      -- The picker or reply field takes a moment to open on a slow Mac;
+      -- keys pressed before it's there land in the chat instead.
+      delay ${settle}
       if not frontmost or name of window 1 is not chatTitle then error "NOT_SENT: Messages lost focus or switched chats"
       ${finalKeys.join("\n      ")}
     end tell
@@ -180,6 +186,17 @@ export function titleFits(title: string, chat: { name: string | null; handles: s
   // one number or email has to match, or Messages has to be guessing names
   // for unknown numbers ("Maybe: Sam Lee"), which a named chat never shows.
   return checked > 0 || guessed;
+}
+
+/** Presses Escape in Messages, if it's in front: closes a tapback picker or reply field left open. */
+export async function dismissPicker(): Promise<void> {
+  const proc = Bun.spawn(
+    ["osascript", "-e", 'tell application "System Events" to tell process "Messages" to if frontmost then key code 53'],
+    { stdout: "ignore", stderr: "ignore" },
+  );
+  const timer = setTimeout(() => proc.kill(), 3_000);
+  await proc.exited;
+  clearTimeout(timer);
 }
 
 /** Runs a UI script. Throws NotSentError when nothing was sent, Error when unsure. */
