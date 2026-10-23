@@ -124,3 +124,45 @@ describe("thinking tapback", () => {
     expect(w.db.outbox().filter((o) => o.kind === "reaction")).toHaveLength(0);
   });
 });
+
+describe("name replies the gate calls chatter", () => {
+  function afterPrompt() {
+    const w = world({});
+    withDhanush(w);
+    w.ctx.classify = async () => ({ intent: "ignore", confidence: 0.9 });
+    w.db.out.set(`name_prompt:${GROUP}`, {
+      action_id: `name_prompt:${GROUP}`, kind: "group_message", group_id: GROUP, text: "save my contact and reply w your first name",
+      purpose: "name_prompt", send_after: w.ctx.now(), status: "sent", created_at: w.ctx.now(),
+    });
+    const liked = (text: string) => {
+      const m = w.db.messages().find((x) => x.message_id && w.db.outbox().some((o) => o.target_message_id === x.message_id && o.reaction === "like") && (x.text ?? "").toLowerCase() === text.toLowerCase());
+      return Boolean(m);
+    };
+    return { w, liked };
+  }
+
+  it("likes someone Tab knows saying their name again", async () => {
+    const { w } = afterPrompt();
+    await w.say("Joe", "Joe");
+    expect(w.db.outbox().filter((o) => o.kind === "reaction" && o.reaction === "like")).toHaveLength(1);
+    expect(w.db.members(GROUP).find((m) => m.phone === PEOPLE.Joe)?.name).toBe("Joe");
+  });
+
+  it("names someone Tab didn't know from a bare first name, with a like", async () => {
+    const { w } = afterPrompt();
+    await processMessage(w.ctx, w.db.ingest({ sender_phone: DHANUSH, group_id: GROUP, text: "dhanush" }));
+    expect(w.db.members(GROUP).find((m) => m.phone === DHANUSH)?.name).toBe("Dhanush");
+    expect(w.db.outbox().filter((o) => o.kind === "reaction" && o.reaction === "like")).toHaveLength(1);
+  });
+
+  it("leaves chatter, someone else's name, and late answers alone", async () => {
+    const { w } = afterPrompt();
+    await processMessage(w.ctx, w.db.ingest({ sender_phone: DHANUSH, group_id: GROUP, text: "lol" }));
+    await w.say("Joe", "Priya"); // not Joe's own name: no rename by accident
+    w.advance(45 * 60_000);
+    await w.say("Kian", "Kian");
+    expect(w.db.members(GROUP).find((m) => m.phone === DHANUSH)?.name).toBeUndefined();
+    expect(w.db.members(GROUP).find((m) => m.phone === PEOPLE.Joe)?.name).toBe("Joe");
+    expect(w.db.outbox().filter((o) => o.kind === "reaction")).toHaveLength(0);
+  });
+});

@@ -236,6 +236,14 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
         intent = "expense";
         decision = "clarify";
       }
+      // Right after Tab's name prompt, a message that's just a name answers
+      // it even when the gate files it as chatter (Vegas chat: Joe and
+      // Harjyot replied with their names and got nothing).
+      if (decision === "ignore" && nameAnswer(ctx, m)) {
+        result = { ...result, intent: "name_reply" };
+        intent = "name_reply";
+        decision = "act";
+      }
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent) && intent !== "answer";
       // Tab is going to answer this: 👍 now, the reply when it's ready.
       if (decision !== "ignore" && m.kind === "text") await eyes(ctx, m);
@@ -1109,13 +1117,37 @@ async function answerConfirm(
 function answeringNamePrompt(ctx: BrainCtx, m: Message): boolean {
   if (!m.group_id) return false;
   const me = ctx.store.members(m.group_id).find((x) => x.phone === m.sender_phone);
-  if (!me || me.name) return false;
+  return Boolean(me && !me.name && afterNamePrompt(ctx, m));
+}
+
+// Tab's last word in the group was its intro or name prompt (they go out
+// together; any of them counts), at most 30 minutes before this message.
+function afterNamePrompt(ctx: BrainCtx, m: Message): boolean {
+  if (!m.group_id) return false;
   const lastTab = ctx.store
     .outbox()
     .filter((o) => o.group_id === m.group_id && o.kind !== "reaction" && o.status !== "cancelled" && o.created_at <= m.received_at)
     .sort((a, b) => b.created_at.getTime() - a.created_at.getTime())[0];
-  // The intro, name prompt, and contact card go out together; any of them counts.
-  return lastTab?.purpose === "name_prompt" || lastTab?.purpose === "onboarding_intro";
+  return (
+    (lastTab?.purpose === "name_prompt" || lastTab?.purpose === "onboarding_intro") &&
+    m.received_at.getTime() - lastTab.created_at.getTime() <= 30 * 60_000
+  );
+}
+
+// Words that parse as a name but are just chat.
+const NOT_A_NAME = /^(?:lol|lmao|lmfao|ok|okay|k|kk|yes|yeah|yea|yep|yup|no|nah|nope|nice|same|bet|true|facts|wait|what|why|how|who|hi|hey|hello|yo|sup|thanks|thank|ty|haha|hahaha|bruh|bro|dude|tab|sure|cool|word|fr|idk|omg|wow|done|here|me|mine|great|good|perfect|sounds|welcome|hii|heyy)$/i;
+
+// Just a name, right after the name prompt: the sender's own name again
+// ("Joe" from Joe), or a first name from someone Tab doesn't know yet.
+function nameAnswer(ctx: BrainCtx, m: Message): boolean {
+  if (!m.group_id || m.kind !== "text" || !afterNamePrompt(ctx, m)) return false;
+  const text = (m.text ?? "").trim();
+  if (text.split(/\s+/).length > 4) return false;
+  const name = parseName(text);
+  if (!name || NOT_A_NAME.test(name)) return false;
+  const me = ctx.store.members(m.group_id).find((x) => x.phone === m.sender_phone);
+  if (!me) return false;
+  return me.name ? me.name.toLowerCase() === name.toLowerCase() : true;
 }
 
 function lastTabPurpose(ctx: BrainCtx, m: Message): string | undefined {
