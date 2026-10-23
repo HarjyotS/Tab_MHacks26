@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { GROUP_STYLE, type ChatSource, type RawAttachment, type RawMessage } from "./chatdb.ts";
 import { appleDate, isAssociated, messageText, normalizeHandle, reactionTarget, tapback } from "./decode.ts";
 import { parseCommand, type Gate } from "./gate.ts";
@@ -490,7 +491,20 @@ function systemMessage(
   };
 }
 
-// Whichever Tab texts from: its number, its Apple Account email, or both.
+// Tab's logo, shown on the contact card in Messages.
+const CARD_PHOTO = (() => {
+  try {
+    return readFileSync(new URL("../assets/tab-contact.png", import.meta.url)).toString("base64");
+  } catch {
+    return undefined;
+  }
+})();
+
+// vCard lines fold at 75 characters, continuing on lines that start with a space.
+const fold = (line: string) => line.match(/.{1,74}/g)!.join("\r\n ");
+
+// Whichever Tab texts from: its number, its Apple Account email, or both,
+// with its logo and site.
 function vcard(name: string, phone?: string, email?: string): string {
   return [
     "BEGIN:VCARD",
@@ -499,6 +513,8 @@ function vcard(name: string, phone?: string, email?: string): string {
     `N:;${name};;;`,
     ...(phone ? [`TEL;type=CELL:${phone}`] : []),
     ...(email ? [`EMAIL;type=INTERNET:${email}`] : []),
+    "URL:https://addtab.app",
+    ...(CARD_PHOTO ? [fold(`PHOTO;ENCODING=b;TYPE=PNG:${CARD_PHOTO}`)] : []),
     "END:VCARD",
     "",
   ].join("\r\n");

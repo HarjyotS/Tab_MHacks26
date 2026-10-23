@@ -497,6 +497,10 @@ test("a Tab with no number sends a contact card with its Apple Account email", a
   const card = sender.calls[0]!.content;
   expect("file" in card && card.file.data.toString()).toContain("EMAIL;type=INTERNET:tab@addtab.app");
   expect("file" in card && card.file.data.toString()).not.toContain("TEL");
+  // Tab's logo, folded into 75-character lines.
+  const text = "file" in card ? card.file.data.toString() : "";
+  expect(text).toContain("PHOTO;ENCODING=b;TYPE=PNG:iVBORw0KGgo");
+  expect(text.split("\r\n").every((line) => line.length <= 75)).toBe(true);
   expect(hub.row(row.action_id)?.status).toBe("sent");
 });
 

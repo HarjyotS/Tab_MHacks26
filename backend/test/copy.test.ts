@@ -60,6 +60,12 @@ function renders(seed: string): {
       amounts: [4000],
     },
     {
+      purpose: "onboarding_intro",
+      group: true,
+      text: T.onboardingHowTo(seed),
+      amounts: [4000, 6300],
+    },
+    {
       purpose: "name_prompt",
       group: true,
       text: T.namePrompt(seed),

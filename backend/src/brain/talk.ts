@@ -4,10 +4,13 @@ import type { Debt } from "../copy/templates.js";
 import { listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
 import { ledgerUrl } from "./ledger.js";
-import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, splitMembers, styleFor, tapback } from "./context.js";
+import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, splitMembers, tapback } from "./context.js";
 import { addThread } from "./threads.js";
 
-// §7.2 step 2: intro, name prompt, and contact card for a new group.
+// §7.2 step 2: for a new group, hello, how it works, Tab's contact card, and
+// the name prompt, in that order: each a second after the one before, since
+// the bridge sends oldest first. No wit line here: it landed last, after the
+// card, and read like a non sequitur (Harjyot: "looks so chopped").
 export async function onboardNewGroups(ctx: BrainCtx) {
   for (const g of ctx.store
     .groups()
@@ -15,43 +18,23 @@ export async function onboardNewGroups(ctx: BrainCtx) {
     const id = `onboarding_intro:${g.group_id}`;
     if (alreadyQueued(ctx, id)) continue;
     const chat = { group_id: g.group_id };
-    const wit =
-      ctx.wit &&
-      (await ctx
-        .wit({
-          purpose: "onboarding_intro",
-          moment: "Tab was just added to this group chat",
-          allowed_names: [],
-          all_member_names: activeMembers(ctx, g.group_id)
-            .map((m) => m.name)
-            .filter((n): n is string => Boolean(n)),
-          style: styleFor(ctx, chat),
-          previous_had_wit: false,
-        })
-        .catch((err: unknown) => {
-          ctx.log("wit_failed", { group_id: g.group_id, error: String(err) });
-          return null;
-        }));
+    const at = (step: number) => new Date(ctx.now().getTime() + step * 1000);
+    await say(ctx, { chat, purpose: "onboarding_intro", id, text: T.onboardingIntro(g.group_id), send_after: at(0) });
     await say(ctx, {
       chat,
       purpose: "onboarding_intro",
-      id,
-      text: T.onboardingIntro(g.group_id),
-      wit: wit || null,
-    });
-    await say(ctx, {
-      chat,
-      purpose: "name_prompt",
-      id: `name_prompt:${g.group_id}`,
-      text: T.namePrompt(g.group_id),
+      id: `onboarding_howto:${g.group_id}`,
+      text: T.onboardingHowTo(g.group_id),
+      send_after: at(1),
     });
     await ctx.db.enqueue_outbox({
       action_id: `contact_card:${g.group_id}`,
       kind: "contact_card",
       group_id: g.group_id,
       purpose: "onboarding_intro",
-      send_after: ctx.now(),
+      send_after: at(2),
     });
+    await say(ctx, { chat, purpose: "name_prompt", id: `name_prompt:${g.group_id}`, text: T.namePrompt(g.group_id), send_after: at(3) });
   }
 }
 
