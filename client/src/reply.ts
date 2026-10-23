@@ -1,4 +1,4 @@
-import { NotSentError, peekTitle, runUiScript, uiScript } from "./messages-ui.ts";
+import { runUiScript, uiScript, withChatTitle } from "./messages-ui.ts";
 
 /** Sends text as an inline (threaded) reply to a message. `fits` checks Messages' window title (titleFits). */
 export interface Replier {
@@ -18,9 +18,7 @@ const LINES = uiScript("Reply to", ['keystroke "v" using command down', "delay 0
 export function uiReplier(): Replier {
   return {
     async reply(targetGuid, text, fits) {
-      const title = await peekTitle(targetGuid);
-      if (!fits(title)) throw new NotSentError(`NOT_SENT: Messages showed "${title}", not this chat`);
-      await runUiScript(LINES, [targetGuid, title, text], 12_000);
+      await withChatTitle(targetGuid, fits, (title) => runUiScript(LINES, [targetGuid, title, text], 12_000));
     },
   };
 }

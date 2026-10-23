@@ -113,6 +113,36 @@ export async function peekTitle(targetGuid: string, timeoutMs = 6_000): Promise<
   return out.trim();
 }
 
+// The last title titleFits accepted. Reading the title costs about 3s (the
+// VM, live), so a chat it's known for goes straight to the action, whose
+// own check still needs the window to show exactly this title.
+let knownTitle: string | undefined;
+
+/**
+ * Runs `act` with Messages' title for the target's chat: the remembered one
+ * when it fits, else a fresh read. If the remembered one turns out stale
+ * (the action sends nothing and says so), it reads the title and tries once more.
+ */
+export async function withChatTitle(
+  targetGuid: string,
+  fits: (title: string) => boolean,
+  act: (title: string) => Promise<void>,
+  peek: (guid: string) => Promise<string> = peekTitle,
+): Promise<void> {
+  if (knownTitle !== undefined && fits(knownTitle)) {
+    try {
+      return await act(knownTitle);
+    } catch (err) {
+      if (!(err instanceof NotSentError)) throw err;
+      knownTitle = undefined;
+    }
+  }
+  const title = await peek(targetGuid);
+  if (!fits(title)) throw new NotSentError(`NOT_SENT: Messages showed "${title}", not this chat`);
+  knownTitle = title;
+  await act(title);
+}
+
 const digits = (s: string) => {
   const d = s.replace(/\D/g, "");
   return d.length >= 10 ? d.slice(-10) : "";

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { titleFits } from "../src/messages-ui.ts";
+import { NotSentError, titleFits, withChatTitle } from "../src/messages-ui.ts";
 
 const VEGAS = { name: "Vegas Trip 26", handles: ["+14083103927", "+16692612230", "+14436367028", "+16692610502"] };
 
@@ -28,4 +28,25 @@ test("a DM fits by its one number, email, or a name for it", () => {
   expect(titleFits("c@d.com", { name: null, handles: ["a@b.com"] })).toBe(false);
   expect(titleFits("the house", dm)).toBe(false); // another chat's name
   expect(titleFits("Sam Lee & Joe Park", { name: null, handles: ["+15555550101", "+15555550102"] })).toBe(false);
+});
+
+test("a chat's title is read once, then reused while it fits, and read again when it's stale", async () => {
+  const fits = (t: string) => titleFits(t, VEGAS);
+  const seen: string[] = [];
+  let peeks = 0;
+  let window = "Maybe: Harjyot Sahni, +1 (408) 310-3927, +1 (669) 261-2230 & +1 (443) 636-7028";
+  const peek = async () => (peeks++, window);
+  const act = async (title: string) => {
+    if (title !== window) throw new NotSentError("NOT_SENT: title changed");
+    seen.push(title);
+  };
+  await withChatTitle("g1", fits, act, peek);
+  await withChatTitle("g2", fits, act, peek);
+  expect(peeks).toBe(1);
+  window = "Vegas Trip 26"; // someone saved the group's name
+  await withChatTitle("g3", fits, act, peek);
+  expect(peeks).toBe(2);
+  expect(seen).toEqual([seen[0]!, seen[0]!, "Vegas Trip 26"]);
+  // A title for another chat is never used for this one.
+  await expect(withChatTitle("x", (t) => t === "the house", act, async () => "Vegas Trip 26")).rejects.toBeInstanceOf(NotSentError);
 });
