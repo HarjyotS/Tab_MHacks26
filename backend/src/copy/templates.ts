@@ -37,6 +37,12 @@ export const onboardingHowTo = (seed: string) =>
   ]);
 
 // Follows the contact card, so "save my contact" points at it.
+// §7.2 again, for whoever never said their name, once the group is talking.
+export const nameReask = (who: string[]) =>
+  who.length === 1
+    ? `${who[0]} what's your name? reply w your first name so i stop calling you by your number`
+    : `still don't know ${listJoin(who)}, reply w your first name so i know who's who`;
+
 export const namePrompt = (seed: string) =>
   pick(seed, [
     `save my contact ${deco("☝️")} and reply w your first name so i know who's who`,
@@ -322,8 +328,15 @@ export function clarifyingQuestion(
       const { item, plural } = itemLabel(p.item);
       return `how much ${plural ? "were" : "was"} ${person ? `${displayName(person)}'s` : "the"} ${item}?`;
     }
-    case "unknown_name":
+    case "unknown_name": {
+      // With someone still unnamed, they're probably that person: the
+      // question lists their last 4 digits so anyone can answer with one
+      // (Harjyot's idea), and process.ts names that member.
+      const four = ctx.people.filter((x) => !x.name && !x.phone.startsWith("forgotten:")).map((x) => x.phone.slice(-4));
+      if (four.length === 1) return `wait who's ${p.name}? if it's …${four[0]} just reply ${four[0]}`;
+      if (four.length > 1) return `wait who's ${p.name}? reply w their last 4: ${four.slice(0, -1).join(", ")} or ${four.at(-1)}`;
       return `wait who's ${p.name}? don't think they're in here`;
+    }
     case "large_amount":
       return `${money(p.amount_cents)}${ctx.description ? ` for ${ctx.description}` : ""}? just making sure`;
     case "invalid_amount":

@@ -341,15 +341,28 @@ test("falls back to a normal message when Messages can't open the reply", async 
   expect(logs.some((l) => l.includes("couldn't reply in thread"))).toBe(true);
 });
 
-test("never tapbacks in a chat whose name can't be checked against Messages' window title", async () => {
+test("tapbacks in a chat with no name, checking its members against Messages' window title", async () => {
   const { fx, hub, tapbacker, bridge, turnOn } = setup();
   await turnOn();
   const dmMessage = fx.message({ chat: fx.dm(A), handle: A, text: "@tab what do I owe" });
   await bridge.poll();
-  const row = hub.enqueue({ kind: "reaction", to_phone: A, target_message_id: dmMessage, reaction: "like" });
-  await bridge.drainOutbox();
-  expect(tapbacker.calls).toHaveLength(0);
-  expect(hub.row(row.action_id)?.error).toContain("no name");
+  let fits: ((title: string) => boolean) | undefined;
+  const real = tapbacker.react.bind(tapbacker);
+  tapbacker.react = async (target, reaction, check) => {
+    fits = check;
+    return real(target, reaction, check);
+  };
+  hub.enqueue({ kind: "reaction", to_phone: A, target_message_id: dmMessage, reaction: "like" });
+  const reacted = tapbacker.nextReact();
+  const draining = bridge.drainOutbox();
+  await reacted;
+  await bridge.poll();
+  await draining;
+  expect(tapbacker.calls).toHaveLength(1);
+  expect(fits!("+1 (555) 555-0101")).toBe(true);
+  expect(fits!("Maybe: Sam Lee")).toBe(true);
+  expect(fits!("+1 (555) 555-0102")).toBe(false);
+  expect(fits!("the house")).toBe(false);
 });
 
 test("sends a normal message when the reply target is in a different chat", async () => {
@@ -541,4 +554,30 @@ test("without AUTO_JOIN, a new group stays off", async () => {
   await bridge.poll();
   expect(gate.groupEnabled(HOUSE)).toBe(false);
   expect(hub.ingested).toHaveLength(0);
+});
+
+test("a question about a cost that can't be an inline reply quotes the message it's about", async () => {
+  const { fx, hub, sender, replier, bridge, deliverNext, turnOn } = setup();
+  await turnOn();
+  const refund = fx.message({ chat: HOUSE, handle: A, text: "Also got a $16 refund from the hotel for the broken AC unit" });
+  fx.message({ chat: HOUSE, handle: B, text: "nice" });
+  await bridge.poll();
+  const row = hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "want me to split that?", target_message_id: refund, purpose: "clarifying_question" });
+  await deliverNext();
+  expect(replier.calls).toHaveLength(0); // not the newest message: Messages can't thread onto it
+  const sent = sender.calls[0]!.content;
+  expect("text" in sent && sent.text).toBe('re: "Also got a $16 refund from the hotel…"\nwant me to split that?');
+  expect(hub.row(row.action_id)).toMatchObject({ status: "sent" });
+});
+
+test("other replies that can't thread go out as they are", async () => {
+  const { fx, hub, sender, bridge, deliverNext, turnOn } = setup();
+  await turnOn();
+  const ask = fx.message({ chat: HOUSE, handle: A, text: "how much do i owe" });
+  fx.message({ chat: HOUSE, handle: B, text: "same" });
+  await bridge.poll();
+  hub.enqueue({ kind: "group_message", group_id: HOUSE, text: "you owe Joe $15.00", target_message_id: ask, purpose: "balance_reply" });
+  await deliverNext();
+  const sent = sender.calls[0]!.content;
+  expect("text" in sent && sent.text).toBe("you owe Joe $15.00");
 });

@@ -73,6 +73,85 @@ on run argv
 end run`.trim().split("\n").flatMap((line) => ["-e", line]);
 }
 
+/**
+ * Opens the message's chat and returns Messages' window title once it has
+ * held still for 0.3s. Sends nothing. The title isn't always the chat's name:
+ * on Tab's own Mac, with no contacts saved, a group shows its members
+ * ("Maybe: Harjyot Sahni, +1 (408) 310-3927 & …"), so callers check it with
+ * titleFits.
+ */
+const PEEK = `
+on run argv
+  open location "sms://open?message-guid=" & (item 1 of argv)
+  tell application "Messages" to activate
+  tell application "System Events" to tell process "Messages"
+    set lastTitle to ""
+    set steady to 0
+    repeat 40 times
+      if frontmost and (count of windows) > 0 then
+        set t to name of window 1
+        if t is lastTitle then
+          set steady to steady + 1
+          if steady is 3 then return t
+        else
+          set lastTitle to t
+          set steady to 0
+        end if
+      end if
+      delay 0.1
+    end repeat
+  end tell
+  error "NOT_SENT: Messages didn't open the chat"
+end run`.trim().split("\n").flatMap((line) => ["-e", line]);
+
+export async function peekTitle(targetGuid: string, timeoutMs = 6_000): Promise<string> {
+  const proc = Bun.spawn(["osascript", ...PEEK, targetGuid], { stdout: "pipe", stderr: "pipe" });
+  const timer = setTimeout(() => proc.kill(), timeoutMs);
+  const [code, out, err] = await Promise.all([proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
+  clearTimeout(timer);
+  if (code !== 0) throw new NotSentError(err.trim() || `NOT_SENT: couldn't read Messages' window (exit ${code})`);
+  return out.trim();
+}
+
+const digits = (s: string) => {
+  const d = s.replace(/\D/g, "");
+  return d.length >= 10 ? d.slice(-10) : "";
+};
+
+/**
+ * Whether Messages' window title shows this chat: its name, or its members
+ * the way Messages lists them when it has no name for the chat (comma and
+ * "&" separated, numbers formatted, contacts it knows as names). Every
+ * number shown must be a member's, and there must be one entry per member.
+ */
+export function titleFits(title: string, chat: { name: string | null; handles: string[] }): boolean {
+  if (chat.name && title === chat.name) return true;
+  const guessed = /^Maybe:\s*/i.test(title);
+  const entries = title
+    .replace(/^Maybe:\s*/i, "")
+    .split(/,\s*|\s+&\s+/)
+    .map((e) => e.trim())
+    .filter(Boolean);
+  if (entries.length === 0 || entries.length !== chat.handles.length) return false;
+  const numbers = new Set(chat.handles.map(digits).filter(Boolean));
+  const emails = new Set(chat.handles.filter((h) => h.includes("@")).map((h) => h.toLowerCase()));
+  let checked = 0;
+  for (const e of entries) {
+    if (e.includes("@")) {
+      if (!emails.delete(e.toLowerCase())) return false;
+      checked++;
+    } else if (digits(e)) {
+      if (!numbers.delete(digits(e))) return false;
+      checked++;
+    }
+    // Anything else is a name Messages has for one of the others.
+  }
+  // Names alone prove nothing ("the house" is another chat's name): at least
+  // one number or email has to match, or Messages has to be guessing names
+  // for unknown numbers ("Maybe: Sam Lee"), which a named chat never shows.
+  return checked > 0 || guessed;
+}
+
 /** Runs a UI script. Throws NotSentError when nothing was sent, Error when unsure. */
 export async function runUiScript(lines: string[], args: string[], timeoutMs: number): Promise<void> {
   const proc = Bun.spawn(["osascript", ...lines, ...args], { stdout: "ignore", stderr: "pipe" });

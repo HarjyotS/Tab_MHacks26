@@ -329,20 +329,27 @@ export async function say(
   return true;
 }
 
-// 👀 right away, while Grok reads the message (live chats only).
-export async function eyes(ctx: BrainCtx, m: { message_id: string; group_id?: string; sender_phone: string }): Promise<void> {
-  // Off unless TAB_EYES_MSG=on: Harjyot wants 👀 as a tapback, not a message in
-  // the chat, and replies take about two seconds on the fast model anyway.
-  if (!ctx.eyes || process.env.TAB_EYES_MSG !== "on") return;
-  await ctx.db.enqueue_outbox({
-    action_id: `eyes:${m.message_id}`,
-    kind: m.group_id ? "group_message" : "dm",
-    group_id: m.group_id,
-    to_phone: m.group_id ? undefined : m.sender_phone,
-    text: "👀",
-    purpose: "other",
-    send_after: ctx.now(),
-  });
+// The moment Tab decides to answer, before Grok reads the message: a 👍 on
+// it, so people see Tab is on it while the reply is worked out (Harjyot:
+// "use tapbacks while thinking and then respond with a reply"). It's the
+// same 👍 that later means "logged", so it never goes out twice, and a ❓
+// that follows replaces it. TAB_EYES=off turns it off (tests do), and
+// TAB_EYES_MSG=on sends the old 👀 message instead.
+export async function eyes(ctx: BrainCtx, m: Message): Promise<void> {
+  if (!ctx.eyes) return;
+  if (process.env.TAB_EYES_MSG === "on") {
+    await ctx.db.enqueue_outbox({
+      action_id: `eyes:${m.message_id}`,
+      kind: m.group_id ? "group_message" : "dm",
+      group_id: m.group_id,
+      to_phone: m.group_id ? undefined : m.sender_phone,
+      text: "👀",
+      purpose: "other",
+      send_after: ctx.now(),
+    });
+    return;
+  }
+  await tapback(ctx, m, "like");
 }
 
 // Tab's own unexpired question about this expense in this chat, in these

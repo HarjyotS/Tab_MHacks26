@@ -1,7 +1,7 @@
 // SPEC §7.2 onboarding and names, and §7.8 queries.
 import * as T from "../copy/templates.js";
 import type { Debt } from "../copy/templates.js";
-import { listJoin, money } from "../copy/format.js";
+import { displayName, listJoin, money } from "../copy/format.js";
 import type { Expense, Message } from "../store/types.js";
 import { ledgerUrl } from "./ledger.js";
 import { activeMembers, alreadyQueued, type BrainCtx, chatOf, say, splitMembers, tapback } from "./context.js";
@@ -35,6 +35,37 @@ export async function onboardNewGroups(ctx: BrainCtx) {
       send_after: at(2),
     });
     await say(ctx, { chat, purpose: "name_prompt", id: `name_prompt:${g.group_id}`, text: T.namePrompt(g.group_id), send_after: at(3) });
+  }
+}
+
+// §7.2 again: members who never said their name get asked once more, while
+// the group is talking (a message in the last 10 minutes): 20 minutes after
+// the first prompt, then every 6 hours, 3 times per group at most. A
+// forgotten or opted-out member isn't asked.
+const REASK_ACTIVE_MS = 10 * 60_000;
+const REASK_FIRST_MS = 20 * 60_000;
+const REASK_EVERY_MS = 6 * 3_600_000;
+const REASK_MAX = 3;
+
+export async function reaskNames(ctx: BrainCtx) {
+  const now = ctx.now().getTime();
+  for (const g of ctx.store.groups().filter((x) => x.onboarding_status === "active")) {
+    const unnamed = splitMembers(ctx, g.group_id).filter((x) => !x.name && !x.phone.startsWith("forgotten:"));
+    if (unnamed.length === 0) continue;
+    const prompts = ctx.store.outbox().filter((o) => o.group_id === g.group_id && o.purpose === "name_prompt");
+    const reasks = prompts.filter((o) => o.action_id.startsWith(`name_reask:${g.group_id}:`)).length;
+    const last = Math.max(0, ...prompts.map((o) => o.created_at.getTime()));
+    if (reasks >= REASK_MAX || now - last < (reasks === 0 ? REASK_FIRST_MS : REASK_EVERY_MS)) continue;
+    const talking = ctx.store
+      .messages()
+      .some((m) => m.group_id === g.group_id && m.kind === "text" && now - m.received_at.getTime() <= REASK_ACTIVE_MS);
+    if (!talking) continue;
+    await say(ctx, {
+      chat: { group_id: g.group_id },
+      purpose: "name_prompt",
+      id: `name_reask:${g.group_id}:${reasks + 1}`,
+      text: T.nameReask(unnamed.map((x) => displayName(x))),
+    });
   }
 }
 
