@@ -1,4 +1,4 @@
-import { NotSentError, peekTitle, runUiScript, uiScript } from "./messages-ui.ts";
+import { runUiScript, uiScript, withChatTitle } from "./messages-ui.ts";
 import type { Reaction } from "./types.ts";
 
 /**
@@ -31,14 +31,13 @@ export function uiTapbacker(): Tapbacker {
   const scripts = new Map<Reaction, string[]>();
   return {
     async react(targetGuid, reaction, fits) {
-      const title = await peekTitle(targetGuid);
-      if (!fits(title)) throw new NotSentError(`NOT_SENT: Messages showed "${title}", not this chat`);
       let lines = scripts.get(reaction);
       if (!lines) {
         lines = uiScript("Tapback", [`keystroke "${PICKER_KEY[reaction]}"`], false);
         scripts.set(reaction, lines);
       }
-      await runUiScript(lines, [targetGuid, title], 8_000);
+      const script = lines;
+      await withChatTitle(targetGuid, fits, (title) => runUiScript(script, [targetGuid, title], 8_000));
     },
   };
 }
