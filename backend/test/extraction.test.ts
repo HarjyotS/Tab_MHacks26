@@ -71,6 +71,20 @@ describe("extractExpense validation", () => {
     ]);
   });
 
+  it("takes the dollars as written when Grok gives them instead of cents (\"we paid 24,000\")", async () => {
+    const out = await extractExpense(fake(expenseRaw({ amount_cents: 24000, description: "EJ Entertainment" })), "m", input("Tab we paid 24,000 at EJ Entertainment"));
+    expect(out.result.amount_cents).toBe(2_400_000);
+    expect(out.problems.map((p) => p.kind)).toEqual(["large_amount"]); // still confirmed: it's a lot
+    const right = await extractExpense(fake(expenseRaw({ amount_cents: 4800 })), "m", input("got pizza, $48"));
+    expect(right.result.amount_cents).toBe(4800);
+    const fixed = await extractExpense(
+      fake(expenseRaw({ fixed: [{ name: "Kian", amount_cents: 3, item: "coke", only: true }] })),
+      "m",
+      input("kian only had a 3 dollar coke"),
+    );
+    expect(fixed.result.fixed).toEqual([{ phone: PHONES.Kian, amount_cents: 300, item: "coke" }]);
+  });
+
   it('marks "had" (not "only had") on a fixed item, and only when there is an item', async () => {
     const out = await extractExpense(
       fake(
