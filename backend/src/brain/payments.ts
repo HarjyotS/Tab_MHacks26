@@ -325,7 +325,7 @@ export async function reportFromText(ctx: BrainCtx, m: Message): Promise<void> {
   const text = m.text ?? "";
   const named = (o: Owe, phone: string) => {
     const name = person(ctx, o.group_id, phone).name;
-    return Boolean(name && new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text));
+    return Boolean(name && mentions(text, name));
   };
   // From the payee: "priya paid me", confirmed as it's said. Everything a
   // person owes them counts together (locked or already reported), and once
@@ -403,15 +403,28 @@ const EVERYONE_PAID = new RegExp(
   "i",
 );
 // A question ("has everyone paid?"), a plan ("once everyone pays"), a "not
-// yet", or everyone paying their own way: none of those paid the sender.
-const NOT_DONE = /\?|^\s*(?:has|have|did|is|are|was|were)\b|\b(?:not|never|yet|if|once|when|until|unless|before|almost|nearly|hopefully|should|will|gonna|soon|own|separately|themselves|individually)\b|n't\b/i;
+// yet", everyone paying their own way, or settling somewhere else ("we're
+// all settled in at the hotel"): none of those paid the sender.
+const NOT_DONE = /\?|^\s*(?:has|have|did|is|are|was|were)\b|\b(?:not|never|yet|if|once|when|until|unless|before|almost|nearly|hopefully|should|will|gonna|soon|own|separately|themselves|individually)\b|n't\b|\b(?:settled|squared)\s+(?:in|on|into|down|for|at|with)\b|\bpaid attention\b/i;
 
 export async function handleEveryonePaid(ctx: BrainCtx, m: Message): Promise<boolean> {
   const text = m.text ?? "";
   if (m.kind !== "text" || !linksMode(ctx) || !EVERYONE_PAID.test(text) || NOT_DONE.test(text)) return false;
-  const groups = m.group_id ? [m.group_id] : ctx.store.groups().map((g) => g.group_id).filter((g) => activeMembers(ctx, g).some((x) => x.phone === m.sender_phone));
-  const ours = owedTo(ctx, m.sender_phone, groups).filter((o) => !forgotten(o.debtor) && !aboutSomethingElse(text, o));
+  const mine = m.group_id ? [m.group_id] : ctx.store.groups().map((g) => g.group_id).filter((g) => activeMembers(ctx, g).some((x) => x.phone === m.sender_phone));
+  // Naming someone ("everyone paid joe back", "just venmo'd joe, we're all
+  // settled") is about them, so reportFromText reads it. And someone who
+  // still owes may mean they paid: never everyone paying them (review).
+  const others = mine.flatMap((g) => activeMembers(ctx, g)).filter((x) => x.phone !== m.sender_phone && x.name);
+  if (others.some((x) => mentions(text, x.name!)) || stillOwes(ctx, m.sender_phone, mine)) return false;
+  const ours = owedTo(ctx, m.sender_phone, mine).filter((o) => !forgotten(o.debtor) && !aboutSomethingElse(text, o));
   if (ours.length === 0) return false;
+  // By DM it could be any of their groups: only one owes them, or Tab asks.
+  const groups = [...new Set(ours.map((o) => o.group_id))];
+  if (!m.group_id && groups.length > 1) {
+    const names = groups.map((g) => ctx.store.group(g)?.display_name?.toLowerCase() ?? "your other group");
+    await say(ctx, { chat: { dm_phone: m.sender_phone }, purpose: "clarifying_question", id: `everyone_paid_which:${m.message_id}`, reply_to: m.message_id, text: T.everyonePaidWhich(names) });
+    return true;
+  }
   for (const o of ours)
     for (const { e } of o.items)
       await ctx.db.record_payment({ transfer_id: transferId(ctx, m, e, o.debtor), expense_id: e.expense_id, from_phone: o.debtor, message_id: m.message_id, provider: providerFor(ctx, o.payee, text) });
@@ -421,16 +434,30 @@ export async function handleEveryonePaid(ctx: BrainCtx, m: Message): Promise<boo
   return true;
 }
 
+const mentions = (text: string, name: string) =>
+  new RegExp(`(?<![\\p{L}\\p{N}])${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?![\\p{L}\\p{N}])`, "iu").test(text);
+
+// Whether this person owes anyone in these groups, or said they paid and
+// is waiting on the payee's word.
+function stillOwes(ctx: BrainCtx, phone: string, groups: string[]): boolean {
+  return ctx.store.expenses().some(
+    (e) =>
+      e.status === "finalized" && groups.includes(e.group_id) && e.payer_phone !== phone &&
+      ctx.store.shares(e.expense_id).some((s) => s.phone === phone && s.role === "participant" && s.amount_cents > 0 && ["locked", "disputed", "approved"].includes(s.status)),
+  );
+}
+
 // Everything each person owes this payee in these groups: locked shares,
 // disputed ones, and ones reported and waiting on the payee's word.
 function owedTo(ctx: BrainCtx, payee: string, groups: string[]): Owe[] {
   const out = new Map<string, Owe>();
   const add = (group_id: string, debtor: string, e: Expense, s: Share) => {
     if (debtor === payee) return;
-    const o = out.get(debtor) ?? { group_id, debtor, payee, items: [], cents: 0 };
+    const key = `${group_id}\n${debtor}`;
+    const o = out.get(key) ?? { group_id, debtor, payee, items: [], cents: 0 };
     o.items.push({ e, s });
     o.cents += s.amount_cents;
-    out.set(debtor, o);
+    out.set(key, o);
   };
   for (const e of ctx.store.expenses()) {
     if (e.status !== "finalized" || e.payer_phone !== payee || !groups.includes(e.group_id)) continue;

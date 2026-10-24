@@ -743,6 +743,10 @@ export function whichPayee(payees: Person[]): string {
 export const linkHint = () => "i texted you a link, just tap 👍 on it once it's sent";
 
 // "I just sent dhanush 30 bucks" when Dhanush owes the sender.
+// "everyone paid we are good" by DM, from someone two groups owe.
+export const everyonePaidWhich = (groups: string[]) =>
+  `which one, ${groups.length === 2 ? groups.join(" or ") : `${groups.slice(0, -1).join(", ")}, or ${groups.at(-1)}`}? say it in that group chat and i'll clear it`;
+
 export const paidWrongWay = (a: { name: string; cents: number }) =>
   `${a.name} owes you ${money(a.cents)}, you don't owe them. if ${a.name} paid you, say "${a.name.toLowerCase()} paid me"`;
 

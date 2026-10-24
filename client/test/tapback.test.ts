@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { NotSentError } from "../src/messages-ui.ts";
+import { NotOnScreenError, NotSentError } from "../src/messages-ui.ts";
 import { attempts, classicFor } from "../src/reactions.ts";
 import { axTapbacker, uiTapbacker } from "../src/tapback.ts";
 
@@ -29,6 +29,22 @@ test("tab-ax saying nothing happened is NOT_SENT, after one fresh look at the wi
   );
   await expect(t.react("G3", "👀", fits, "chat", undefined, bubble)).rejects.toBeInstanceOf(NotSentError);
   expect(runs).toBeGreaterThanOrEqual(1);
+  expect(peeks).toBeLessThanOrEqual(1);
+});
+
+test("a message that isn't on screen is NOT_SENT at once, without another look at the window", async () => {
+  let peeks = 0;
+  let runs = 0;
+  const t = axTapbacker(
+    async () => {
+      if (runs++ === 0) return "Thumbs up"; // the first one lands, and the title is learned
+      throw new NotOnScreenError("NOT_SENT: 0 bubbles with that text at 9:13 am");
+    },
+    async () => (peeks++, "Vegas Trip 26"),
+  );
+  await t.react("G0", "like", fits, "chat", undefined, bubble);
+  await expect(t.react("G6", "like", fits, "chat", undefined, bubble)).rejects.toBeInstanceOf(NotOnScreenError);
+  expect(runs).toBe(2);
   expect(peeks).toBeLessThanOrEqual(1);
 });
 

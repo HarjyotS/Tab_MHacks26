@@ -13,6 +13,9 @@ export class NotSentError extends Error {}
 /** A newer message came in while Tab was opening the picker or reply field: Messages would act on that one. */
 export class NotNewestError extends NotSentError {}
 
+/** The chat is open but the message isn't on screen (tab-ax): reading the title again won't help either. */
+export class NotOnScreenError extends NotNewestError {}
+
 /**
  * Step one of a two-step action: open the message's chat, check the title,
  * and choose the Edit menu item, leaving the picker or reply field open.

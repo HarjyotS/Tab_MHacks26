@@ -258,6 +258,49 @@ describe("payment links (§7.6): Tab never moves money", () => {
     expect(w.db.transfers()).toEqual([]);
   });
 
+  // Review: Priya owes Joe for pizza and is owed for groceries.
+  it("never reads it from someone who still owes, or as about someone it names", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    await w.say("Joe", "got pizza, $40");
+    const groceries = await w.say("Priya", "got groceries, $60");
+    await w.wait(31_000);
+    await w.say("Kian", "let's settle up");
+    const g = `exp_${groceries.message_id}`;
+    gateSays(w, { "just venmod joe, we're all settled": ["ignore", 0.9], "everyone paid joe back": ["ignore", 0.9] });
+    await w.say("Priya", "just venmod joe, we're all settled");
+    await w.say("Kian", "everyone paid joe back");
+    for (const who of ["Joe", "Kian", "Jake"] as const) expect(share(w, g, who).status).toBe("locked");
+    expect(w.db.transfers().filter((t) => t.to_phone === PEOPLE.Priya)).toEqual([]);
+  });
+
+  it('"settled in at the hotel" isn\'t paying anyone back', async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const { id } = await settled(w);
+    gateSays(w, { "ok we are all settled in at the hotel": ["ignore", 0.9], "everyone settled on tacos": ["ignore", 0.9] });
+    await w.say("Joe", "ok we are all settled in at the hotel");
+    await w.say("Joe", "everyone settled on tacos");
+    expect(share(w, id, "Priya").status).toBe("locked");
+    expect(w.db.transfers()).toEqual([]);
+  });
+
+  it("by DM, asks which group when two owe them, and clears neither", async () => {
+    const w = world(script);
+    w.ctx.payments = "links";
+    const { id } = await settled(w);
+    w.db.addGroup("dorm", [{ phone: PEOPLE.Joe, name: "Joe" }, { phone: PEOPLE.Kian, name: "Kian" }]);
+    const dorm = await w.say("Joe", "got pizza, $40", { group_id: "dorm" });
+    await w.wait(31_000);
+    await w.say("Kian", "let's settle up", { group_id: "dorm" });
+    expect(share(w, `exp_${dorm.message_id}`, "Kian").status).toBe("locked");
+    gateSays(w, { "everyone paid we are good": ["ignore", 0.9] });
+    await w.dm("Joe", "everyone paid we are good");
+    expect(share(w, id, "Priya").status).toBe("locked");
+    expect(share(w, `exp_${dorm.message_id}`, "Kian").status).toBe("locked");
+    expect(dmsTo(w, "Joe").at(-1)!.text).toMatch(/^which one, .+ or .+\? say it in that group chat and i'll clear it$/);
+  });
+
   // Vegas chat: "I just sent dhanush 30 bucks" while Dhanush owed the sender.
   it("never takes money sent to someone who owes you as their payment, and says so", async () => {
     const w = world(script);

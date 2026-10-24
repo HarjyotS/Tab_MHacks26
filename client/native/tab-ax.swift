@@ -3,15 +3,18 @@
 // Each message bubble in Messages (macOS 26) carries accessibility actions:
 // the six classic tapbacks ("Heart", "Thumbs up", …), the five most recent
 // emoji ("👀", "💸", …), "Reply…" and more. tab-ax opens the message's chat,
-// finds that one bubble by its text and time, and runs an action on it: no
-// tapback picker, and it works on any message on screen, not just the newest.
+// finds that one bubble by its exact text, minute, and side, and runs an
+// action on it: no tapback picker, and any message on screen, not just the
+// newest.
 //
 //   tab-ax react <guid> <window title> <text> <epoch s> <mine 0|1> <action> [fallback action…]
 //   (action "?" only finds the bubble and prints it)
 //   tab-ax list [window title]
 //
 // Exit 0: done, prints the action used. Exit 2: nothing happened (stderr says
-// why: wrong chat, no such bubble, no such action). Exit 1: anything else.
+// why: wrong chat, no such action). Exit 3: nothing happened, the chat is
+// open but that message isn't on screen (Messages opens a chat at its
+// newest messages, not at the one linked). Exit 1: anything else.
 // Built by ops/install.sh and ops/update.sh with swiftc; needs the
 // Accessibility permission of the process that runs it (the bridge's bun).
 
@@ -34,8 +37,10 @@ func label(_ action: String) -> String? {
   return action.dropFirst(5).split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init)
 }
 // Attachments stay as U+FFFC, the same mark chat.db and the labels use.
+// Times use a narrow no-break space ("1:58\u{202F}PM").
 func norm(_ s: String) -> String {
-  s.replacingOccurrences(of: "\u{2019}", with: "'").replacingOccurrences(of: "\u{2018}", with: "'")
+  s.replacingOccurrences(of: "\u{202F}", with: " ").replacingOccurrences(of: "\u{00A0}", with: " ")
+    .replacingOccurrences(of: "\u{2019}", with: "'").replacingOccurrences(of: "\u{2018}", with: "'")
     .replacingOccurrences(of: "\u{201C}", with: "\"").replacingOccurrences(of: "\u{201D}", with: "\"")
     .lowercased().components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }.joined(separator: " ")
 }
@@ -52,11 +57,16 @@ func find(_ e: AXUIElement, id: String, depth: Int = 0) -> AXUIElement? {
 }
 // A bubble is the element with a description like "Maybe: Dhanush Ekollu,
 // ok bet, 2:00 PM" ("Your iMessage, …" for Tab's own, "…, ￼, …" for a photo)
-// that carries the tapback actions. A reply's quote of its parent ("…, Reply
-// Preview, <parent text>, …") is one too, and is never the message itself.
-func bubbles(_ e: AXUIElement, depth: Int = 0, into out: inout [(AXUIElement, String)]) {
+// that carries the tapback actions; its text view's value is exactly the
+// message's text. A reply's quote of its parent ("…, Reply Preview,
+// <parent text>, …") is one too, and is never the message itself.
+struct Bubble { let element: AXUIElement; let desc: String; let text: String? }
+func bubbles(_ e: AXUIElement, depth: Int = 0, into out: inout [Bubble]) {
   if let d = str(e, kAXDescriptionAttribute), actionNames(e).contains(where: { label($0) == "Thumbs up" }) {
-    if !norm(d).contains(", reply preview, ") { out.append((e, d)) }
+    if !norm(d).contains(", reply preview, ") {
+      let textView = find(e, id: "CKBalloonTextView", depth: 9)
+      out.append(Bubble(element: e, desc: d, text: textView.flatMap { str($0, kAXValueAttribute) }))
+    }
     return
   }
   if depth > 4 { return }
@@ -79,9 +89,9 @@ func window(titled title: String?) -> AXUIElement? {
   guard let title else { return wins.first }
   return wins.first { str($0, kAXTitleAttribute) == title }
 }
-func bubblesIn(_ win: AXUIElement) -> [(AXUIElement, String)] {
+func bubblesIn(_ win: AXUIElement) -> [Bubble] {
   guard let transcript = find(win, id: "TranscriptCollectionView") else { return [] }
-  var all: [(AXUIElement, String)] = []
+  var all: [Bubble] = []
   bubbles(transcript, into: &all)
   return all
 }
@@ -89,8 +99,8 @@ func bubblesIn(_ win: AXUIElement) -> [(AXUIElement, String)] {
 if args[1] == "list" {
   guard let win = window(titled: args.count > 2 ? args[2] : nil) else { fail(2, "NOT_SENT: no such window") }
   print("window:", str(win, kAXTitleAttribute) ?? "")
-  for (e, d) in bubblesIn(win) {
-    print(d.replacingOccurrences(of: "\n", with: " / "), "|", actionNames(e).compactMap(label).joined(separator: ","))
+  for b in bubblesIn(win) {
+    print(b.desc.replacingOccurrences(of: "\n", with: " / "), "|", actionNames(b.element).compactMap(label).joined(separator: ","))
   }
   exit(0)
 }
@@ -103,14 +113,17 @@ fmt.locale = Locale.current
 fmt.dateFormat = DateFormatter.dateFormat(fromTemplate: "jmm", options: 0, locale: Locale.current)
 let time = norm(fmt.string(from: Date(timeIntervalSince1970: Double(args[5]) ?? 0)))
 
-// The bubbles whose description is "<sender>, <text>, …" with this text,
-// from the right side. A photo alone is "￼", so photos match by side and time.
-func matching(_ all: [(AXUIElement, String)]) -> [(AXUIElement, String)] {
+// A photo with a caption shows as two bubbles: the caption's is the one.
+let caption: String? = text.contains("\u{FFFC}") ? Optional(norm(text.replacingOccurrences(of: "\u{FFFC}", with: " "))).flatMap { $0.isEmpty ? nil : $0 } : nil
+
+// The bubbles with exactly this text (or caption), sent at this minute, from
+// this side ("Your iMessage" is Tab's). A photo alone is "￼".
+func matching(_ all: [Bubble]) -> [Bubble] {
   guard !text.isEmpty else { return [] }
-  return all.filter { (_, d) in
-    let n = norm(d)
-    guard n.hasPrefix("your imessage, ") == mine else { return false }
-    return n.contains(", " + text + ",") || n.hasSuffix(", " + text)
+  return all.filter { b in
+    let d = norm(b.desc)
+    guard d.hasPrefix("your imessage, ") == mine, d.contains(time), let shown = b.text.map(norm) else { return false }
+    return shown == text || shown == caption
   }
 }
 
@@ -118,27 +131,29 @@ func matching(_ all: [(AXUIElement, String)]) -> [(AXUIElement, String)] {
 guard let url = URL(string: "sms://open?message-guid=\(guid)") else { fail(1, "bad guid") }
 NSWorkspace.shared.open(url)
 messages.activate()
-var pick: (AXUIElement, String)?
+var pick: Bubble?
 var seen = "nothing"
-let deadline = Date().addingTimeInterval(5)
+var deadline = Date().addingTimeInterval(5)
+var chatOpen = false
 while Date() < deadline {
   if let win = window(titled: title) {
+    // Once the chat shows, its newest messages are on screen within moments.
+    if !chatOpen { chatOpen = true; deadline = min(deadline, Date().addingTimeInterval(2)) }
+    // Two such bubbles (the same words, side, and minute): neither, rather than a guess.
     let found = matching(bubblesIn(win))
-    // Two bubbles with the same text from the same side: the time decides, or nothing does.
-    let timed = found.filter { norm($0.1).contains(time) }
     if found.count == 1 { pick = found[0]; break }
-    if timed.count == 1 { pick = timed[0]; break }
-    seen = "\(found.count) bubbles with that text (\(timed.count) at \(time))"
+    seen = "\(found.count) bubbles with that text at \(time)"
   } else {
     seen = "no window titled \(title)"
   }
   usleep(150_000)
 }
-guard let (bubble, desc) = pick else { fail(2, "NOT_SENT: \(seen)") }
+guard let pick else { fail(chatOpen ? 3 : 2, "NOT_SENT: \(seen)") }
+let bubble = pick.element
 let available = actionNames(bubble)
 // "?" finds the bubble and stops: a dry run.
 if wanted == ["?"] {
-  print(desc.replacingOccurrences(of: "\n", with: " / "), "|", available.compactMap(label).joined(separator: ","))
+  print(pick.desc.replacingOccurrences(of: "\n", with: " / "), "|", available.compactMap(label).joined(separator: ","))
   exit(0)
 }
 for w in wanted {

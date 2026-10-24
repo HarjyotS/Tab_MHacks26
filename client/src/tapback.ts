@@ -1,4 +1,4 @@
-import { dismissPicker, finishScript, NotSentError, openScript, twoStep, withChatTitle } from "./messages-ui.ts";
+import { dismissPicker, finishScript, NotOnScreenError, NotSentError, openScript, twoStep, withChatTitle } from "./messages-ui.ts";
 import { actionFor, attempts, classicFor, reactionForAction } from "./reactions.ts";
 import type { ClassicReaction, Reaction } from "./types.ts";
 
@@ -74,7 +74,7 @@ export function uiTapbacker(): Tapbacker {
 
 export type RunAx = (args: string[], timeoutMs: number) => Promise<string>;
 
-/** Runs tab-ax. Exit 2 is NOT_SENT: it says nothing happened. */
+/** Runs tab-ax. Exits 2 and 3 are NOT_SENT: nothing happened (3: the message isn't on screen). */
 export function runTabAx(bin: string): RunAx {
   return async (args, timeoutMs) => {
     const proc = Bun.spawn([bin, ...args], { stdout: "pipe", stderr: "pipe" });
@@ -86,6 +86,7 @@ export function runTabAx(bin: string): RunAx {
     const [code, out, err] = await Promise.all([proc.exited, new Response(proc.stdout).text(), new Response(proc.stderr).text()]);
     clearTimeout(timer);
     if (code === 0) return out.trim();
+    if (!killed && code === 3) throw new NotOnScreenError(err.trim() || "NOT_SENT: that message isn't on screen");
     if (!killed && code === 2) throw new NotSentError(err.trim() || "NOT_SENT: tab-ax did nothing");
     throw new Error(killed ? `tab-ax timed out after ${timeoutMs} ms` : `tab-ax exited ${code}: ${err.trim()}`);
   };
