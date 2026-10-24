@@ -86,7 +86,7 @@ async function ask(
 }
 
 // Problems Tab can't resolve by asking for a missing fact.
-const CONFIRM = new Set<Problem["kind"]>(["large_amount"]);
+export const CONFIRM = new Set<Problem["kind"]>(["large_amount"]);
 
 // SPEC §7.3: extract, validate, then propose or ask.
 export async function handleExpense(

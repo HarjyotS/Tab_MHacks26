@@ -7,7 +7,7 @@ import type { Expense, Message } from "../store/types.js";
 import { activeMembers, type BrainCtx, chatKey, chatOf, eyes, type Pending, perExpense, say, tapback } from "./context.js";
 
 const SLOW = new Set<Intent>(["expense", "receipt", "split_adjustment", "correction", "money_question"]);
-import { agreesWithSplit, applyAdjustment, applyOrExplain, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
+import { agreesWithSplit, applyAdjustment, applyOrExplain, CONFIRM, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
 import { staleExpenses } from "./ghosting.js";
 import { handleEveryonePaid, handlePaymentDm, linksMode, reportFromText } from "./payments.js";
@@ -1057,7 +1057,11 @@ async function answerExpense(ctx: BrainCtx, m: Message, t: Thread, answer: strin
   // the first message (§7.5).
   const expense = p.kind === "adjustment" ? ctx.store.expense(p.expense_id) : undefined;
   const retry = expense ? priceChange(ctx, expense, extracted, { text: answer, problem: p.problems[0] }) : extracted;
-  if (retry.problems.length >= p.problems.length) return false; // didn't help
+  // A new expense's large amount is a fact found, not a problem left: the
+  // "just making sure" check follows (Vegas chat: "It was $24000" to "how
+  // much was the ej entertainment?" got "didn't catch that").
+  const left = (ps: typeof retry.problems) => (p.kind === "expense" ? ps.filter((x) => !CONFIRM.has(x.kind)) : ps).length;
+  if (left(retry.problems) >= left(p.problems)) return false; // didn't help
   closeThread(ctx, chatOf(m), t);
   if (p.kind === "adjustment") {
     if (!expense) return true;
