@@ -109,7 +109,7 @@ export async function handleRename(ctx: BrainCtx, m: Message): Promise<boolean> 
   }
   const from = displayName(target);
   await ctx.db.set_member_name({ member_id: target.member_id, name });
-  await tapback(ctx, m, "like");
+  await tapback(ctx, m, "🫡");
   await say(ctx, { chat: chatOf(m), purpose: "other", id: `renamed:${m.message_id}`, reply_to: m.message_id, text: T.renamed({ from, to: name }) });
   ctx.log("member_renamed", { message_id: m.message_id, group_id: m.group_id });
   return true;
@@ -141,7 +141,7 @@ export async function handleNameReply(ctx: BrainCtx, m: Message) {
     member_id: `${m.group_id}:${m.sender_phone}`,
     name,
   });
-  await tapback(ctx, m, "like");
+  await tapback(ctx, m, "🫡");
   // §7.2 step 5: active once every known member is named (anyone who
   // texted STOP isn't waited on).
   const members = splitMembers(ctx, m.group_id);

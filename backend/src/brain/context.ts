@@ -3,7 +3,7 @@
 import type { Classify, GateMessage, Intent, PhotoNote } from "@tab/gate";
 import { CONTEXT_MESSAGES, type LedgerConfig, type Timing } from "../config.js";
 import type { BackendReducers } from "../db/reducers.js";
-import type { OutboxPurpose, Reaction } from "../db/types.js";
+import type { EmojiReaction, OutboxPurpose, Reaction } from "../db/types.js";
 import { compose } from "../copy/compose.js";
 import { styleFlags, styleFromFlags, type GroupStyle, type StyleFlags } from "../copy/style.js";
 import type { WitContext } from "../copy/wit.js";
@@ -329,12 +329,11 @@ export async function say(
   return true;
 }
 
-// The moment Tab decides to answer, before Grok reads the message: a 👍 on
+// The moment Tab decides to answer, before Grok reads the message: a 👀 on
 // it, so people see Tab is on it while the reply is worked out (Harjyot:
-// "use tapbacks while thinking and then respond with a reply"). It's the
-// same 👍 that later means "logged", so it never goes out twice, and a ❓
-// that follows replaces it. TAB_EYES=off turns it off (tests do), and
-// TAB_EYES_MSG=on sends the old 👀 message instead.
+// "use the eyes emoji while thinking"). One tapback per person per message,
+// so the one that says how it went (👍, ❓, 💸, …) replaces it. TAB_EYES=off
+// turns it off (tests do), and TAB_EYES_MSG=on sends a 👀 message instead.
 export async function eyes(ctx: BrainCtx, m: Message): Promise<void> {
   if (!ctx.eyes) return;
   if (process.env.TAB_EYES_MSG === "on") {
@@ -349,7 +348,7 @@ export async function eyes(ctx: BrainCtx, m: Message): Promise<void> {
     });
     return;
   }
-  await tapback(ctx, m, "like");
+  await tapback(ctx, m, "👀");
 }
 
 // Tab's own unexpired question about this expense in this chat, in these
@@ -364,11 +363,14 @@ function stillAsking(ctx: BrainCtx, chat: Chat, expense_id: string, text: string
   );
 }
 
-// SPEC §13: Like = logged or understood; Question = not sure, a question follows.
+// SPEC §13: 👍 = logged or understood; ❓ = not sure, a question follows.
+// Emoji for the rest (Harjyot: "different reactions for different
+// thoughts"): 👀 working on it, 💸 money sent, 🤑 money came in, 🎉 all
+// paid up, 🫡 got your name.
 export async function tapback(
   ctx: BrainCtx,
   m: Message,
-  reaction: Extract<Reaction, "like" | "question">,
+  reaction: Extract<Reaction, "like" | "question"> | EmojiReaction,
   expense_id?: string,
 ) {
   await ctx.db.enqueue_outbox({

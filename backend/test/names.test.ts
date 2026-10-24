@@ -105,16 +105,28 @@ describe("names Tab doesn't know yet", () => {
 });
 
 describe("thinking tapback", () => {
-  it("likes a message Tab will answer before working on the reply, once", async () => {
+  it("puts 👀 on a message Tab will answer before working on the reply, once", async () => {
     const w = world(script);
     w.ctx.eyes = true;
     await w.say("Joe", "got pizza, $48");
     const mine = w.db.outbox().filter((o) => o.target_message_id && w.db.messages().some((m) => m.message_id === o.target_message_id && m.text === "got pizza, $48"));
-    const likes = mine.filter((o) => o.kind === "reaction" && o.reaction === "like");
-    expect(likes).toHaveLength(1);
+    const eyes = mine.filter((o) => o.kind === "reaction" && o.reaction === "👀");
+    expect(eyes).toHaveLength(1);
     const order = w.db.outbox().map((o) => o.action_id);
     const proposal = order.findIndex((id) => id.startsWith("split_proposal:"));
-    expect(order.indexOf(likes[0]!.action_id)).toBeLessThan(proposal);
+    expect(order.indexOf(eyes[0]!.action_id)).toBeLessThan(proposal);
+  });
+
+  // Vegas chat: "ok everyone paid" (unsure) and "its all been settled" (an
+  // answer to nothing) each got a 👍, and nothing changed.
+  it("puts nothing on a message Tab is only unsure about, or an answer to nothing open", async () => {
+    const w = world(script);
+    w.ctx.eyes = true;
+    w.ctx.classify = async (input) =>
+      input.message.text === "sent it to him" ? { intent: "payment_reported", confidence: 0.53 } : { intent: "answer", confidence: 0.9 };
+    await w.say("Joe", "sent it to him");
+    await w.say("Joe", "fr");
+    expect(w.db.outbox().filter((o) => o.kind === "reaction")).toHaveLength(0);
   });
 
   it("stays quiet on chatter", async () => {
@@ -135,24 +147,24 @@ describe("name replies the gate calls chatter", () => {
       purpose: "name_prompt", send_after: w.ctx.now(), status: "sent", created_at: w.ctx.now(),
     });
     const liked = (text: string) => {
-      const m = w.db.messages().find((x) => x.message_id && w.db.outbox().some((o) => o.target_message_id === x.message_id && o.reaction === "like") && (x.text ?? "").toLowerCase() === text.toLowerCase());
+      const m = w.db.messages().find((x) => x.message_id && w.db.outbox().some((o) => o.target_message_id === x.message_id && o.reaction === "🫡") && (x.text ?? "").toLowerCase() === text.toLowerCase());
       return Boolean(m);
     };
     return { w, liked };
   }
 
-  it("likes someone Tab knows saying their name again", async () => {
+  it("salutes someone Tab knows saying their name again", async () => {
     const { w } = afterPrompt();
     await w.say("Joe", "Joe");
-    expect(w.db.outbox().filter((o) => o.kind === "reaction" && o.reaction === "like")).toHaveLength(1);
+    expect(w.db.outbox().filter((o) => o.kind === "reaction" && o.reaction === "🫡")).toHaveLength(1);
     expect(w.db.members(GROUP).find((m) => m.phone === PEOPLE.Joe)?.name).toBe("Joe");
   });
 
-  it("names someone Tab didn't know from a bare first name, with a like", async () => {
+  it("names someone Tab didn't know from a bare first name, with a 🫡", async () => {
     const { w } = afterPrompt();
     await processMessage(w.ctx, w.db.ingest({ sender_phone: DHANUSH, group_id: GROUP, text: "dhanush" }));
     expect(w.db.members(GROUP).find((m) => m.phone === DHANUSH)?.name).toBe("Dhanush");
-    expect(w.db.outbox().filter((o) => o.kind === "reaction" && o.reaction === "like")).toHaveLength(1);
+    expect(w.db.outbox().filter((o) => o.kind === "reaction" && o.reaction === "🫡")).toHaveLength(1);
   });
 
   it("leaves chatter, someone else's name, and late answers alone", async () => {

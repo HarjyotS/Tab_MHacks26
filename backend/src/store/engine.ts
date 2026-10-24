@@ -708,7 +708,8 @@ export class Engine implements Store {
         if (!message || (message.sender_phone !== a.fromPhone && !byPayee)) throw new Error("Only the two people involved can report a payment");
         const share = this.shrs.get(`${a.expenseId}:${a.fromPhone}`);
         if (share?.status === "paid") return;
-        if (!share || share.role !== "participant" || !(share.status === "locked" || (byPayee && share.status === "approved"))) {
+        // The payee's word also ends a dispute: they say it's paid.
+        if (!share || share.role !== "participant" || !(share.status === "locked" || (byPayee && (share.status === "approved" || share.status === "disputed")))) {
           throw new Error("Share is not payable");
         }
         // The payee's word settles any earlier unconfirmed report of the same share.

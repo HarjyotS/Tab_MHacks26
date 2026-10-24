@@ -11,6 +11,8 @@ export interface RawMessage {
   item_type: number;
   associated_message_type: number | null;
   associated_message_guid: string | null;
+  /** The emoji of an emoji tapback (associated_message_type 2006); macOS 15 and later. */
+  associated_message_emoji?: string | null;
   thread_originator_guid: string | null;
   cache_has_attachments: number;
   /** Sender for inbound rows; the recipient for outbound DMs; null for outbound group rows. */
@@ -70,7 +72,7 @@ export class ChatDb implements ChatSource {
     this.messageSelect = `
       SELECT m.ROWID AS rowid, m.guid, m.text, m.attributedBody, m.is_from_me, m.date,
              m.item_type, m.associated_message_type, m.associated_message_guid,
-             ${optional("thread_originator_guid")}, m.cache_has_attachments,
+             ${optional("associated_message_emoji")}, ${optional("thread_originator_guid")}, m.cache_has_attachments,
              h.id AS handle, c.guid AS chat_guid, c.chat_identifier, c.style AS chat_style
       FROM message m
       LEFT JOIN handle h ON h.ROWID = m.handle_id

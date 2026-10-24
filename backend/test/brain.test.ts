@@ -47,6 +47,8 @@ const GROK: Record<string, object> = {
     amount_cents: 2200,
     description: "Uber",
   },
+  "new|venmo me for ej entertainment": { ...base, description: "EJ Entertainment" },
+  "new|venmo me for ej entertainment\nIt was $24000": { ...base, amount_cents: 2400000, description: "EJ Entertainment" },
   "new|pizza was $48 lol": {
     ...base,
     amount_cents: 4800,
@@ -351,6 +353,16 @@ describe("Tab's questions (SPEC 7.3 step 2)", () => {
       payer_phone: KIAN,
       status: "proposed",
     });
+  });
+
+  // Vegas chat: "It was $24000" got "didn't catch that", then silence.
+  it("takes a large answered amount, after one just-making-sure", async () => {
+    await send(KIAN, "venmo me for ej entertainment");
+    expect(said("clarifying_question")).toEqual(["how much was the ej entertainment?"]);
+    await send(KIAN, "It was $24000");
+    expect(said("clarifying_question").at(-1)).toBe("$24,000.00 for ej entertainment? just making sure");
+    await send(KIAN, "yes");
+    expect(db.expenses()[0]).toMatchObject({ total_cents: 2400000, payer_phone: KIAN, status: "proposed" });
   });
 
   it("asks who paid, and takes the answer from the person it asked", async () => {

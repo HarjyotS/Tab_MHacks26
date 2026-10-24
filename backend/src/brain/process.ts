@@ -7,10 +7,10 @@ import type { Expense, Message } from "../store/types.js";
 import { activeMembers, type BrainCtx, chatKey, chatOf, eyes, type Pending, perExpense, say, tapback } from "./context.js";
 
 const SLOW = new Set<Intent>(["expense", "receipt", "split_adjustment", "correction", "money_question"]);
-import { agreesWithSplit, applyAdjustment, applyOrExplain, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
+import { agreesWithSplit, applyAdjustment, applyOrExplain, CONFIRM, groupFor, handleAdjustment, handleExpense, keepSplit, latestOpen, PRESENCE, priceChange, proposeNew } from "./expense.js";
 import { describePhotos, extractInput, gateInput, remember, repliedExpense } from "./inputs.js";
 import { staleExpenses } from "./ghosting.js";
-import { handlePaymentDm, linksMode, reportFromText } from "./payments.js";
+import { handleEveryonePaid, handlePaymentDm, linksMode, reportFromText } from "./payments.js";
 import { handlePersonCommand } from "./people.js";
 import { askReceipt, askWhichItems, claimFollowups, claimTargets, handleClaim, handleReceipt, proposeReceipt } from "./receipt.js";
 import {
@@ -138,6 +138,8 @@ const FALLBACK_MIN_CONFIDENCE = 0.3;
 // Talk about an open split or receipt ("update it", "same as before"): still
 // worth a question even below the clarify bar, while something is open.
 const SPLIT_TALK = new Set<string>(["split_adjustment", "name_reply", "claim"]);
+// Intents whose act often ends in nothing: no 👀 up front for these.
+const OFTEN_NOTHING = new Set<string>(["answer", "payment_reported", "ignore"]);
 
 // Why a message that got no reply and changed nothing should still get one
 // (Harjyot: "it just gives up"), or undefined to stay quiet (P1). Chatter
@@ -206,6 +208,12 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       await ctx.db.set_message_result({ message_id: m.message_id, intent: "payment_reported", status: "done" });
       return;
     }
+    // "ok everyone paid" from the person they owe: everyone's paid back.
+    // The gate read these as unsure chatter (Vegas chat), so it's checked first.
+    if (await handleEveryonePaid(ctx, m)) {
+      await ctx.db.set_message_result({ message_id: m.message_id, intent: "payment_reported", status: "done" });
+      return;
+    }
     if (m.kind === "reaction") {
       await routeReaction(ctx, m); // §6.2: never classified
     } else {
@@ -251,8 +259,12 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
         decision = "act";
       }
       const moneyRelated = decision !== "ignore" && MONEY_INTENTS.has(intent) && intent !== "answer";
-      // Tab is going to answer this: 👍 now, the reply when it's ready.
-      if (decision !== "ignore" && m.kind === "text") await eyes(ctx, m);
+      // Tab is going to act on this: 👀 now, the reply when it's ready. Not
+      // when it's only unsure (clarify often stays quiet), nor for an answer
+      // or a payment report, which often change nothing: a 👀 or 👍 left on a
+      // message Tab then did nothing with read as "done" (Vegas chat: "ok
+      // everyone paid" got a 👍 and the balances never moved).
+      if (decision === "act" && m.kind === "text" && !OFTEN_NOTHING.has(intent)) await eyes(ctx, m);
       ctx.log("classified", {
         message_id: m.message_id, group_id: m.group_id, intent, confidence, decision,
         prefiltered: result.prefiltered === true,
@@ -293,7 +305,9 @@ export async function processMessage(base: BrainCtx, raw: Message): Promise<void
       if (!breakdown && !answered && !why && !ledger && !photoAmount) {
         try {
           // These go to Grok and take a few seconds: 👀 first.
-          if ((decision === "act" && SLOW.has(result.intent)) || (decision !== "ignore" && result.intent === "money_question")) await eyes(ctx, m);
+          // An unsure question gets an answer only when it's put to Tab (clarify).
+          const answering = decision === "act" || (decision === "clarify" && askingTab(ctx, m));
+          if ((decision === "act" && SLOW.has(result.intent)) || (answering && result.intent === "money_question")) await eyes(ctx, m);
           if (decision === "act") await act(ctx, m, result.intent);
           else if (decision === "clarify") await clarify(ctx, m, result.intent, undefined, result.confidence);
         } catch (err) {
@@ -705,7 +719,7 @@ async function nameFromDigits(ctx: BrainCtx, m: Message, open: Thread[]): Promis
   const name = problem?.kind === "unknown_name" ? parseName(problem.name) : undefined;
   if (!name) return false;
   await ctx.db.set_member_name({ member_id: matches[0]!.member_id, name });
-  await tapback(ctx, m, "like");
+  await tapback(ctx, m, "🫡");
   ctx.log("named_by_digits", { message_id: m.message_id, group_id: m.group_id });
   await answerExpense(ctx, m, t, "");
   return true;
@@ -1043,7 +1057,11 @@ async function answerExpense(ctx: BrainCtx, m: Message, t: Thread, answer: strin
   // the first message (§7.5).
   const expense = p.kind === "adjustment" ? ctx.store.expense(p.expense_id) : undefined;
   const retry = expense ? priceChange(ctx, expense, extracted, { text: answer, problem: p.problems[0] }) : extracted;
-  if (retry.problems.length >= p.problems.length) return false; // didn't help
+  // A new expense's large amount is a fact found, not a problem left: the
+  // "just making sure" check follows (Vegas chat: "It was $24000" to "how
+  // much was the ej entertainment?" got "didn't catch that").
+  const left = (ps: typeof retry.problems) => (p.kind === "expense" ? ps.filter((x) => !CONFIRM.has(x.kind)) : ps).length;
+  if (left(retry.problems) >= left(p.problems)) return false; // didn't help
   closeThread(ctx, chatOf(m), t);
   if (p.kind === "adjustment") {
     if (!expense) return true;

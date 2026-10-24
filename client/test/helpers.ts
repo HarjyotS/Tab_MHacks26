@@ -5,8 +5,9 @@ import { join } from "node:path";
 import type { Outgoing, Sender, Target } from "../src/sender.ts";
 import { NotSentError } from "../src/messages-ui.ts";
 import type { Replier } from "../src/reply.ts";
-import type { Tapbacker } from "../src/tapback.ts";
-import type { Reaction } from "../src/types.ts";
+import type { Bubble, Tapbacker } from "../src/tapback.ts";
+import { isTabEmoji } from "../src/reactions.ts";
+import type { ClassicReaction, Reaction } from "../src/types.ts";
 
 /** Real NSAttributedString typedstreams, archived on macOS with NSArchiver. */
 export const ATTRIBUTED_BODIES = readFileSync(join(import.meta.dir, "fixtures", "attributed-body.b64"), "utf8")
@@ -27,6 +28,7 @@ interface NewMessage {
   itemType?: number;
   associatedType?: number;
   associatedGuid?: string;
+  associatedEmoji?: string;
   threadOriginator?: string;
   hasAttachments?: boolean;
 }
@@ -50,7 +52,7 @@ export class FakeMessages {
                             attributedBody BLOB, handle_id INTEGER DEFAULT 0, is_from_me INTEGER DEFAULT 0,
                             date INTEGER DEFAULT 0, item_type INTEGER DEFAULT 0,
                             associated_message_type INTEGER DEFAULT 0, associated_message_guid TEXT,
-                            cache_has_attachments INTEGER DEFAULT 0
+                            associated_message_emoji TEXT, cache_has_attachments INTEGER DEFAULT 0
                             ${opts.threadColumn === false ? "" : ", thread_originator_guid TEXT"});
       CREATE TABLE attachment (ROWID INTEGER PRIMARY KEY AUTOINCREMENT, guid TEXT, filename TEXT, mime_type TEXT,
                                uti TEXT, transfer_state INTEGER DEFAULT 0);
@@ -96,9 +98,9 @@ export class FakeMessages {
       this.db
         .query(
           `INSERT INTO message (guid, text, attributedBody, handle_id, is_from_me, date, item_type,
-                                associated_message_type, associated_message_guid, cache_has_attachments
-                                ${this.hasThreadColumn() ? ", thread_originator_guid" : ""})
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${this.hasThreadColumn() ? ", ?" : ""})`,
+                                associated_message_type, associated_message_guid, associated_message_emoji,
+                                cache_has_attachments ${this.hasThreadColumn() ? ", thread_originator_guid" : ""})
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? ${this.hasThreadColumn() ? ", ?" : ""})`,
         )
         .run(
           guid,
@@ -110,6 +112,7 @@ export class FakeMessages {
           m.itemType ?? 0,
           m.associatedType ?? 0,
           m.associatedGuid ?? null,
+          m.associatedEmoji ?? null,
           m.hasAttachments ? 1 : 0,
           ...(this.hasThreadColumn() ? [m.threadOriginator ?? null] : []),
         ).lastInsertRowid,
@@ -185,12 +188,15 @@ export class FakeSender implements Sender {
   async stop(): Promise<void> {}
 }
 
-const TAPBACK_CODES: Record<Reaction, number> = { love: 2000, like: 2001, dislike: 2002, laugh: 2003, emphasize: 2004, question: 2005 };
+const TAPBACK_CODES: Record<ClassicReaction, number> = { love: 2000, like: 2001, dislike: 2002, laugh: 2003, emphasize: 2004, question: 2005 };
 
 /** Writes the from-me tapback row Messages.app would have written, optionally on the wrong message. */
 export class FakeTapbacker implements Tapbacker {
-  readonly calls: { target: string; reaction: Reaction }[] = [];
+  readonly calls: { target: string; reaction: Reaction; bubble?: Bubble }[] = [];
   misfireOnto: string | null = null;
+  /** Land this instead of what was asked for, as a stand-in would. */
+  landAs: Reaction | null = null;
+  attempts?: (reaction: Reaction) => Reaction[];
   /** Pretend the picker swallowed nothing: no tapback lands in chat.db. */
   noOp = false;
   anyMessage = false;
@@ -199,19 +205,21 @@ export class FakeTapbacker implements Tapbacker {
 
   constructor(private readonly fx: FakeMessages) {}
 
-  async react(target: string, reaction: Reaction, _fits: (title: string) => boolean, _chatGuid?: string): Promise<void> {
-    this.calls.push({ target, reaction });
+  async react(target: string, reaction: Reaction, _fits: (title: string) => boolean, _chatGuid?: string, _newest?: () => boolean, bubble?: Bubble): Promise<void> {
+    this.calls.push({ target, reaction, bubble });
     if (this.noOp) {
       for (const wake of this.waiters.splice(0)) wake();
       return;
     }
     const landedOn = this.misfireOnto ?? target;
+    const landed = this.landAs ?? reaction;
     this.fx.message({
       chat: this.fx.chatOf(landedOn),
       fromMe: true,
       text: `Liked a message`,
-      associatedType: TAPBACK_CODES[reaction],
+      associatedType: isTabEmoji(landed) ? 2006 : TAPBACK_CODES[landed],
       associatedGuid: `p:0/${landedOn}`,
+      ...(isTabEmoji(landed) ? { associatedEmoji: landed } : {}),
     });
     for (const wake of this.waiters.splice(0)) wake();
   }

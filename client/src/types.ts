@@ -1,6 +1,9 @@
 // The parts of SPEC.md section 5 that the client reads or writes.
 
-export type Reaction = "like" | "love" | "dislike" | "laugh" | "emphasize" | "question";
+export type ClassicReaction = "like" | "love" | "dislike" | "laugh" | "emphasize" | "question";
+/** Emoji tapbacks Tab uses (iMessage on iOS 18 / macOS 15 and later): see reactions.ts. */
+export type EmojiReaction = "👀" | "💸" | "🤑" | "🫡" | "🎉";
+export type Reaction = ClassicReaction | EmojiReaction;
 
 /** Arguments to the `ingest_message` reducer. */
 export interface InboundMessage {

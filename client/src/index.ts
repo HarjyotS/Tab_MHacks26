@@ -11,7 +11,7 @@ import { spacetimeHub } from "./spacetime-hub.ts";
 import { backendHub } from "./backend-hub.ts";
 import { State } from "./state.ts";
 import { uiReplier } from "./reply.ts";
-import { uiTapbacker } from "./tapback.ts";
+import { axTapbacker, runTabAx, uiTapbacker } from "./tapback.ts";
 import { ImsgRpc, imsgReplier, imsgTapbacker } from "./imsg.ts";
 
 const log = (line: string) => console.log(`${new Date().toISOString().slice(11, 19)} ${line}`);
@@ -92,7 +92,14 @@ if (imsg) {
   const check = await imsg.ready(["tapback", "send.rich"]);
   log(check.ok ? "imsg helper is up: tapbacks and replies go through it." : `imsg isn't ready (${check.why}); run "imsg launch" with SIP off.`);
 }
-const tapbacker = config.tapbackMode === "off" ? null : config.tapbackMode === "imsg" && imsg ? imsgTapbacker(imsg) : uiTapbacker();
+// tab-ax reacts to any message, emoji too; without it, the picker does the classic six.
+const tabAx = config.tapbackMode === "ax" && existsSync(config.tabAxPath);
+if (config.tapbackMode === "ax" && !tabAx) log(`tab-ax isn't built at ${config.tabAxPath} (ops/update.sh builds it); tapbacks use the picker.`);
+const tapbacker =
+  config.tapbackMode === "off" ? null
+  : config.tapbackMode === "imsg" && imsg ? imsgTapbacker(imsg)
+  : tabAx ? axTapbacker(runTabAx(config.tabAxPath))
+  : uiTapbacker();
 
 const bridge = new Bridge(db, hub, sender, tapbacker, images, gate, state, {
   commandPrefix: config.commandPrefix,

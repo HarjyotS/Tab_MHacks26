@@ -3,6 +3,8 @@ import { cleanText } from "./decode.ts";
 interface Expected {
   key: string;
   text: string;
+  /** Other bodies that count too: a tapback's stand-ins. */
+  also: string[];
   isFile: boolean;
   resolve: (guid: string | null) => void;
   timer: ReturnType<typeof setTimeout>;
@@ -20,11 +22,12 @@ export class SentMatcher {
   private expected: Expected[] = [];
 
   /**
-   * Call before sending; pass null as the body for a file. `landed` resolves
-   * with the row's guid, or null on timeout. Cancel if the send fails, so a
-   * retry's row isn't claimed by the dead expectation.
+   * Call before sending; pass null as the body for a file, and in `also` any
+   * other body that counts as this send. `landed` resolves with the row's
+   * guid, or null on timeout. Cancel if the send fails, so a retry's row
+   * isn't claimed by the dead expectation.
    */
-  expect(key: string, body: string | null, timeoutMs: number): { landed: Promise<string | null>; cancel: () => void } {
+  expect(key: string, body: string | null, timeoutMs: number, also: string[] = []): { landed: Promise<string | null>; cancel: () => void } {
     let entry!: Expected;
     const remove = () => {
       clearTimeout(entry.timer);
@@ -34,6 +37,7 @@ export class SentMatcher {
       entry = {
         key,
         text: cleanText(body),
+        also: also.map(cleanText),
         isFile: body == null,
         resolve,
         timer: setTimeout(() => {
@@ -55,7 +59,7 @@ export class SentMatcher {
   match(key: string, text: string, hasAttachment: boolean, guid: string): boolean {
     const body = cleanText(text);
     const index = this.expected.findIndex(
-      (e) => e.key === key && (e.isFile ? hasAttachment && body === "" : e.text === body),
+      (e) => e.key === key && (e.isFile ? hasAttachment && body === "" : e.text === body || e.also.includes(body)),
     );
     if (index < 0) return false;
     const [entry] = this.expected.splice(index, 1);

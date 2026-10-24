@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { GROUP_STYLE, type ChatSource, type RawAttachment, type RawMessage } from "./chatdb.ts";
-import { appleDate, isAssociated, messageText, normalizeHandle, reactionTarget, tapback } from "./decode.ts";
+import { appleDate, decodeAttributedBody, isAssociated, messageText, normalizeHandle, reactionTarget, tapback } from "./decode.ts";
+import { isTabEmoji } from "./reactions.ts";
 import { parseCommand, type Gate } from "./gate.ts";
 import { HubUnavailable, type Hub } from "./hub.ts";
 import { SentMatcher } from "./matcher.ts";
@@ -227,10 +228,11 @@ export class Bridge {
     };
 
     if (isAssociated(row.associated_message_type)) {
-      const reaction = tapback(row.associated_message_type);
+      const reaction = tapback(row.associated_message_type, row.associated_message_emoji);
       const target = reactionTarget(row.associated_message_guid);
-      // Removed tapbacks, emoji tapbacks, stickers and poll votes aren't part of the contract.
-      if (!reaction || !target) return "done";
+      // Removed tapbacks, stickers, poll votes, and emoji tapbacks that don't
+      // mean a classic one (a 👍🏽 does) aren't part of the contract.
+      if (!reaction || isTabEmoji(reaction) || !target) return "done";
       if (!isGroup && !this.gate.allowDm(sender, "", this.opts.now())) return "done";
       await this.hub.ingest({ ...base, kind: "reaction", reaction, reply_to_id: target });
       return "done";
@@ -280,7 +282,7 @@ export class Bridge {
   /** From-me rows are Tab's own sends, the owner's commands, or the owner typing by hand. */
   private async handleOwn(row: RawMessage, chat: string, isGroup: boolean): Promise<void> {
     if (isAssociated(row.associated_message_type)) {
-      const reaction = tapback(row.associated_message_type);
+      const reaction = tapback(row.associated_message_type, row.associated_message_emoji);
       const target = reactionTarget(row.associated_message_guid);
       if (reaction && target && !this.matcher.match(tapbackKey(target), reaction, false, row.guid)) {
         // Tab's phone tapbacked something nobody asked for: by hand, or the UI driver hit the wrong message.
@@ -412,8 +414,9 @@ export class Bridge {
   /**
    * Tapbacks drive Messages' UI, so they get one attempt (a second press on the
    * same tapback would remove it), only go out while the target is the newest
-   * message in its chat, and count as sent only once chat.db shows Tab's
-   * tapback on the right message.
+   * message in its chat (unless the tapbacker can reach any message), and
+   * count as sent only once chat.db shows Tab's tapback on the right message:
+   * the one asked for, or one of its stand-ins (reactions.ts).
    */
   private async deliverTapback(row: OutboxRow, fail: (error: string) => Promise<void>): Promise<void> {
     if (!this.tapbacker) return fail("unsupported: tapbacks are off (TAPBACK_MODE=off)");
@@ -433,11 +436,14 @@ export class Bridge {
 
     // Messages acts on whatever chat it shows, so only act once its window title proves it's this chat.
     const fits = this.titleCheck(target.chat_guid);
-    const expectation = this.matcher.expect(tapbackKey(row.target_message_id), row.reaction, this.opts.tapbackVerifyMs);
+    const landing = this.tapbacker.attempts?.(row.reaction) ?? [row.reaction];
+    const expectation = this.matcher.expect(tapbackKey(row.target_message_id), row.reaction, this.opts.tapbackVerifyMs, landing);
     try {
       const chat = target.chat_guid;
       const newest = () => this.db.latestInChat(chat)?.guid === target.guid;
-      await this.tapbacker.react(row.target_message_id, row.reaction, fits, chat, this.tapbacker.anyMessage ? undefined : newest);
+      // How Messages labels the bubble: its text with U+FFFC for each attachment, its time, whose side.
+      const bubble = { text: target.text || decodeAttributedBody(target.attributedBody) || "", sentAt: appleDate(target.date), fromMe: target.is_from_me === 1 };
+      await this.tapbacker.react(row.target_message_id, row.reaction, fits, chat, this.tapbacker.anyMessage ? undefined : newest, bubble);
     } catch (err) {
       expectation.cancel();
       return fail(String(err));

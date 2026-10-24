@@ -38,8 +38,12 @@ export type GroupStatus = "pending" | "active";
 export type SplitMode = "even" | "custom" | "itemized";
 export type ShareRole = "payer" | "participant";
 export type OutboxKind = "group_message" | "dm" | "reaction" | "contact_card";
-export type Reaction =
+export type ClassicReaction =
   "like" | "love" | "dislike" | "laugh" | "emphasize" | "question";
+// Emoji tapbacks Tab sends (iMessage on iOS 18 and later). The bridge falls
+// back to a classic stand-in where an emoji can't go out (client/src/reactions.ts).
+export type EmojiReaction = "👀" | "💸" | "🤑" | "🫡" | "🎉";
+export type Reaction = ClassicReaction | EmojiReaction;
 // SPEC §7.6, stored by set_settle_mode. A group that never chose is "ledger".
 export type SettleMode = "ledger" | "per_expense";
 

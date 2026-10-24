@@ -1039,8 +1039,15 @@ Access: an unguessable group URL such as `/g/<random id>`, with no login for the
 
 | Tab's tapback | Meaning                                        |
 | ------------- | ---------------------------------------------- |
+| 👀            | Working on a reply (replaced by the outcome)   |
 | Like          | Logged, or understood                          |
 | Question      | Not sure; a short question follows immediately |
+| 💸            | Someone says they sent their part              |
+| 🤑            | The person owed says it came in                |
+| 🎉            | The person owed says everyone paid             |
+| 🫡            | Got your name                                  |
+
+> **Since the beta (emoji):** 👀 goes on a message only when Tab is going to act on it, never on one it's unsure about. Emoji tapbacks go out through Messages' accessibility actions (`TAPBACK_MODE=ax`, ops/README.md "Emoji tapbacks"); where an emoji can't, a classic stand-in does (`client/src/reactions.ts`). "ok everyone paid" or "it's all been settled" from the person owed pays back everyone who owes them, like "priya paid me" (7.6).
 
 Tab never sends the same clarifying question about an expense twice in a row. While a question is still open, asking it again goes out once in other words with a concrete example ("how much should Priya pay? like $16.00"), or not at all when there's no better way to put it; after that Tab stops asking and keeps the question open to an answer. Where the best reading is clear, Tab applies it instead of asking (fractional shares, 7.5; "it was even", 7.5).
 

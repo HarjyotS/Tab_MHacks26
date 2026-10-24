@@ -8,6 +8,7 @@
     "chats": "bun src/chats.ts",
     "tapback-probe": "bun src/tapback-probe.ts",
     "reply-probe": "bun src/reply-probe.ts",
+    "seed-emoji": "bun src/seed-emoji.ts",
     "test": "bun test",
     "typecheck": "tsc --noEmit",
     "playground": "bun playground/server.ts"

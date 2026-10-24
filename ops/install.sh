@@ -29,6 +29,12 @@ NODE="$(command -v node || true)"
 grep -q '^DATABASE_URL=.' "$REPO/.env" || { echo "no DATABASE_URL in $REPO/.env: see ops/README.md, step 5"; exit 1; }
 grep -q '^HUB=backend' "$REPO/client/.env" || echo "note: client/.env should say HUB=backend (ops/README.md, step 6)"
 
+# TAPBACK_MODE=ax: build tab-ax and put Tab's emoji in Messages' recents.
+if grep -q '^TAPBACK_MODE=ax' "$REPO/client/.env"; then
+  "$REPO/ops/build-tab-ax.sh" || echo "note: tab-ax didn't build, so tapbacks will use the picker"
+  (cd "$REPO/client" && "$BUN" src/seed-emoji.ts) || echo "note: couldn't seed Tab's emoji (bun run seed-emoji in client/)"
+fi
+
 mkdir -p "$AGENTS" "$LOGS"
 PATH_FOR_SERVICES="${BUN:h}:${NODE:h}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 for s in $SERVICES; do

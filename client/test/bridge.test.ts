@@ -212,10 +212,42 @@ test("sends a tapback and confirms it landed on the right message", async () => 
   expect(row).toMatchObject({ kind: "reaction", target_message_id: guid, reaction: "like" });
 
   await tapbackNext();
-  expect(tapbacker.calls).toEqual([{ target: guid, reaction: "like" }]);
+  expect(tapbacker.calls).toMatchObject([{ target: guid, reaction: "like", bubble: { text: "@tab like", fromMe: false } }]);
   expect(hub.row(row!.action_id)).toMatchObject({ status: "sent" });
   expect(hub.row(row!.action_id)?.sent_photon_id).toStartWith("GUID-");
   expect(logs.some((l) => l.includes("unrequested"))).toBe(false);
+});
+
+test("an emoji tapback counts once chat.db shows it, or the stand-in that went out instead", async () => {
+  const { fx, hub, tapbacker, bridge, logs, tapbackNext, turnOn } = setup();
+  await turnOn();
+  const first = fx.message({ chat: HOUSE, handle: A, text: "sent you 30" });
+  const second = fx.message({ chat: HOUSE, handle: B, text: "paid you back" });
+  await bridge.poll();
+
+  const eyes = hub.enqueue({ kind: "reaction", group_id: HOUSE, target_message_id: second, reaction: "👀" });
+  await tapbackNext();
+  expect(hub.row(eyes.action_id)).toMatchObject({ status: "sent" });
+
+  // That chat's emoji slots are full: 🤑 isn't offered, so its stand-in 💸 goes out.
+  tapbacker.anyMessage = true;
+  tapbacker.attempts = (r) => (r === "🤑" ? ["🤑", "💸", "love"] : [r]);
+  tapbacker.landAs = "💸";
+  const paid = hub.enqueue({ kind: "reaction", group_id: HOUSE, target_message_id: first, reaction: "🤑" });
+  await tapbackNext();
+  expect(hub.row(paid.action_id)).toMatchObject({ status: "sent" });
+  expect(logs.some((l) => l.includes("unrequested"))).toBe(false);
+});
+
+test("someone's 👍🏽 emoji tapback is a like; other emoji tapbacks aren't passed on", async () => {
+  const { fx, hub, bridge, turnOn } = setup();
+  await turnOn();
+  const split = fx.message({ chat: HOUSE, handle: A, text: "pizza 48" });
+  fx.message({ chat: HOUSE, handle: B, associatedType: 2006, associatedEmoji: "👍🏽", associatedGuid: `p:0/${split}` });
+  fx.message({ chat: HOUSE, handle: B, associatedType: 2006, associatedEmoji: "💸", associatedGuid: `p:0/${split}` });
+  fx.message({ chat: HOUSE, handle: B, associatedType: 2006, associatedEmoji: "🇮🇱", associatedGuid: `p:0/${split}` });
+  await bridge.poll();
+  expect(hub.ingested.filter((m) => m.kind === "reaction").map((m) => [m.reaction, m.reply_to_id])).toEqual([["like", split]]);
 });
 
 test("fails a tapback that lands on the wrong message and logs the stray one", async () => {
